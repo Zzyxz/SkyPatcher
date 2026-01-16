@@ -6,244 +6,58 @@ namespace AMMO
 	{
 		line_content l;
 
-		//// extract ammos
-		//std::regex ammos_regex("filterByAmmos\\s*=([^:]+)", regex::icase);
-		//std::smatch ammos_match;
-		//std::regex_search(line, ammos_match, ammos_regex);
-		//std::vector<std::string> ammos;
-		//if (ammos_match.empty() || ammos_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string ammos_str = ammos_match[1];
-		//	std::regex ammos_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator ammos_iterator(ammos_str.begin(), ammos_str.end(), ammos_list_regex);
-		//	std::sregex_iterator ammos_end;
-		//	while (ammos_iterator != ammos_end) {
-		//		std::string tempVar = (*ammos_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Race: {}"), race);
-		//		if (tempVar != "none") {
-		//			ammos.push_back(tempVar);
-		//		}
-		//		++ammos_iterator;
-		//	}
-		//	l.ammo = ammos;
-		//}
-
 		extractData(line, "filterByAmmos\\s*=([^:]+)", l.ammo);
+		extractData(line, "filterByAmmosExcluded\\s*=([^:]+)", l.objectExcluded);
 
-		// extract weight
-		std::regex weightLess_regex("filterByWeightLessThan\\s*=([^:]+)", regex::icase);
-		std::smatch weightLessmatch;
-		std::regex_search(line, weightLessmatch, weightLess_regex);
-		// extract the value after the equals sign
-		if (weightLessmatch.empty() || weightLessmatch[1].str().empty()) {
-			l.weightLessThan = "none";
-		} else {
-			std::string value = weightLessmatch[1].str();
-			value.erase(std::remove_if(value.begin(), value.end(), ::isspace), value.end());
-			l.weightLessThan = value;
-		}
-
-		//// extract keywords
-		//std::regex  keywords_regex("filterByKeywords\\s*=([^:]+)", regex::icase);
-		//std::smatch keywords_match;
-		//std::regex_search(line, keywords_match, keywords_regex);
-		//std::vector<std::string> keywords;
-		//if (keywords_match.empty() || keywords_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          keywords_str = keywords_match[1];
-		//	std::regex           keywords_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator keywords_iterator(keywords_str.begin(), keywords_str.end(), keywords_list_regex);
-		//	std::sregex_iterator keywords_end;
-		//	while (keywords_iterator != keywords_end) {
-		//		std::string keyword = (*keywords_iterator)[0].str();
-		//		keyword.erase(keyword.begin(), std::find_if_not(keyword.begin(), keyword.end(), ::isspace));
-		//		keyword.erase(std::find_if_not(keyword.rbegin(), keyword.rend(), ::isspace).base(), keyword.end());
-		//		if (keyword != "none") {
-		//			keywords.push_back(keyword);
-		//		}
-		//		++keywords_iterator;
-		//	}
-		//	l.keywords = keywords;
-		//}
+		extractValueString(line, "filterByWeightLessThan\\s*=([^:]+)", l.weightLessThan);
 
 		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
 
-		//// extract keywords
-		//std::regex  keywordsOr_regex("filterByKeywordsOr\\s*=([^:]+)", regex::icase);
-		//std::smatch keywordsOr_match;
-		//std::regex_search(line, keywordsOr_match, keywordsOr_regex);
-		//std::vector<std::string> keywordsOr;
-		//if (keywordsOr_match.empty() || keywordsOr_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          keywordsOr_str = keywordsOr_match[1];
-		//	std::regex           keywordsOr_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator keywordsOr_iterator(keywordsOr_str.begin(), keywordsOr_str.end(), keywordsOr_list_regex);
-		//	std::sregex_iterator keywordsOr_end;
-		//	while (keywordsOr_iterator != keywordsOr_end) {
-		//		std::string keyword = (*keywordsOr_iterator)[0].str();
-		//		keyword.erase(keyword.begin(), std::find_if_not(keyword.begin(), keyword.end(), ::isspace));
-		//		keyword.erase(std::find_if_not(keyword.rbegin(), keyword.rend(), ::isspace).base(), keyword.end());
-		//		if (keyword != "none") {
-		//			keywordsOr.push_back(keyword);
-		//		}
-		//		++keywordsOr_iterator;
-		//	}
-		//	l.keywordsOr = keywordsOr;
-		//}
-
 		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-
-		//// extract keywords
-		//std::regex  keywordsExcluded_regex("filterByKeywordsExcluded\\s*=([^:]+)", regex::icase);
-		//std::smatch keywordsExcluded_match;
-		//std::regex_search(line, keywordsExcluded_match, keywordsExcluded_regex);
-		//std::vector<std::string> keywordsExcluded;
-		//if (keywordsExcluded_match.empty() || keywordsExcluded_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          keywordsExcluded_str = keywordsExcluded_match[1];
-		//	std::regex           keywordsExcluded_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator keywordsExcluded_iterator(keywordsExcluded_str.begin(), keywordsExcluded_str.end(), keywordsExcluded_list_regex);
-		//	std::sregex_iterator keywordsExcluded_end;
-		//	while (keywordsExcluded_iterator != keywordsExcluded_end) {
-		//		std::string keyword = (*keywordsExcluded_iterator)[0].str();
-		//		keyword.erase(keyword.begin(), std::find_if_not(keyword.begin(), keyword.end(), ::isspace));
-		//		keyword.erase(std::find_if_not(keyword.rbegin(), keyword.rend(), ::isspace).base(), keyword.end());
-		//		if (keyword != "none") {
-		//			keywordsExcluded.push_back(keyword);
-		//		}
-		//		++keywordsExcluded_iterator;
-		//	}
-		//	l.keywordsExcluded = keywordsExcluded;
-		//}
 
 		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
 
-						// extract weight
-		std::regex weight_regex("weight\\s*=([^:]+)", regex::icase);
-		std::smatch weightmatch;
-		std::regex_search(line, weightmatch, weight_regex);
-		// extract the value after the equals sign
-		if (weightmatch.empty() || weightmatch[1].str().empty()) {
-			l.weight = "none";
-		} else {
-			std::string value = weightmatch[1].str();
-			value.erase(std::remove_if(value.begin(), value.end(), ::isspace), value.end());
-			l.weight = value;
-		}
+		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
 
-		// extract damage
-		std::regex damage_regex("attackDamage\\s*=([^:]+)", regex::icase);
-		std::smatch damagematch;
-		std::regex_search(line, damagematch, damage_regex);
-		// extract the value after the equals sign
-		if (damagematch.empty() || damagematch[1].str().empty()) {
-			l.damage = "none";
-		} else {
-			std::string damagevalue = damagematch[1].str();
-			damagevalue.erase(std::remove_if(damagevalue.begin(), damagevalue.end(), ::isspace), damagevalue.end());
-			l.damage = damagevalue;
-		}
+		extractValueString(line, "attackDamage\\s*=([^:]+)", l.damage);
+		extractValueString(line, "attackDamageToAdd\\s*=([^:]+)", l.damageToAdd);
 
-		// extract damageMult
-		std::regex  damageMult_regex("attackDamageMult\\s*=([^:]+)", regex::icase);
-		std::smatch damageMultmatch;
-		std::regex_search(line, damageMultmatch, damageMult_regex);
-		// extract the value after the equals sign
-		if (damageMultmatch.empty() || damageMultmatch[1].str().empty()) {
-			l.damageMult = "none";
-		} else {
-			std::string damageMultvalue = damageMultmatch[1].str();
-			damageMultvalue.erase(std::remove_if(damageMultvalue.begin(), damageMultvalue.end(), ::isspace), damageMultvalue.end());
-			l.damageMult = damageMultvalue;
-		}
+		extractValueString(line, "attackDamageMult\\s*=([^:]+)", l.damageMult);
 
-		// extract projectile
-		std::regex setNewProjectile_regex("setNewProjectile\\s*=([^:]+)", regex::icase);
-		std::smatch setNewProjectilematch;
-		std::regex_search(line, setNewProjectilematch, setNewProjectile_regex);
-		// extract the value after the equals sign
-		if (setNewProjectilematch.empty() || setNewProjectilematch[1].str().empty()) {
-			l.projectile = "none";
-		} else {
-			std::string setNewProjectilevalue = setNewProjectilematch[1].str();
-			setNewProjectilevalue.erase(setNewProjectilevalue.begin(), std::find_if_not(setNewProjectilevalue.begin(), setNewProjectilevalue.end(), ::isspace));
-			setNewProjectilevalue.erase(std::find_if_not(setNewProjectilevalue.rbegin(), setNewProjectilevalue.rend(), ::isspace).base(), setNewProjectilevalue.end());
-			l.projectile = setNewProjectilevalue;
-		}
 
-		//// extract formList
-		//std::regex formList_regex("addToFormList\\s*=([^:]+)", regex::icase);
-		//std::smatch formList_match;
-		//std::regex_search(line, formList_match, formList_regex);
-		//std::vector<std::string> formList;
-		//if (formList_match.empty() || formList_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string formList_str = formList_match[1];
-		//	std::regex formList_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator formList_iterator(formList_str.begin(), formList_str.end(), formList_list_regex);
-		//	std::sregex_iterator formList_end;
-		//	while (formList_iterator != formList_end) {
-		//		std::string tempVar = (*formList_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Race: {}"), race);
-		//		if (tempVar != "none") {
-		//			formList.push_back(tempVar);
-		//		}
-		//		++formList_iterator;
-		//	}
-		//	l.formList = formList;
-		//}
+		extractValueString(line, "setNewProjectile\\s*=([^:]+)", l.projectile);
 
 		extractData(line, "addToFormList\\s*=([^:]+)", l.formList);
 
-		//// extract fullName
-		//std::regex fullName_regex("fullName\\s*=\\s*~([^~]+?)\\s*~");
-		//std::smatch namematch;
-		//std::regex_search(line, namematch, fullName_regex);
-		//// extract the value after the equals sign
-		//if (namematch.empty() || namematch[1].str().empty()) {
-		//	l.fullName = "none";
-		//} else {
-		//	std::string namevalue = namematch[1].str();
-		//	namevalue.erase(namevalue.begin(), std::find_if_not(namevalue.begin(), namevalue.end(), ::isspace));
-		//	namevalue.erase(std::find_if_not(namevalue.rbegin(), namevalue.rend(), ::isspace).base(), namevalue.end());
-		//	l.fullName = namevalue;
-		//}
-
-				// extract keywordsToAdd
-		std::regex keywordsToAdd_regex("keywordsToAdd\\s*=([^:]+)", regex::icase);
-		std::smatch keywordsToAdd_match;
-		std::regex_search(line, keywordsToAdd_match, keywordsToAdd_regex);
-		std::vector<std::string> keywordsToAdd;
-		if (keywordsToAdd_match.empty() || keywordsToAdd_match[1].str().empty()) {
-			//empty
-		} else {
-			std::string keywordsToAdd_str = keywordsToAdd_match[1];
-			std::regex keywordsToAdd_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-			std::sregex_iterator keywordsToAdd_iterator(keywordsToAdd_str.begin(), keywordsToAdd_str.end(), keywordsToAdd_list_regex);
-			std::sregex_iterator keywordsToAdd_end;
-			while (keywordsToAdd_iterator != keywordsToAdd_end) {
-				std::string keywordToAdd = (*keywordsToAdd_iterator)[0].str();
-				keywordToAdd.erase(keywordToAdd.begin(), std::find_if_not(keywordToAdd.begin(), keywordToAdd.end(), ::isspace));
-				keywordToAdd.erase(std::find_if_not(keywordToAdd.rbegin(), keywordToAdd.rend(), ::isspace).base(), keywordToAdd.end());
-				if (keywordToAdd != "none") {
-					//logger::info(FMT_STRING("keywordsToAdd: {}"), keywordToAdd);
-					keywordsToAdd.push_back(keywordToAdd);
-				}
-				++keywordsToAdd_iterator;
-			}
-			l.keywordsToAdd = keywordsToAdd;
-		}
-
 		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
+
+		//extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
+		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
+		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
+		extractValueString(line, "value\\s*=([^:]+)", l.value);
+		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
+		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
+		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
+
+		extractValueString(line, "model\\s*=([^:]+)", l.model);
+		extractToArr2D(line, "alternateTexturesToAdd\\s*=([^:]+)", l.alternateTextures);
+		extractData(line, "alternateTexturesToRemove\\s*=([^:]+)", l.alternateTexturesRemove);
+		extractValueString(line, "alternateTexturesClear\\s*=([^:]+)", l.alternateTexturesClear);
+		extractData(line, "filterByAlternateTextures\\s*=([^:]+)", l.alternateTexturesFind);
+		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
+		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
+		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
+		extractValueString(line, "range\\s*=([^:]+)", l.range);
+		extractValueString(line, "rangeMult\\s*=([^:]+)", l.rangeMult);
+		extractValueString(line, "speed\\s*=([^:]+)", l.speed);
+		extractValueString(line, "speedMult\\s*=([^:]+)", l.speedMult);
+		extractValueString(line, "gravity\\s*=([^:]+)", l.gravity);
+		extractValueString(line, "gravityMult\\s*=([^:]+)", l.gravityMult);
+		extractValueString(line, "restrictToBolts\\s*=([^:]+)", l.restrictToBolts);
+		extractDataStrings(line, "hasPlugins\\s*=([^:]+)", l.hasPlugin);
+		extractDataStrings(line, "hasPluginsOr\\s*=([^:]+)", l.hasPluginOr);
+		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
+		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
 
 		return l;
 	}
@@ -254,8 +68,6 @@ namespace AMMO
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
 		RE::BSTArray<RE::TESAmmo*> AmmoArray = dataHandler->GetFormArray<RE::TESAmmo>();
 		for (const auto& line : tokens) {
-
-			
 
 			if (!line.ammo.empty()) {
 				//logger::info("npc not empty");
@@ -271,8 +83,12 @@ namespace AMMO
 						patch(line, ammo);
 					}
 				}
+			}
+
+			if (!line.ammo.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.weightLessThan == "none" && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
 				continue;
 			}
+
 
 			for (const auto& curobj : AmmoArray) {
 				//logger::debug("Mod: {} || Weapon Type: {} || Damage: {} || Projectile: {} || addToFormList: {}", line.ammo.c_str(), line.type.c_str(), line.damage.c_str(), line.projectile.c_str(), line.armorPenetration.c_str());
@@ -283,7 +99,95 @@ namespace AMMO
 
 				bool keywordAnd = false;
 				bool keywordOr = false;
+				bool contains = false;
+				bool containsOr = false;
 				//logger::info(FMT_STRING("Its a form! {:08X}"), curobj->formID);
+
+				if (!curobj || curobj->IsDeleted()) {
+					continue;
+				}
+
+				if (!line.modNames.empty()) {
+					bool modFound = false;
+					for (auto const modName : line.modNames) {
+						if (modName == curobj->GetFile(0)->fileName) {
+							modFound = true;
+						}
+					}
+					if (modFound == false) {
+						continue;
+					}
+				}
+
+				if (!line.hasPlugin.empty()) {
+					bool isPluginMissing = false;
+					for (auto const modName : line.hasPlugin) {
+						if (!IsPluginInstalled(modName.c_str())) {
+							isPluginMissing = true;
+						}
+					}
+					if (isPluginMissing) {
+						continue;
+					}
+				}
+
+				if (!line.hasPluginOr.empty()) {
+					bool modFound = false;
+					for (auto const modName : line.hasPluginOr) {
+						if (IsPluginInstalled(modName.c_str())) {
+							modFound = true;
+						}
+					}
+					if (modFound == false) {
+						continue;
+					}
+				}
+				
+				if (!line.alternateTexturesFind.empty()) {
+					for (const auto& textureString : line.alternateTexturesFind) {
+						RE::TESForm* currentform = nullptr;
+						currentform = GetFormFromIdentifier(textureString);
+						if (currentform) {
+							//logger::debug("start search");
+							if (findTextureSet(curobj, currentform->As<RE::BGSTextureSet>())) {
+								//logger::debug("Texture found");
+								found = true;
+								break;
+							}
+						}
+					}
+				}
+
+				if (!found && !line.filterByEditorIdContains.empty()) {
+					for (const auto& editorString : line.filterByEditorIdContains) {
+						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
+							contains = true;
+						} else {
+							contains = false;
+							break;
+						}
+					}
+				} else {
+					contains = true;
+				}
+
+				if (!found && !line.filterByEditorIdContainsOr.empty()) {
+					//logger::info("keywords not empty");
+					for (const auto& editorString : line.filterByEditorIdContainsOr) {
+						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
+							containsOr = true;
+							break;
+						}
+					}
+				} else {
+					containsOr = true;
+				}
+
+				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
+					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
+					found = true;
+				}
+
 
 				if (!line.keywords.empty()) {
 					//logger::info("keywords not empty");
@@ -338,18 +242,21 @@ namespace AMMO
 					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
-
+				#ifndef SKYRIMVR
 				if (!line.weightLessThan.empty() && line.weightLessThan != "none") {
 					if (curobj->weight < stof(line.weightLessThan)) {
 						found = true;
 					}
 				}
-
-				if (line.ammo.empty() && line.weightLessThan.empty() && line.keywords.empty() && line.keywordsOr.empty()) {
+				#endif
+				//logger::debug(FMT_STRING("{} {} {} {}"), line.ammo.size(), line.weightLessThan.size(), line.keywords.size(), line.keywordsOr.size());
+				if (line.ammo.empty() && line.weightLessThan == "none" && line.keywords.empty() && line.keywordsOr.empty() && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
+					
+					//logger::debug(FMT_STRING("all Empty"));
 					found = true;
 				}
 
-				if (!line.keywordsExcluded.empty()) {
+				if (!line.keywordsExcluded.empty() && found) {
 					//logger::info("keywords not empty");
 					for (const auto& keywordstring : line.keywordsExcluded) {
 						RE::TESForm*    currentform = nullptr;
@@ -370,49 +277,51 @@ namespace AMMO
 					}
 				}
 
-				if (found) {
-					patch(line, curobj);
-				}
+						//proj
 
-				if (found && !line.damage.empty() && line.damage != "none") {
+				if (!line.restrictToBolts.empty() && line.restrictToBolts != "none" && toLowerCase(line.restrictToBolts) == "true" && !curobj->IsBolt()) {
 					try {
-						curobj->data.damage = stof(line.damage);
-						logger::debug(FMT_STRING("ammo formid: {:08X} {} changed damage {}"), curobj->formID, curobj->fullName, curobj->data.damage);
+						found = false;
+						//logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} is not a bolt."), curobj->formID, curobj->fullName);
 					} catch (const std::invalid_argument& e) {
 					}
 				}
 
-				if (found && !line.projectile.empty() && line.projectile != "none") {
-					RE::TESForm* projectileform = nullptr;
-					RE::BGSProjectile* currentprojectile = nullptr;
-					std::string string_form = line.projectile.c_str();
-					projectileform = GetFormFromIdentifier(string_form);
-					if (projectileform && projectileform->formType == RE::FormType::Projectile) {
-						currentprojectile = (RE::BGSProjectile*)projectileform;
-						curobj->data.projectile = currentprojectile;
-						logger::debug(FMT_STRING("projectile set to {:08X} {}"), currentprojectile->formID, currentprojectile->fullName);
-					} else {
-						//logger::debug("Projectile not set.");
-					}
-				}
-
-				if (found && !line.formList.empty()) {
-					//logger::info("found! patching values");
-					//for (const auto& avifstring : line.avifs)
-					for (size_t i = 0; i < line.formList.size(); i++) {
-						RE::TESForm* currentform = nullptr;
-						RE::BGSListForm* listForm = nullptr;
-						std::string string_form = line.formList[i].c_str();
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::FormList) {
-							listForm = (RE::BGSListForm*)currentform;
-							listForm->forms.push_back(curobj);
-							logger::debug(FMT_STRING("added ammo {:08X} {} to FormList: {:08X}"), curobj->formID, curobj->fullName, listForm->formID);
-						} else {
-							//logger::info("Armor Penetration not set.");
+				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
+					//logger::info("factions not empty");
+					for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
+						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
+							found = false;
+							break;
 						}
 					}
 				}
+
+				if (!line.objectExcluded.empty() && found) {
+					//logger::info("npc not empty");
+					for (const auto& npcstring : line.objectExcluded) {
+						RE::TESForm*       currentform = nullptr;
+						RE::TESAmmo* npc = nullptr;
+
+						std::string string_form = npcstring;
+						currentform = GetFormFromIdentifier(string_form);
+						if (currentform && currentform->formType == RE::FormType::Ammo) {
+							npc = (RE::TESAmmo*)currentform;
+
+							if (curobj->formID == npc->formID) {
+								found = false;
+								//logger::info("Projectile Excluded.");
+								break;
+							}
+						}
+					}
+				}
+
+				if (found) {
+					patch(line, curobj);
+				}
+
+		
 
 			}
 		}
@@ -491,6 +400,11 @@ namespace AMMO
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed damage {}"), curobj->formID, curobj->fullName, curobj->data.damage);
 		}
 
+		if (!line.damageToAdd.empty() && line.damageToAdd != "none") {
+				curobj->data.damage = curobj->data.damage + stof(line.damageToAdd);
+				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed damage {}"), curobj->formID, curobj->fullName, line.damageToAdd);
+		}
+
 		if (!line.damageMult.empty() && line.damageMult != "none") {
 				curobj->data.damage = curobj->data.damage * stof(line.damageMult);
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed(mult) damage {}"), curobj->formID, curobj->fullName, curobj->data.damage);
@@ -516,8 +430,8 @@ namespace AMMO
 				std::string string_form = line.keywordsToAdd[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Keyword) {
-					curobj->AddKeyword((RE::BGSKeyword*)currentform);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} added keyword {:08X} {} "), curobj->formID, curobj->fullName, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
+					if(curobj->AddKeyword((RE::BGSKeyword*)currentform))
+						logger::debug(FMT_STRING("weapon formid: {:08X} {} added keyword {:08X} {} "), curobj->formID, curobj->fullName, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
 				}
 			}
 		}
@@ -548,7 +462,7 @@ namespace AMMO
 			} catch (const std::invalid_argument& e) {
 			}
 		}
-
+		#ifndef SKYRIMVR
 		if (!line.weight.empty() && line.weight != "none") {
 			try {
 				curobj->weight = std::stof(line.weight);
@@ -556,6 +470,199 @@ namespace AMMO
 			} catch (const std::invalid_argument& e) {
 			}
 		}
+		#endif
+		if (!line.value.empty() && line.value != "none") {
+			try {
+				curobj->value = std::stoi(line.value);
+				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed value {}"), curobj->formID, curobj->fullName, curobj->value);
+			} catch (const std::invalid_argument& e) {
+			}
+		}
+		#ifndef SKYRIMVR
+		if (!line.weightMult.empty() && line.weightMult != "none") {
+			try {
+				curobj->weight = curobj->weight * std::stof(line.weightMult);
+				logger::debug(FMT_STRING("ammo formid: {:08X} {} multiplied weight {}"), curobj->formID, curobj->fullName, curobj->weight);
+			} catch (const std::invalid_argument& e) {
+			}
+		}
+		#endif
+		if (!line.valueMult.empty() && line.valueMult != "none") {
+			try {
+				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
+				logger::debug(FMT_STRING("ammo formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
+			} catch (const std::invalid_argument& e) {
+			}
+		}
+
+		
+		
+		if (!line.model.empty() && line.model != "none") {
+			try {
+				curobj->SetModel(line.model.c_str());
+				curobj->ReplaceModel();
+				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed model path {}"), curobj->formID, curobj->fullName, curobj->model.c_str());
+			} catch (const std::invalid_argument& e) {
+			}
+		}
+
+		if (!line.alternateTextures.empty()) {
+			for (const auto& objectToAdd : line.alternateTextures) {
+				std::string  texture = objectToAdd[0];
+				std::string  name = objectToAdd[1];
+				int32_t      index = std::stoi(objectToAdd[2]);
+				RE::TESForm* currentform = GetFormFromIdentifier(texture);
+				if (currentform && currentform->formType == RE::FormType::TextureSet) {
+					RE::TESModelTextureSwap::AlternateTexture newTex;
+					newTex.textureSet = currentform->As<RE::BGSTextureSet>();
+					newTex.name3D = name;
+					newTex.index3D = index;
+					addAltTexture(curobj, newTex);
+					logger::debug(FMT_STRING("ammo formid: {:08X} {} changed alternate textures {:08X} name3d {} index3d {}"), curobj->formID, curobj->fullName, newTex.textureSet->formID, newTex.name3D.c_str(), newTex.index3D);
+				}
+			}
+		}
+
+		if (!line.model.empty() && line.model != "none") {
+			try {
+				curobj->SetModel(line.model.c_str());
+				curobj->ReplaceModel();
+				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed model path {}"), curobj->formID, curobj->fullName, curobj->model.c_str());
+			} catch (const std::invalid_argument& e) {
+			}
+		}
+
+		if (!line.alternateTexturesClear.empty() && line.alternateTexturesClear != "none") {
+			clearAltTextures(curobj);
+			logger::debug(FMT_STRING("ammo formid: {:08X} {} cleared all alternate textures"), curobj->formID, curobj->fullName);
+		}
+
+		if (!line.alternateTexturesRemove.empty()) {
+			for (size_t i = 0; i < line.alternateTexturesRemove.size(); i++) {
+				RE::TESForm* currentform = nullptr;
+				std::string  string_form = line.alternateTexturesRemove[i];
+				currentform = GetFormFromIdentifier(string_form);
+				if (currentform && currentform->formType == RE::FormType::TextureSet) {
+					auto removed = removeAltTextureByTextureSet(curobj, currentform->As<RE::BGSTextureSet>());
+					if (removed) {
+						logger::debug(FMT_STRING("ammo formid: {:08X} {} alternateTexture removed {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
+					} else {
+						logger::critical(FMT_STRING("ammo formid: {:08X} {} alternateTexture not removed {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
+					}
+				}
+			}
+		}
+
+		if (!line.alternateTextures.empty()) {
+			for (const auto& objectToAdd : line.alternateTextures) {
+				std::string  texture = objectToAdd[0];
+				std::string  name = objectToAdd[1];
+				int32_t      index = std::stoi(objectToAdd[2]);
+				RE::TESForm* currentform = GetFormFromIdentifier(texture);
+				if (currentform && currentform->formType == RE::FormType::TextureSet) {
+					RE::TESModelTextureSwap::AlternateTexture newTex;
+					newTex.textureSet = currentform->As<RE::BGSTextureSet>();
+					newTex.name3D = name;
+					newTex.index3D = index;
+					addAltTexture(curobj, newTex);
+					logger::debug(FMT_STRING("ammo formid: {:08X} {} changed alternate textures {:08X} name3d {} index3d {}"), curobj->formID, curobj->fullName, newTex.textureSet->formID, newTex.name3D.c_str(), newTex.index3D);
+				}
+			}
+		}
+
+
+
+
+		//proj
+
+		if (!line.speed.empty() && line.speed != "none" && curobj->data.projectile) {
+			try {
+				curobj->data.projectile->data.speed = std::stof(line.speed);
+				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed speed {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.speed);
+			} catch (const std::invalid_argument& e) {
+			}
+		}
+
+		if (!line.speedMult.empty() && line.speedMult != "none" && curobj->data.projectile) {
+			try {
+				curobj->data.projectile->data.speed = curobj->data.projectile->data.speed * std::stof(line.speedMult);
+				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied speed {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.speed);
+			} catch (const std::invalid_argument& e) {
+			}
+		}
+
+		if (!line.range.empty() && line.range != "none" && curobj->data.projectile) {
+			try {
+				curobj->data.projectile->data.range = std::stof(line.range);
+				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed range {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.range);
+			} catch (const std::invalid_argument& e) {
+			}
+		}
+
+		if (!line.rangeMult.empty() && line.rangeMult != "none" && curobj->data.projectile) {
+			try {
+				curobj->data.projectile->data.range = curobj->data.projectile->data.range * std::stof(line.rangeMult);
+				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied range {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.range);
+			} catch (const std::invalid_argument& e) {
+			}
+		}
+
+		if (!line.gravity.empty() && line.gravity != "none" && curobj->data.projectile) {
+			try {
+				curobj->data.projectile->data.gravity = std::stof(line.gravity);
+				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed gravity {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.gravity);
+			} catch (const std::invalid_argument& e) {
+			}
+		}
+
+		if (!line.gravityMult.empty() && line.gravityMult != "none" && curobj->data.projectile) {
+			try {
+				curobj->data.projectile->data.gravity = curobj->data.projectile->data.gravity * std::stof(line.gravityMult);
+				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied gravity {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.gravity);
+			} catch (const std::invalid_argument& e) {
+			}
+		}
+
+		if (!line.setFlags.empty()) {
+			for (const auto& setFlag : line.setFlags) {
+				// logger::debug(FMT_STRING("ammo formid: {:08X} {} flag {}"), curobj->formID, curobj->fullName, setFlag);
+				if (toLowerCase(setFlag) == "ignoresnormalweaponresistance") {
+					curobj->data.flags.set(RE::AMMO_DATA::Flag::kIgnoresNormalWeaponResistance);
+					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag enabled ignoresnormalweaponresistance"), curobj->formID, curobj->fullName);
+				} else if (toLowerCase(setFlag) == "nonplayable") {
+					curobj->data.flags.set(RE::AMMO_DATA::Flag::kNonPlayable);
+					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag enabled nonplayable"), curobj->formID, curobj->fullName);
+				} else if (toLowerCase(setFlag) == "nonbolt") {
+					curobj->data.flags.set(RE::AMMO_DATA::Flag::kNonBolt);
+					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag enabled nonbolt"), curobj->formID, curobj->fullName);
+				} else {
+					// Handle the case where an invalid flag is provided
+					// You might want to add error handling or logging here
+				}
+			}
+		}
+
+		if (!line.removeFlags.empty()) {
+			for (const auto& removeFlag : line.removeFlags) {
+				if (toLowerCase(removeFlag) == "ignoresnormalweaponresistance") {
+					curobj->data.flags.reset(RE::AMMO_DATA::Flag::kIgnoresNormalWeaponResistance);
+					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag disabled ignoresnormalweaponresistance"), curobj->formID, curobj->fullName);
+				} else if (toLowerCase(removeFlag) == "nonplayable") {
+					curobj->data.flags.reset(RE::AMMO_DATA::Flag::kNonPlayable);
+					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag disabled nonplayable"), curobj->formID, curobj->fullName);
+				} else if (toLowerCase(removeFlag) == "nonbolt") {
+					curobj->data.flags.reset(RE::AMMO_DATA::Flag::kNonBolt);
+					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag disabled nonbolt"), curobj->formID, curobj->fullName);
+				} else {
+					// Handle the case where an invalid flag is provided
+					// You might want to add error handling or logging here
+				}
+			}
+		}
+
+
+
+
 	}
 
 }

@@ -33,11 +33,24 @@ namespace ALCH
 		std::vector<std::vector<std::string>> addedObjects;
 		std::vector<std::string> removedObjects;
 		std::vector<std::vector<std::string>> changedObjects;
+		std::vector<std::vector<std::string>> changedAddObjects;
+
+		std::string                           clear;
+		std::vector<std::string>              modNames;
+		std::vector<std::vector<std::string>> alternateTextures;
+		std::vector<std::string>              alternateTexturesRemove;
+		std::vector<std::string>              alternateTexturesFind;
+		std::string                           alternateTexturesClear;
+		std::string                           model;
+		std::vector<std::string>              filterByEditorIdContains;
+		std::vector<std::string>              filterByEditorIdContainsOr;
+		std::vector<std::string>              filterByEditorIdContainsExcluded;
 	};
 
 	struct line_content create_patch_instruction(const std::string& line);
 	void process_patch_instructions(const std::list<line_content>& tokens);
 	void* readConfig(const std::string& folder);
+	void                patch(ALCH::line_content line, RE::AlchemyItem* curobj);
 }
 
 #endif

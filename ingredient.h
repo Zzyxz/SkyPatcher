@@ -28,16 +28,27 @@ namespace INGR
 		std::vector<std::string> keywordsToRemove;
 		std::string filterType;
 		std::string capsvalue;
+		std::string                           valueMult;
 		std::string weight;
+		std::string                           weightMult;
+		std::string                           clear;
 		std::string fullName;
 		std::vector<std::vector<std::string>> addedObjects;
 		std::vector<std::string> removedObjects;
 		std::vector<std::vector<std::string>> changedObjects;
+		std::vector<std::vector<std::string>> changedAddObjects;
+		std::vector<std::string>              modNames;
+		std::vector<std::vector<std::string>> alternateTextures;
+		std::vector<std::string>              alternateTexturesRemove;
+		std::vector<std::string>              alternateTexturesFind;
+		std::string                           alternateTexturesClear;
+		std::string                           model;
 	};
 
 	struct line_content create_patch_instruction(const std::string& line);
 	void process_patch_instructions(const std::list<line_content>& tokens);
 	void* readConfig(const std::string& folder);
+	void                patch(INGR::line_content line, RE::IngredientItem* curobj);
 }
 
 #endif

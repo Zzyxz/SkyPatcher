@@ -33,11 +33,33 @@ namespace ENCH
 		std::vector<std::vector<std::string>> addedObjects;
 		std::vector<std::string> removedObjects;
 		std::vector<std::vector<std::string>> changedObjects;
+		std::vector<std::vector<std::string>> changedAddObjects;
+		std::vector<std::vector<std::string>> changedFirstObjects;
+		std::vector<std::string>              filterByEditorIdContains;
+		std::vector<std::string>              filterByEditorIdContainsOr;
+		std::vector<std::string>              filterByEditorIdContainsExcluded;
+		std::string baseCost;
+		std::string chargeOverride;
+		std::string halfCostPerk;
+		std::string chargeTime;
+		std::string castType;
+		std::string clear;
+		std::vector<std::string> modNames;
+
+		std::vector<std::string> setFlags;
+		std::vector<std::string> removeFlags;
+
+		std::vector<std::string> filterByMinimumSkillLevel;
+		std::vector<std::string> restrictToSchool;
+		std::vector<std::string> restrictToCastingType;
+		std::vector<std::string> restrictToSpellType;
+		
 	};
 
 	struct line_content create_patch_instruction(const std::string& line);
 	void process_patch_instructions(const std::list<line_content>& tokens);
 	void* readConfig(const std::string& folder);
+	void               patch(ENCH::line_content line, RE::EnchantmentItem* curobj);
 }
 
 #endif

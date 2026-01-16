@@ -6,57 +6,7 @@ namespace FORMLIST
 	{
 		line_content l;
 
-		//// extract objects
-		//std::regex  objects_regex("filterByFormLists\\s*=([^:]+)", regex::icase);
-		//std::smatch objects_match;
-		//std::regex_search(line, objects_match, objects_regex);
-		//std::vector<std::string> objects;
-		//if (objects_match.empty() || objects_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objects_str = objects_match[1];
-		//	std::regex           objects_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objects_iterator(objects_str.begin(), objects_str.end(), objects_list_regex);
-		//	std::sregex_iterator objects_end;
-		//	while (objects_iterator != objects_end) {
-		//		std::string tempVar = (*objects_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Race: {}"), race);
-		//		if (tempVar != "none") {
-		//			objects.push_back(tempVar);
-		//		}
-		//		++objects_iterator;
-		//	}
-		//	l.objects = objects;
-		//}
-
 		extractData(line, "filterByFormLists\\s*=([^:]+)", l.objects);
-
-		//// extract formsToAdd
-		//std::regex  formsToAdd_regex("formsToAdd\\s*=([^:]+)", regex::icase);
-		//std::smatch formsToAdd_match;
-		//std::regex_search(line, formsToAdd_match, formsToAdd_regex);
-		//std::vector<std::string> formsToAdd;
-		//if (formsToAdd_match.empty() || formsToAdd_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          formsToAdd_str = formsToAdd_match[1];
-		//	std::regex           formsToAdd_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator formsToAdd_iterator(formsToAdd_str.begin(), formsToAdd_str.end(), formsToAdd_list_regex);
-		//	std::sregex_iterator formsToAdd_end;
-		//	while (formsToAdd_iterator != formsToAdd_end) {
-		//		std::string keywordToAdd = (*formsToAdd_iterator)[0].str();
-		//		keywordToAdd.erase(keywordToAdd.begin(), std::find_if_not(keywordToAdd.begin(), keywordToAdd.end(), ::isspace));
-		//		keywordToAdd.erase(std::find_if_not(keywordToAdd.rbegin(), keywordToAdd.rend(), ::isspace).base(), keywordToAdd.end());
-		//		if (keywordToAdd != "none") {
-		//			//logger::info(FMT_STRING("formsToAdd: {}"), keywordToAdd);
-		//			formsToAdd.push_back(keywordToAdd);
-		//		}
-		//		++formsToAdd_iterator;
-		//	}
-		//	l.objectsAdd = formsToAdd;
-		//}
 
 		extractData(line, "formsToAdd\\s*=([^:]+)", l.objectsAdd);
 
@@ -81,34 +31,9 @@ namespace FORMLIST
 				//logger::debug(FMT_STRING("Match: {} {}"), match[1].str(), match[2].str());
 			}
 		}
-
-		//// extract formsToRemove
-		//std::regex  formsToRemove_regex("formsToRemove\\s*=([^:]+)", regex::icase);
-		//std::smatch formsToRemove_match;
-		//std::regex_search(line, formsToRemove_match, formsToRemove_regex);
-		//std::vector<std::string> formsToRemove;
-		//if (formsToRemove_match.empty() || formsToRemove_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          formsToRemove_str = formsToRemove_match[1];
-		//	std::regex           formsToRemove_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator formsToRemove_iterator(formsToRemove_str.begin(), formsToRemove_str.end(), formsToRemove_list_regex);
-		//	std::sregex_iterator formsToRemove_end;
-		//	while (formsToRemove_iterator != formsToRemove_end) {
-		//		std::string keywordToRemove = (*formsToRemove_iterator)[0].str();
-		//		keywordToRemove.erase(keywordToRemove.begin(), std::find_if_not(keywordToRemove.begin(), keywordToRemove.end(), ::isspace));
-		//		keywordToRemove.erase(std::find_if_not(keywordToRemove.rbegin(), keywordToRemove.rend(), ::isspace).base(), keywordToRemove.end());
-		//		if (keywordToRemove != "none") {
-		//			//logger::info(FMT_STRING("formsToRemove: {}"), keywordToRemove);
-		//			formsToRemove.push_back(keywordToRemove);
-		//		}
-		//		++formsToRemove_iterator;
-		//	}
-		//	l.objectsRemove = formsToRemove;
-		//}
-
 		extractData(line, "formsToRemove\\s*=([^:]+)", l.objectsRemove);
-
+		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
+		extractValueString(line, "clear\\s*=([^:]+)", l.clear);
 		return l;
 	}
 
@@ -119,7 +44,28 @@ namespace FORMLIST
 		RE::BSTArray<RE::BGSListForm*> objectArray = dataHandler->GetFormArray<RE::BGSListForm>();
 		for (const auto& line : tokens) {
 			for (const auto& curobj : objectArray) {
+
 				bool found = false;
+				
+
+				if (!curobj || curobj->IsDeleted()) {
+					continue;
+				}
+
+				if (!line.modNames.empty()) {
+					bool modFound = false;
+					for (auto const modName : line.modNames) {
+						if (modName == curobj->GetFile(0)->fileName) {
+							modFound = true;
+						}
+					}
+					if (modFound == false) {
+						continue;
+					}
+				}
+				
+				
+
 				//logger::debug(FMT_STRING("formlist found. {:08X}"), curobj->formID);
 				if (!line.objects.empty()) {
 					//logger::info("npc not empty");
@@ -140,24 +86,48 @@ namespace FORMLIST
 						}
 					}
 				}
+
 				if (line.objects.empty()) {
 					found = true;
 				}
 
-				if (found && !line.objectsRemove.empty()) {
-					for (size_t i = 0; i < line.objectsRemove.size(); i++) {
-						RE::TESForm* currentform = nullptr;
-						std::string  string_form = line.objectsRemove[i];
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform) {
-							//logger::debug(FMT_STRING("formlist formid: {:08X} with count({}) "), curobj->formID, curobj->arrayOfForms.size());
-							curobj->forms.erase(std::remove_if(curobj->forms.begin(), curobj->forms.end(), [&](const RE::TESForm* x) {
-								return x->formID == currentform->formID;
-							}));
-							logger::debug(FMT_STRING("formlist formid: {:08X} with count({}) removed form {:08X} "), curobj->formID, curobj->forms.size(), currentform->formID);
+				if (found && !line.clear.empty() && line.clear != "none") {
+					curobj->forms.clear();
+				}
+
+				if (!line.objectsRemove.empty()) {
+					for (const auto& objectToRemove : line.objectsRemove) {
+						std::string        removeFormStr = objectToRemove;
+						auto removeForm = GetFormFromIdentifier(removeFormStr);
+						if (removeForm) {
+							auto it = std::remove_if(curobj->forms.begin(), curobj->forms.end(), [&](const RE::TESForm* x) {
+								return x->formID == removeForm->formID;
+							});
+							while (it != curobj->forms.end()) {
+								curobj->forms.erase(it);
+								it = std::remove_if(it, curobj->forms.end(), [&](const RE::TESForm* x) {
+									return x->formID == removeForm->formID;
+								});
+							}
+							logger::debug(FMT_STRING("formlist formid: {:08X} removed form {:08X} "), curobj->formID, removeForm->formID);
 						}
 					}
 				}
+
+				//if (found && !line.objectsRemove.empty()) {
+				//	for (size_t i = 0; i < line.objectsRemove.size(); i++) {
+				//		RE::TESForm* currentform = nullptr;
+				//		std::string  string_form = line.objectsRemove[i];
+				//		currentform = GetFormFromIdentifier(string_form);
+				//		if (currentform) {
+				//			//logger::debug(FMT_STRING("formlist formid: {:08X} with count({}) "), curobj->formID, curobj->arrayOfForms.size());
+				//			curobj->forms.erase(std::remove_if(curobj->forms.begin(), curobj->forms.end(), [&](const RE::TESForm* x) {
+				//				return x->formID == currentform->formID;
+				//			}));
+				//			
+				//		}
+				//	}
+				//}
 
 				if (found && !line.objectsAdd.empty()) {
 					for (size_t i = 0; i < line.objectsAdd.size(); i++) {
@@ -191,8 +161,10 @@ namespace FORMLIST
 					}
 				}
 
-				if (found) {
-				}
+
+
+				//if (found) {
+				//}
 			}
 		}
 	}

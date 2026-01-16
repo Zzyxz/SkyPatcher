@@ -38,9 +38,11 @@ namespace LEVELEDLIST
 		if (!a_lobj)
 			return;
 
-		using func_t = decltype(&FreeLeveledList);
-		const REL::Relocation<func_t> func{ REL::ID(296092) };
-		return func(a_lobj, arg2);
+		RE::free(a_lobj);
+
+		//using func_t = decltype(&FreeLeveledList);
+		//const REL::Relocation<func_t> func{ REL::ID(296092) };
+		//return func(a_lobj, arg2);
 	}
 
 	struct LL_ALLOC
@@ -79,28 +81,41 @@ namespace LEVELEDLIST
 
 			levl->entries.clear();
 			levl->numEntries = 0;
+			//logger::debug("ceateLL size after clear entries numEntries {}", levl->entries.size(), levl->numEntries);
 		}
 
 		if (a_llad.empty())
 			return;
 
 		uint32_t  size = static_cast<uint32_t>(a_llad.size());
+		//logger::debug("ceateLL size {}", size);
 		LL_ALLOC* newLL = reserveNewLevL(size);
 		if (!newLL)
 			return;
 
 		newLL->count = size;
-		for (uint32_t ii = 0; ii < size; ii++)
+		for (uint32_t ii = 0; ii < size; ii++) {
 			newLL->ll[ii] = a_llad[ii];
+			//logger::debug("ceateLL size for {}", ii);
+		}
 
-		levl->entries.resize(sizeof(RE::LEVELED_OBJECT) * newLL->count);
-		
+		//logger::debug("ceateLL size before resize entries {} numEntries {}", levl->entries.size(), levl->numEntries);
+
+		levl->entries.resize(newLL->count);
+
+		//logger::debug("ceateLL size newLL->count {}", newLL->count);
+
+		//logger::debug("ceateLL size before set entries {} numEntries {}", levl->entries.size(), levl->numEntries);
+
 		for (int i = 0; i < newLL->count; i++) {
-			levl->entries[i] = newLL->ll[i];  
+			levl->entries[i] = newLL->ll[i];
+			//logger::debug("ceateLL size for {}", i);
 		}
 
 		//= nLL->ll;
 		levl->numEntries = static_cast<int8_t>(size);
+		//logger::debug("ceateLL size static_cast<int8_t>(size) {}", static_cast<int8_t>(size));
+		//logger::debug("ceateLL size entries {} numEntries {}", levl->entries.size(), levl->numEntries);
 	}
 
 	void ClearLL(RE::TESLeveledList* levl)
@@ -110,7 +125,7 @@ namespace LEVELEDLIST
 
 		if (!levl->entries.empty()) {
 			memset(levl->entries.data(), 0, levl->numEntries * sizeof(RE::LEVELED_OBJECT));
-			FreeLeveledList(levl->entries.data());
+			//FreeLeveledList(levl->entries.data());
 
 			levl->entries.clear();
 			levl->numEntries = 0;
@@ -121,72 +136,8 @@ namespace LEVELEDLIST
 	{
 		line_content l;
 
-		// Regular expression pattern to extract level, count and chance
-		// extract addToLL
-		std::regex  addToLL_regex("addToLL\\s*=([^:]+)", regex::icase);
-		std::smatch addToLL_match;
-		std::regex_search(line, addToLL_match, addToLL_regex);
-		std::vector<std::string> addToLL;
-		if (addToLL_match.empty() || addToLL_match[1].str().empty()) {
-			//empty
-		} else {
-			std::string              valueLine = addToLL_match[1].str();
-			std::vector<std::string> arr;
-			// exclude the addToLL= part from the first string
-			size_t      startPos = valueLine.find("=") + 1;
-			size_t      pos = 0;
-			std::string token;
-			while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
-				token = valueLine.substr(startPos, pos - startPos);
-				arr.push_back(token);
-				startPos = pos + 1;
-			}
-			arr.push_back(valueLine.substr(startPos));
 
-			for (std::string s : arr) {
-				std::cout << "String: " << s << std::endl;
-				std::vector<std::string> splitArr;
-				size_t                   innerPos = 0;
-				std::string              innerToken;
-				while ((innerPos = s.find("~")) != std::string::npos) {
-					innerToken = s.substr(0, innerPos);
-					splitArr.push_back(innerToken);
-					s.erase(0, innerPos + 1);
-				}
-				splitArr.push_back(s);
 
-				l.object = splitArr[0];
-				l.level = splitArr[1];
-				l.reference = splitArr[2];
-				l.count = splitArr[3];
-				l.chance = splitArr[4];
-			}
-		}
-
-		//// extract objects
-		//std::regex  objects_regex("filterByLLs\\s*=([^:]+)", regex::icase);
-		//std::smatch objects_match;
-		//std::regex_search(line, objects_match, objects_regex);
-		//std::vector<std::string> objects;
-		//if (objects_match.empty() || objects_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objects_str = objects_match[1];
-		//	std::regex           objects_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objects_iterator(objects_str.begin(), objects_str.end(), objects_list_regex);
-		//	std::sregex_iterator objects_end;
-		//	while (objects_iterator != objects_end) {
-		//		std::string tempVar = (*objects_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Race: {}"), race);
-		//		if (tempVar != "none") {
-		//			objects.push_back(tempVar);
-		//		}
-		//		++objects_iterator;
-		//	}
-		//	l.objects = objects;
-		//}
 
 		extractData(line, "filterByLLs\\s*=([^:]+)", l.objects);
 
@@ -197,263 +148,53 @@ namespace LEVELEDLIST
 		// extract the value after the equals sign
 		if (noFilterLLmatch.empty() || noFilterLLmatch[1].str().empty()) {
 			l.noFilterLL = "none";
-		} else {
+		}
+		else {
 			std::string noFilterLLvalue = noFilterLLmatch[1].str();
 			noFilterLLvalue.erase(noFilterLLvalue.begin(), std::find_if_not(noFilterLLvalue.begin(), noFilterLLvalue.end(), ::isspace));
 			noFilterLLvalue.erase(std::find_if_not(noFilterLLvalue.rbegin(), noFilterLLvalue.rend(), ::isspace).base(), noFilterLLvalue.end());
 			l.noFilterLL = noFilterLLvalue;
 		}
 
-		//// extract objectsContainer
-		//std::regex  objectsContainer_regex("filterByContainers\\s*=([^:]+)", regex::icase);
-		//std::smatch objectsContainer_match;
-		//std::regex_search(line, objectsContainer_match, objectsContainer_regex);
-		//std::vector<std::string> objectsContainer;
-		//if (objectsContainer_match.empty() || objectsContainer_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objectsContainer_str = objectsContainer_match[1];
-		//	std::regex           objectsContainer_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objectsContainer_iterator(objectsContainer_str.begin(), objectsContainer_str.end(), objectsContainer_list_regex);
-		//	std::sregex_iterator objectsContainer_end;
-		//	while (objectsContainer_iterator != objectsContainer_end) {
-		//		std::string tempVar = (*objectsContainer_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Race: {}"), race);
-		//		if (tempVar != "none") {
-		//			objectsContainer.push_back(tempVar);
-		//		}
-		//		++objectsContainer_iterator;
-		//	}
-		//	l.containerObjects = objectsContainer;
-		//}
-
-		extractData(line, "filterByContainers\\s*=([^:]+)", l.containerObjects);
-
-		std::regex  add_regex("addToLLs\\s*=([^:]+)", regex::icase);
-		std::smatch add_match;
-		std::regex_search(line, add_match, add_regex);
-		std::vector<std::string> add;
-		if (add_match.empty() || add_match[1].str().empty()) {
-			//empty
-		} else {
-			std::string              valueLine = add_match[1].str();
-			std::vector<std::string> arr;
-
-			// exclude the addToLL= part from the first string
-			size_t      startPos = valueLine.find("=") + 1;
-			size_t      pos = 0;
-			std::string token;
-			while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
-				token = valueLine.substr(startPos, pos - startPos);
-				token = trim(token);  // remove leading and trailing white spaces
-				arr.push_back(token);
-				startPos = pos + 1;
-			}
-			token = valueLine.substr(startPos);
-			token = trim(token);  // remove leading and trailing white spaces
-			arr.push_back(token);
-
-			std::vector<std::vector<std::string>> arr2D(arr.size());
-
-			for (int i = 0; i < arr.size(); i++) {
-				std::vector<std::string> splitArr;
-				size_t                   innerPos = 0;
-				std::string              innerToken;
-				while ((innerPos = arr[i].find("~")) != std::string::npos) {
-					innerToken = arr[i].substr(0, innerPos);
-					innerToken = trim(innerToken);  // remove leading and trailing white spaces
-					splitArr.push_back(innerToken);
-					arr[i].erase(0, innerPos + 1);
-				}
-				innerToken = arr[i];
-				innerToken = trim(innerToken);  // remove leading and trailing white spaces
-				splitArr.push_back(innerToken);
-				arr2D[i] = splitArr;
-			}
-			l.addedObjects = arr2D;
-		}
-
-		std::regex  addContainer_regex("addToContainers\\s*=([^:]+)", regex::icase);
-		std::smatch addContainer_match;
-		std::regex_search(line, addContainer_match, addContainer_regex);
-		std::vector<std::string> addContainer;
-		if (addContainer_match.empty() || addContainer_match[1].str().empty()) {
-			//empty
-		} else {
-			std::string              valueLine = addContainer_match[1].str();
-			std::vector<std::string> arr;
-
-			// exclude the addToLL= part from the first string
-			size_t      startPos = valueLine.find("=") + 1;
-			size_t      pos = 0;
-			std::string token;
-			while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
-				token = valueLine.substr(startPos, pos - startPos);
-				token = trim(token);  // remove leading and trailing white spaces
-				arr.push_back(token);
-				startPos = pos + 1;
-			}
-			token = valueLine.substr(startPos);
-			token = trim(token);  // remove leading and trailing white spaces
-			arr.push_back(token);
-
-			std::vector<std::vector<std::string>> arr2D(arr.size());
-
-			for (int i = 0; i < arr.size(); i++) {
-				std::vector<std::string> splitArr;
-				size_t                   innerPos = 0;
-				std::string              innerToken;
-				while ((innerPos = arr[i].find("~")) != std::string::npos) {
-					innerToken = arr[i].substr(0, innerPos);
-					innerToken = trim(innerToken);  // remove leading and trailing white spaces
-					splitArr.push_back(innerToken);
-					arr[i].erase(0, innerPos + 1);
-				}
-				innerToken = arr[i];
-				innerToken = trim(innerToken);  // remove leading and trailing white spaces
-				splitArr.push_back(innerToken);
-				arr2D[i] = splitArr;
-			}
-			l.addedContainerObjects = arr2D;
-		}
-
-		//// extract objectsToRemove
-		//std::regex  objectsToRemove_regex("removeFromContainers\\s*=([^:]+)", regex::icase);
-		//std::smatch objectsToRemove_match;
-		//std::regex_search(line, objectsToRemove_match, objectsToRemove_regex);
-		//std::vector<std::string> objectsToRemove;
-		//if (objectsToRemove_match.empty() || objectsToRemove_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objectsToRemove_str = objectsToRemove_match[1];
-		//	std::regex           objectsToRemove_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objectsToRemove_iterator(objectsToRemove_str.begin(), objectsToRemove_str.end(), objectsToRemove_list_regex);
-		//	std::sregex_iterator objectsToRemove_end;
-		//	while (objectsToRemove_iterator != objectsToRemove_end) {
-		//		std::string spellToAdd = (*objectsToRemove_iterator)[0].str();
-		//		spellToAdd.erase(spellToAdd.begin(), std::find_if_not(spellToAdd.begin(), spellToAdd.end(), ::isspace));
-		//		spellToAdd.erase(std::find_if_not(spellToAdd.rbegin(), spellToAdd.rend(), ::isspace).base(), spellToAdd.end());
-		//		if ((*objectsToRemove_iterator)[0].str() != "none") {
-		//			//logger::info(FMT_STRING("objectsToRemove: {}"), spellToAdd);
-		//			objectsToRemove.push_back(spellToAdd);
-		//		}
-		//		++objectsToRemove_iterator;
-		//	}
-		//	l.removedContainerObjects = objectsToRemove;
-		//}
-
-		extractData(line, "removeFromContainers\\s*=([^:]+)", l.removedContainerObjects);
-
-		std::regex  remove_regex("removeFromLLs\\s*=([^:]+)", regex::icase);
-		std::smatch remove_match;
-		std::regex_search(line, remove_match, remove_regex);
-		std::vector<std::string> remove;
-		if (remove_match.empty() || remove_match[1].str().empty()) {
-			//empty
-		} else {
-			std::string              valueLine = remove_match[1].str();
-			std::vector<std::string> arr;
-
-			// exclude the removeToLL= part from the first string
-			size_t      startPos = valueLine.find("=") + 1;
-			size_t      pos = 0;
-			std::string token;
-			while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
-				token = valueLine.substr(startPos, pos - startPos);
-				token = trim(token);  // remove leading and trailing white spaces
-				arr.push_back(token);
-				startPos = pos + 1;
-			}
-			token = valueLine.substr(startPos);
-			token = trim(token);  // remove leading and trailing white spaces
-			arr.push_back(token);
-
-			std::vector<std::vector<std::string>> arr2D(arr.size());
-
-			for (int i = 0; i < arr.size(); i++) {
-				std::vector<std::string> splitArr;
-				size_t                   innerPos = 0;
-				std::string              innerToken;
-				while ((innerPos = arr[i].find("~")) != std::string::npos) {
-					innerToken = arr[i].substr(0, innerPos);
-					innerToken = trim(innerToken);  // remove leading and trailing white spaces
-					splitArr.push_back(innerToken);
-					arr[i].erase(0, innerPos + 1);
-				}
-				innerToken = arr[i];
-				innerToken = trim(innerToken);  // remove leading and trailing white spaces
-				splitArr.push_back(innerToken);
-				arr2D[i] = splitArr;
-			}
-			l.removedObjects = arr2D;
-		}
-
-		// extract clear
-		std::regex  clearlist_regex("clear\\s*=([^:]+)", regex::icase);
-		std::smatch clearlistmatch;
-		std::regex_search(line, clearlistmatch, clearlist_regex);
+		// extract noFilterLLNPC
+		std::regex  noFilterLLNPC_regex("noFilterLLNPC\\s*=([^:]+)", regex::icase);
+		std::smatch noFilterLLNPCmatch;
+		std::regex_search(line, noFilterLLNPCmatch, noFilterLLNPC_regex);
 		// extract the value after the equals sign
-		if (clearlistmatch.empty() || clearlistmatch[1].str().empty()) {
-			l.clear = "none";
-		} else {
-			std::string clearlistvalue = clearlistmatch[1].str();
-			clearlistvalue.erase(std::remove_if(clearlistvalue.begin(), clearlistvalue.end(), ::isspace), clearlistvalue.end());
-			l.clear = clearlistvalue;
+		if (noFilterLLNPCmatch.empty() || noFilterLLNPCmatch[1].str().empty()) {
+			l.noFilterLLNPC = "none";
+		}
+		else {
+			std::string noFilterLLNPCvalue = noFilterLLNPCmatch[1].str();
+			noFilterLLNPCvalue.erase(noFilterLLNPCvalue.begin(), std::find_if_not(noFilterLLNPCvalue.begin(), noFilterLLNPCvalue.end(), ::isspace));
+			noFilterLLNPCvalue.erase(std::find_if_not(noFilterLLNPCvalue.rbegin(), noFilterLLNPCvalue.rend(), ::isspace).base(), noFilterLLNPCvalue.end());
+			l.noFilterLLNPC = noFilterLLNPCvalue;
 		}
 
-		// extract calcforLevel
-		std::regex  calcforLevellist_regex("calcForLevel\\s*=([^:]+)", regex::icase);
-		std::smatch calcforLevellistmatch;
-		std::regex_search(line, calcforLevellistmatch, calcforLevellist_regex);
-		// extract the value after the equals sign
-		if (calcforLevellistmatch.empty() || calcforLevellistmatch[1].str().empty()) {
-			l.calcForLevel = "none";
-		} else {
-			std::string calcforLevellistvalue = calcforLevellistmatch[1].str();
-			calcforLevellistvalue.erase(std::remove_if(calcforLevellistvalue.begin(), calcforLevellistvalue.end(), ::isspace), calcforLevellistvalue.end());
-			l.calcForLevel = calcforLevellistvalue;
-		}
+		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
+		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
+		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
 
-		// extract calcEachItem
-		std::regex  calcEachItemlist_regex("calcEachItem\\s*=([^:]+)", regex::icase);
-		std::smatch calcEachItemlistmatch;
-		std::regex_search(line, calcEachItemlistmatch, calcEachItemlist_regex);
-		// extract the value after the equals sign
-		if (calcEachItemlistmatch.empty() || calcEachItemlistmatch[1].str().empty()) {
-			l.calcEachItem = "none";
-		} else {
-			std::string calcEachItemlistvalue = calcEachItemlistmatch[1].str();
-			calcEachItemlistvalue.erase(std::remove_if(calcEachItemlistvalue.begin(), calcEachItemlistvalue.end(), ::isspace), calcEachItemlistvalue.end());
-			l.calcEachItem = calcEachItemlistvalue;
-		}
 
-		// extract calcLevelAndEachItem
-		std::regex  calcLevelAndEachItemlist_regex("calcLevelAndEachItem\\s*=([^:]+)", regex::icase);
-		std::smatch calcLevelAndEachItemlistmatch;
-		std::regex_search(line, calcLevelAndEachItemlistmatch, calcLevelAndEachItemlist_regex);
-		// extract the value after the equals sign
-		if (calcLevelAndEachItemlistmatch.empty() || calcLevelAndEachItemlistmatch[1].str().empty()) {
-			l.calcForLevelAndEachItem = "none";
-		} else {
-			std::string calcLevelAndEachItemlistvalue = calcLevelAndEachItemlistmatch[1].str();
-			calcLevelAndEachItemlistvalue.erase(std::remove_if(calcLevelAndEachItemlistvalue.begin(), calcLevelAndEachItemlistvalue.end(), ::isspace), calcLevelAndEachItemlistvalue.end());
-			l.calcForLevelAndEachItem = calcLevelAndEachItemlistvalue;
-		}
+		extractData(line, "filterByLLNPCs\\s*=([^:]+)", l.containerObjects);
 
-		// extract calcUseAll
-		std::regex  calcUseAlllist_regex("calcUseAll\\s*=([^:]+)", regex::icase);
-		std::smatch calcUseAlllistmatch;
-		std::regex_search(line, calcUseAlllistmatch, calcUseAlllist_regex);
-		// extract the value after the equals sign
-		if (calcUseAlllistmatch.empty() || calcUseAlllistmatch[1].str().empty()) {
-			l.calcUseAll = "none";
-		} else {
-			std::string calcUseAlllistvalue = calcUseAlllistmatch[1].str();
-			calcUseAlllistvalue.erase(std::remove_if(calcUseAlllistvalue.begin(), calcUseAlllistvalue.end(), ::isspace), calcUseAlllistvalue.end());
-			l.calcUseAll = calcUseAlllistvalue;
-		}
+		extractToArr2D(line, "addToLLs\\s*=([^:]+)", l.addedObjects);
+		extractToArr2D(line, "addOnceToLLs\\s*=([^:]+)", l.addedObjectsOnce);
+
+		extractToArr2D(line, "removeFromLLs\\s*=([^:]+)", l.removedObjects);
+
+		extractValueString(line, "clear\\s*=([^:]+)", l.clear);
+
+		extractValueString(line, "calcForLevel\\s*=([^:]+)", l.calcForLevel);
+
+		extractValueString(line, "calcEachItem\\s*=([^:]+)", l.calcEachItem);
+
+		extractValueString(line, "calcLevelAndEachItem\\s*=([^:]+)", l.calcForLevelAndEachItem);
+
+		extractValueString(line, "calcUseAll\\s*=([^:]+)", l.calcUseAll);
+
+		extractValueString(line, "clearFlags\\s*=([^:]+)", l.clearFlags);
+
 
 		std::regex  templateKeyword_regex("addTemplateKeywords\\s*=([^:]+)", regex::icase);
 		std::smatch templateKeyword_match;
@@ -461,7 +202,8 @@ namespace LEVELEDLIST
 		std::vector<std::string> templateKeyword;
 		if (templateKeyword_match.empty() || templateKeyword_match[1].str().empty()) {
 			//empty
-		} else {
+		}
+		else {
 			std::string              valueLine = templateKeyword_match[1].str();
 			std::vector<std::string> arr;
 
@@ -499,32 +241,11 @@ namespace LEVELEDLIST
 			l.templateKeyword = arr2D;
 		}
 
-		//// extract removeWeaponsByKeyword
-		//std::regex  removeWeaponsByKeyword_regex("removeObjectsByKeyword\\s*=([^:]+)", regex::icase);
-		//std::smatch removeWeaponsByKeyword_match;
-		//std::regex_search(line, removeWeaponsByKeyword_match, removeWeaponsByKeyword_regex);
-		//std::vector<std::string> removeWeaponsByKeyword;
-		//if (removeWeaponsByKeyword_match.empty() || removeWeaponsByKeyword_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          removeWeaponsByKeyword_str = removeWeaponsByKeyword_match[1];
-		//	std::regex           removeWeaponsByKeyword_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator removeWeaponsByKeyword_iterator(removeWeaponsByKeyword_str.begin(), removeWeaponsByKeyword_str.end(), removeWeaponsByKeyword_list_regex);
-		//	std::sregex_iterator removeWeaponsByKeyword_end;
-		//	while (removeWeaponsByKeyword_iterator != removeWeaponsByKeyword_end) {
-		//		std::string keywordToRemove = (*removeWeaponsByKeyword_iterator)[0].str();
-		//		keywordToRemove.erase(keywordToRemove.begin(), std::find_if_not(keywordToRemove.begin(), keywordToRemove.end(), ::isspace));
-		//		keywordToRemove.erase(std::find_if_not(keywordToRemove.rbegin(), keywordToRemove.rend(), ::isspace).base(), keywordToRemove.end());
-		//		if (keywordToRemove != "none") {
-		//			//logger::info(FMT_STRING("removeWeaponsByKeyword: {}"), keywordToRemove);
-		//			removeWeaponsByKeyword.push_back(keywordToRemove);
-		//		}
-		//		++removeWeaponsByKeyword_iterator;
-		//	}
-		//	l.removeItemsByKeyword = removeWeaponsByKeyword;
-		//}
-
 		extractData(line, "removeObjectsByKeyword\\s*=([^:]+)", l.removeItemsByKeyword);
+		extractValueString(line, "chanceGlobal\\s*=([^:]+)", l.llglobal);
+		extractValueString(line, "chanceNone\\s*=([^:]+)", l.chanceNone);
+		extractToArr2D(line, "formsToReplace\\s*=([^:]+)", l.replaceObjects);
+		extractToArr2D(line, "objectMultCount\\s*=([^:]+)", l.objectMultCount);
 
 		return l;
 	}
@@ -533,16 +254,15 @@ namespace LEVELEDLIST
 	{
 		logger::debug("processing patch instructions");
 		const auto                    dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESLevItem*> objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
 
-		const auto                       containerHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESObjectCONT*> containerArray = containerHandler->GetFormArray<RE::TESObjectCONT>();
+
+
 
 		for (const auto& line : tokens) {
 			//New
 			if (!line.objects.empty()) {
 				for (const auto& objectstring : line.objects) {
-					RE::TESForm*    currentform = nullptr;
+					RE::TESForm* currentform = nullptr;
 					RE::TESLevItem* object = nullptr;
 
 					std::string string_form = objectstring;
@@ -559,346 +279,111 @@ namespace LEVELEDLIST
 				}
 			}
 
+
 			if (!line.containerObjects.empty()) {
 				//logger::info("npc not empty");
 				for (const auto& objectstring : line.containerObjects) {
-					RE::TESForm*       currentform = nullptr;
-					RE::TESObjectCONT* object = nullptr;
+					RE::TESForm* currentform = nullptr;
+					RE::TESLevCharacter* object = nullptr;
 					std::string        string_form = objectstring;
 					currentform = GetFormFromIdentifier(string_form);
-					if (currentform && currentform->formType == RE::FormType::Container) {
-						object = (RE::TESObjectCONT*)currentform;
-						patchContainer(line, object);
+					if (currentform && currentform->formType == RE::FormType::LeveledNPC) {
+						object = (RE::TESLevCharacter*)currentform;
+						//logger::debug(FMT_STRING("leveled list char"));
+						patch(line, object);
 					}
 				}
 			}
 
 			if (!line.noFilterLL.empty() && toLowerCase(line.noFilterLL) == "true") {
+				RE::BSTArray<RE::TESLevItem*> objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
 				for (const auto& curobj : objectArray) {
 					if (static_cast<uint32_t>(curobj->numEntries) > 120) {
 						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
 						continue;
 					}
+
 					patch(line, curobj);
 				}
 			}
 
-			//for (const auto& curobj : objectArray) {
-			//	bool found = false;
+			if (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty() || !line.filterByEditorIdContainsExcluded.empty()) {
+				RE::BSTArray<RE::TESLevItem*> objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
+				for (const auto& curobj : objectArray) {
 
-			//	//Legacy
-			//	if (!line.object.empty()) {
-			//		RE::TESForm* currentform = nullptr;
-			//		RE::TESLevItem* npc = nullptr;
-			//		std::string string_form = line.object;
-			//		currentform = GetFormFromIdentifier(string_form);
-			//		if (currentform && currentform->formType == RE::ENUM_FORM_ID::kLVLI) {
-			//			npc = (RE::TESLevItem*)currentform;
-			//			if (curobj->formID == npc->formID) {
-			//				found = true;
-			//				//logger::debug(FMT_STRING("LVLI Found {:08X}"), npc->formID);
-			//			}
-			//		}
-			//	}
+					bool contains = false;
+					bool containsOr = false;
+					bool found = false;
 
-			//	//New
-			//	if (!line.objects.empty()) {
-			//		//logger::info("npc not empty");
-			//		for (const auto& objectstring : line.objects) {
-			//			RE::TESForm* currentform = nullptr;
-			//			RE::TESLevItem* object = nullptr;
+					if (static_cast<uint32_t>(curobj->numEntries) > 120) {
+						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
+						continue;
+					}
 
-			//			std::string string_form = objectstring;
-			//			currentform = GetFormFromIdentifier(string_form);
-			//			if (currentform && currentform->formType == RE::ENUM_FORM_ID::kLVLI) {
-			//				object = (RE::TESLevItem*)currentform;
+					if (!line.filterByEditorIdContains.empty()) {
+						for (const auto& editorString : line.filterByEditorIdContains) {
+							if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
+								contains = true;
+							}
+							else {
+								contains = false;
+								break;
+							}
+						}
+					}
+					else {
+						contains = true;
+					}
 
-			//				if (curobj->formID == object->formID) {
-			//					found = true;
-			//					//logger::debug("LL found: {:08X} flags {}", object->formID, object->llFlags);
-			//					break;
-			//				}
-			//			}
-			//		}
-			//	}
+					if (!line.filterByEditorIdContainsOr.empty()) {
+						//logger::info("keywords not empty");
+						for (const auto& editorString : line.filterByEditorIdContainsOr) {
+							if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
+								containsOr = true;
+								break;
+							}
+						}
+					}
+					else {
+						containsOr = true;
+					}
 
-			//	if (!line.object.empty() && !line.objects.empty()) {
-			//		found = true;
-			//	}
+					if ((!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
+						//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
+						found = true;
+					}
 
-			//	if (found && !line.removedObjects.empty()) {
-			//		std::vector<RE::LEVELED_OBJECT> llVec = GetLL(curobj);
+					if (!line.filterByEditorIdContainsExcluded.empty() && found) {
+						//logger::info("factions not empty");
+						for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
+							if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
+								found = false;
+								break;
+							}
+						}
+					}
 
-			//		for (const auto& objectsToRemove : line.removedObjects) {
-			//			RE::TESForm* delForm = GetFormFromIdentifier(objectsToRemove[0]);
-			//			if (!delForm) {
-			//				logger::debug(FMT_STRING("Form not found {}, skipping."), objectsToRemove[0]);
-			//				continue;
-			//			}
+					if (found) {
+						patch(line, curobj);
+					}
+				}
+			}
 
-			//			std::string relationSign = "";
-			//			uint16_t number;
-			//			bool hasNumberLvl = false;
-			//			bool hasNumberCount = false;
 
-			//			if (objectsToRemove.size() >= 2) {
-			//				std::vector<std::string> templvl = splitRelationNumber(objectsToRemove[1]);
-			//				if (templvl.size() == 2 && templvl[0] != "none") {
-			//					number = std::stoi(templvl[0]);
-			//					relationSign = templvl[1];
-			//					hasNumberLvl = true;
-			//				} else if (templvl.size() == 1 && templvl[0] != "none") {
-			//					number = std::stoi(templvl[0]);
-			//					hasNumberLvl = true;
-			//				}
+			if (!line.noFilterLLNPC.empty() && toLowerCase(line.noFilterLLNPC) == "true") {
+				RE::BSTArray<RE::TESLevCharacter*> tesLevCharArray = dataHandler->GetFormArray<RE::TESLevCharacter>();
+				for (const auto& curobj : tesLevCharArray) {
+					if (static_cast<uint32_t>(curobj->numEntries) > 120) {
+						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
+						continue;
+					}
 
-			//				if (hasNumberLvl) {
-			//					if (relationSign == "<") {
-			//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-			//							return x.level < number && x.form == delForm;
-			//						}),
-			//							llVec.end());
-			//						logger::debug(FMT_STRING("leveled Lists {:08X} level < {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-			//					} else if (relationSign == ">") {
-			//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-			//							return x.level > number && x.form == delForm;
-			//						}),
-			//							llVec.end());
-			//						logger::debug(FMT_STRING("leveled Lists {:08X} level > {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-			//					} else if (relationSign == ">=") {
-			//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-			//							return x.level >= number && x.form == delForm;
-			//						}),
-			//							llVec.end());
-			//						logger::debug(FMT_STRING("leveled Lists {:08X} level >= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-			//					} else if (relationSign == "<=") {
-			//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-			//							return x.level <= number && x.form == delForm;
-			//						}),
-			//							llVec.end());
-			//						logger::debug(FMT_STRING("leveled Lists {:08X} level <= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-			//					} else if (relationSign == "") {
-			//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-			//							return x.level == number && x.form == delForm;
-			//						}),
-			//							llVec.end());
-			//						logger::debug(FMT_STRING("leveled Lists {:08X} level == {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-			//					}
-			//				}
-			//			}
+					patch(line, curobj);
+				}
+			}
 
-			//			if (objectsToRemove.size() >= 3) {
-			//				std::vector<std::string> tempcount = splitRelationNumber(objectsToRemove[2]);
 
-			//				relationSign = "";
 
-			//				if (tempcount.size() == 2 && tempcount[0] != "none") {
-			//					number = std::stoi(tempcount[0]);
-			//					relationSign = tempcount[1];
-			//					hasNumberCount = true;
-			//				} else if (tempcount.size() == 1 && tempcount[0] != "none") {
-			//					number = std::stoi(tempcount[0]);
-			//					hasNumberCount = true;
-			//				}
-
-			//				if (hasNumberCount) {
-			//					if (relationSign == "<") {
-			//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-			//							return x.count < number && x.form == delForm;
-			//						}),
-			//							llVec.end());
-			//						logger::debug(FMT_STRING("leveled Lists {:08X} count < {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-			//					} else if (relationSign == ">") {
-			//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-			//							return x.count > number && x.form == delForm;
-			//						}),
-			//							llVec.end());
-			//						logger::debug(FMT_STRING("leveled Lists {:08X} count > {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-			//					} else if (relationSign == ">=") {
-			//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-			//							return x.count >= number && x.form == delForm;
-			//						}),
-			//							llVec.end());
-			//						logger::debug(FMT_STRING("leveled Lists {:08X} count >= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-			//					} else if (relationSign == "<=") {
-			//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-			//							return x.count <= number && x.form == delForm;
-			//						}),
-			//							llVec.end());
-			//						logger::debug(FMT_STRING("leveled Lists {:08X} count <= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-			//					} else if (relationSign == "") {
-			//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-			//							return x.count == number && x.form == delForm;
-			//						}),
-			//							llVec.end());
-			//						logger::debug(FMT_STRING("leveled Lists {:08X} count == {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-			//					}
-			//				}
-			//			}
-
-			//			if (!hasNumberLvl && !hasNumberCount) {
-			//				llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-			//					return x.form == delForm;
-			//				}),
-			//					llVec.end());
-			//				logger::debug(FMT_STRING("leveled Lists {:08X} removed all Forms {:08X}"), curobj->formID, delForm->formID);
-			//			}
-			//		}
-
-			//		std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
-			//			return a.level < b.level;
-			//		});
-			//		SetLL(curobj, llVec);
-			//	}
-
-			//	if (found && !line.templateKeyword.empty()) {
-
-			//		for (const auto& object : line.templateKeyword) {
-			//
-			//			RE::BGSKeyword* addForm = (RE::BGSKeyword*)GetFormFromIdentifier(object[0]);
-			//			changeKeyword_TESLevItem(curobj, addForm, std::stoi(object[1]));
-			//			logger::debug(FMT_STRING("leveled Lists formid: {:08X} added/changed {:08X} {} {}"), curobj->formID, addForm->formID, addForm->formEditorID, object[1]);
-			//
-			//		}
-
-			//		//curobj->keywordChances
-
-			//	}
-
-			//	if (found && !line.clear.empty() && line.clear != "none") {
-			//		if (line.clear == "yes" || line.clear == "true") {
-			//			logger::debug(FMT_STRING("leveled lists {:08X} cleared"), curobj->formID);
-			//			ClearLL(curobj);
-
-			//		}
-			//	}
-			//	if (found && !line.calcForLevel.empty() && line.calcForLevel != "none") {
-			//		if (line.calcForLevel == "yes" || line.calcForLevel == "true") {
-			//			curobj->llFlags = 1;
-			//			logger::debug(FMT_STRING("leveled lists {:08X} set to Calculate from all levels <= players level"), curobj->formID);
-			//		}
-			//	}
-
-			//	if (found && !line.calcEachItem.empty() && line.calcEachItem != "none") {
-			//		if (line.calcEachItem == "yes" || line.calcEachItem == "true") {
-			//			curobj->llFlags = 2;
-			//			logger::debug(FMT_STRING("leveled lists {:08X} set to Calculate for each item in count"), curobj->formID);
-			//		}
-			//	}
-
-			//	if (found && !line.calcForLevelAndEachItem.empty() && line.calcForLevelAndEachItem != "none") {
-			//		if (line.calcForLevelAndEachItem == "yes" || line.calcForLevelAndEachItem == "true") {
-			//			curobj->llFlags = 3;
-			//			logger::debug(FMT_STRING("leveled lists {:08X} set to  Calculate from all levels <= players level and for each item in count"), curobj->formID);
-			//		}
-			//	}
-
-			//	if (found && !line.calcUseAll.empty() && line.calcUseAll != "none") {
-			//			curobj->llFlags = 4;
-			//			curobj->maxUseAllCount = std::stoi(line.calcUseAll);
-			//			logger::debug(FMT_STRING("leveled lists {:08X} set to Use All with amount {}"), curobj->formID, line.calcUseAll);
-			//	}
-
-			//	if (found && !line.addedObjects.empty()) {
-			//		std::vector<RE::LEVELED_OBJECT> llVec = GetLL(curobj);
-			//		for (const auto& objectToAdd : line.addedObjects) {
-			//			//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-			//			std::string addFormStr = objectToAdd[0];
-			//			uint16_t level = std::stoi(objectToAdd[1]);
-			//			uint16_t count = std::stoi(objectToAdd[2]);
-			//			uint8_t chanceNone = std::stoi(objectToAdd[3]);
-			//			RE::TESForm* addForm = GetFormFromIdentifier(addFormStr);
-
-			//			if (addForm) {
-			//				llVec.push_back({ addForm, nullptr, count, level, static_cast<int8_t>(chanceNone) });
-			//				logger::debug(FMT_STRING("leveled Lists {:08X} added Form {:08X}"), curobj->formID, addForm->formID);
-			//			} else {
-			//				logger::critical(FMT_STRING("leveled Lists {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
-			//			}
-			//		}
-			//		std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
-			//			return a.level < b.level;
-			//		});
-			//		SetLL(curobj, llVec);
-			//	}
-
-			//	////////////////////////////////////////////
-			//	//Legacy
-			//	////////////////////////////////////////////
-			//	if (found && !line.object.empty()) {
-			//		std::vector<RE::LEVELED_OBJECT> llVec = GetLL(curobj);
-			//		std::string addFormStr = line.reference;
-			//		uint16_t level = std::stoi(line.level);
-			//		uint16_t count = std::stoi(line.count);
-			//		uint8_t chanceNone = std::stoi(line.chance);
-			//		RE::TESForm* addForm = GetFormFromIdentifier(addFormStr);
-
-			//		llVec.push_back({ addForm, nullptr, count, level, static_cast<int8_t>(chanceNone) });
-
-			//		std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
-			//			return a.level < b.level;
-			//		});
-
-			//		logger::debug(FMT_STRING("LVLI {:08X} added Form {:08X}"), curobj->formID, addForm->formID);
-			//		SetLL(curobj, llVec);
-			//	}
-			//}//after LLs
-
-			//for (const auto& curobj : containerArray) {
-			//	bool found = false;
-
-			//	if (!line.containerObjects.empty()) {
-			//		//logger::info("npc not empty");
-			//		for (const auto& objectstring : line.containerObjects) {
-			//			RE::TESForm* currentform = nullptr;
-			//			RE::TESObjectCONT* object = nullptr;
-
-			//			std::string string_form = objectstring;
-			//			currentform = GetFormFromIdentifier(string_form);
-			//			if (currentform && currentform->formType == RE::ENUM_FORM_ID::kCONT) {
-			//				object = (RE::TESObjectCONT*)currentform;
-
-			//				if (curobj->formID == object->formID) {
-			//					found = true;
-			//					//logger::debug("LL found: {:08X} flags {}", object->formID, object->llFlags);
-			//					break;
-			//				}
-			//			}
-			//		}
-			//	}
-
-			//	if (found && !line.addedContainerObjects.empty()) {
-			//		for (const auto& objectToAdd : line.addedContainerObjects) {
-			//			//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-			//			std::string addFormStr = objectToAdd[0];
-			//			uint32_t count = std::stoi(objectToAdd[1]);
-			//			RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
-
-			//			if (addForm) {
-			//				curobj->AddObject(addForm, count, nullptr);
-			//				logger::debug(FMT_STRING("leveled Lists - container {:08X} added Form {:08X}"), curobj->formID, addForm->formID);
-			//			} else {
-			//				logger::critical(FMT_STRING("leveled Lists - container {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
-			//			}
-			//		}
-			//	}
-
-			//	if (found && !line.removedContainerObjects.empty()) {
-			//		for (const auto& objectToAdd : line.removedContainerObjects) {
-			//			//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-			//			std::string addFormStr = objectToAdd;
-			//			RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
-
-			//			if (addForm) {
-			//				curobj->RemoveObject(addForm);
-			//				logger::debug(FMT_STRING("leveled Lists - container {:08X} removed Form {:08X}"), curobj->formID, addForm->formID);
-			//			} else {
-			//				logger::critical(FMT_STRING("leveled Lists - container {:08X} Form not found: {}"), curobj->formID, objectToAdd);
-			//			}
-			//		}
-			//	}
-
-			//}
 		}
 	}
 
@@ -907,8 +392,8 @@ namespace LEVELEDLIST
 		char        skipChar = ';';
 		std::string extension = ".ini";
 
-		DIR*                   dir;
-		struct dirent*         ent;
+		DIR* dir;
+		struct dirent* ent;
 		std::list<std::string> directories{ folder };
 		std::string            currentFolder;
 
@@ -922,7 +407,8 @@ namespace LEVELEDLIST
 						struct _stat st;
 						if (_stat(fullPath.c_str(), &st) == 0 && (_S_IFDIR & st.st_mode)) {
 							directories.push_back(fullPath);
-						} else {
+						}
+						else {
 							std::string fileName = ent->d_name;
 							size_t      pos = fileName.find(extension);
 							if (pos != std::string::npos) {
@@ -962,14 +448,49 @@ namespace LEVELEDLIST
 					}
 				}
 				closedir(dir);
-			} else {
+			}
+			else {
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
 	}
-
-	void patch(LEVELEDLIST::line_content line, RE::TESLevItem* curobj)
+	template <typename T>
+	void patch(LEVELEDLIST::line_content line, T* curobj)
 	{
+
+
+		if (!line.replaceObjects.empty()) {
+			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
+
+			for (const auto& objectToreplace : line.replaceObjects) {
+				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
+				std::string formToReplaceString = objectToreplace[0];
+				std::string formToReplaceWithString = objectToreplace[1];
+				int          count = 0;
+				RE::TESForm* formToReplace = GetFormFromIdentifier(formToReplaceString);
+				RE::TESForm* formToReplaceWith = GetFormFromIdentifier(formToReplaceWithString);
+				// Replace logic for the entire vector
+				for (auto& obj : llVec) {
+					if (obj.form->formID == formToReplace->formID) {
+						obj.form = formToReplaceWith;
+						count++;
+					}
+				}
+				std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
+					return a.level < b.level;
+					});
+				if (llVec.size() >= 1) {
+					createLL(curobj, llVec);
+					logger::debug(FMT_STRING("leveled Lists {:08X} all forms of {:08X} have been replaced by {:08X}. Total replaced: {}"), curobj->formID, formToReplace->formID, formToReplaceWith->formID, count);
+				}
+				else {
+					ClearLL(curobj);
+					logger::debug(FMT_STRING("leveled Lists {:08X} is now empty"), curobj->formID);
+				}
+			}
+		}
+
+
 		if (!line.removedObjects.empty()) {
 			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
 
@@ -991,7 +512,8 @@ namespace LEVELEDLIST
 						number = std::stoi(templvl[0]);
 						relationSign = templvl[1];
 						hasNumberLvl = true;
-					} else if (templvl.size() == 1 && templvl[0] != "none") {
+					}
+					else if (templvl.size() == 1 && templvl[0] != "none") {
 						number = std::stoi(templvl[0]);
 						hasNumberLvl = true;
 					}
@@ -1000,31 +522,35 @@ namespace LEVELEDLIST
 						if (relationSign == "<") {
 							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
 								return x.level < number && x.form == delForm;
-							}),
+								}),
 								llVec.end());
 							logger::debug(FMT_STRING("leveled Lists {:08X} level < {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						} else if (relationSign == ">") {
+						}
+						else if (relationSign == ">") {
 							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
 								return x.level > number && x.form == delForm;
-							}),
+								}),
 								llVec.end());
 							logger::debug(FMT_STRING("leveled Lists {:08X} level > {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						} else if (relationSign == ">=") {
+						}
+						else if (relationSign == ">=") {
 							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
 								return x.level >= number && x.form == delForm;
-							}),
+								}),
 								llVec.end());
 							logger::debug(FMT_STRING("leveled Lists {:08X} level >= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						} else if (relationSign == "<=") {
+						}
+						else if (relationSign == "<=") {
 							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
 								return x.level <= number && x.form == delForm;
-							}),
+								}),
 								llVec.end());
 							logger::debug(FMT_STRING("leveled Lists {:08X} level <= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						} else if (relationSign == "") {
+						}
+						else if (relationSign == "") {
 							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
 								return x.level == number && x.form == delForm;
-							}),
+								}),
 								llVec.end());
 							logger::debug(FMT_STRING("leveled Lists {:08X} level == {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
 						}
@@ -1040,7 +566,8 @@ namespace LEVELEDLIST
 						number = std::stoi(tempcount[0]);
 						relationSign = tempcount[1];
 						hasNumberCount = true;
-					} else if (tempcount.size() == 1 && tempcount[0] != "none") {
+					}
+					else if (tempcount.size() == 1 && tempcount[0] != "none") {
 						number = std::stoi(tempcount[0]);
 						hasNumberCount = true;
 					}
@@ -1049,31 +576,35 @@ namespace LEVELEDLIST
 						if (relationSign == "<") {
 							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
 								return x.count < number && x.form == delForm;
-							}),
+								}),
 								llVec.end());
 							logger::debug(FMT_STRING("leveled Lists {:08X} count < {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						} else if (relationSign == ">") {
+						}
+						else if (relationSign == ">") {
 							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
 								return x.count > number && x.form == delForm;
-							}),
+								}),
 								llVec.end());
 							logger::debug(FMT_STRING("leveled Lists {:08X} count > {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						} else if (relationSign == ">=") {
+						}
+						else if (relationSign == ">=") {
 							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
 								return x.count >= number && x.form == delForm;
-							}),
+								}),
 								llVec.end());
 							logger::debug(FMT_STRING("leveled Lists {:08X} count >= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						} else if (relationSign == "<=") {
+						}
+						else if (relationSign == "<=") {
 							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
 								return x.count <= number && x.form == delForm;
-							}),
+								}),
 								llVec.end());
 							logger::debug(FMT_STRING("leveled Lists {:08X} count <= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						} else if (relationSign == "") {
+						}
+						else if (relationSign == "") {
 							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
 								return x.count == number && x.form == delForm;
-							}),
+								}),
 								llVec.end());
 							logger::debug(FMT_STRING("leveled Lists {:08X} count == {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
 						}
@@ -1083,7 +614,7 @@ namespace LEVELEDLIST
 				if (!hasNumberLvl && !hasNumberCount) {
 					llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
 						return x.form == delForm;
-					}),
+						}),
 						llVec.end());
 					logger::debug(FMT_STRING("leveled Lists {:08X} removed all Forms {:08X}"), curobj->formID, delForm->formID);
 				}
@@ -1091,8 +622,14 @@ namespace LEVELEDLIST
 
 			std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
 				return a.level < b.level;
-			});
-			createLL(curobj, llVec);
+				});
+			if (llVec.size() >= 1) {
+				createLL(curobj, llVec);
+			}
+			else {
+				ClearLL(curobj);
+				logger::debug(FMT_STRING("leveled Lists {:08X} is now empty"), curobj->formID);
+			}
 		}
 
 		if (!line.removeItemsByKeyword.empty()) {
@@ -1111,11 +648,18 @@ namespace LEVELEDLIST
 						//logger::debug(FMT_STRING("leveled Lists {:08X} cannot removed item {:08X} not a keyword {:08X} {} "), curobj->formID, x.form->formID, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
 
 						return false;
-					}),
+						}),
 						llVec.end());
 				}
 			}
-			createLL(curobj, llVec);
+			//if ()
+			if (llVec.size() >= 1) {
+				createLL(curobj, llVec);
+			}
+			else {
+				ClearLL(curobj);
+				logger::debug(FMT_STRING("leveled Lists {:08X} is now empty"), curobj->formID);
+			}
 		}
 
 		//if (!line.templateKeyword.empty()) {
@@ -1134,89 +678,450 @@ namespace LEVELEDLIST
 				ClearLL(curobj);
 			}
 		}
-		//if (!line.calcForLevel.empty() && line.calcForLevel != "none") {
-		//	if (line.calcForLevel == "yes" || line.calcForLevel == "true") {
-		//		curobj->llFlags = 1;
-		//		logger::debug(FMT_STRING("leveled lists {:08X} set to Calculate from all levels <= players level"), curobj->formID);
-		//	}
-		//}
 
-		//if (!line.calcEachItem.empty() && line.calcEachItem != "none") {
-		//	if (line.calcEachItem == "yes" || line.calcEachItem == "true") {
-		//		curobj->llFlags = 2;
-		//		logger::debug(FMT_STRING("leveled lists {:08X} set to Calculate for each item in count"), curobj->formID);
-		//	}
-		//}
+		if (!line.calcForLevel.empty() && line.calcForLevel != "none") {
+			if (line.calcForLevel == "yes" || line.calcForLevel == "true") {
+				curobj->llFlags = RE::TESLeveledList::Flag::kCalculateFromAllLevelsLTOrEqPCLevel;
+				logger::debug(FMT_STRING("leveled lists {:08X} set to Calculate from all levels <= players level"), curobj->formID);
+			}
+		}
 
-		//if (!line.calcForLevelAndEachItem.empty() && line.calcForLevelAndEachItem != "none") {
-		//	if (line.calcForLevelAndEachItem == "yes" || line.calcForLevelAndEachItem == "true") {
-		//		curobj->llFlags = 3;
-		//		logger::debug(FMT_STRING("leveled lists {:08X} set to  Calculate from all levels <= players level and for each item in count"), curobj->formID);
-		//	}
-		//}
+		if (!line.calcEachItem.empty() && line.calcEachItem != "none") {
+			if (line.calcEachItem == "yes" || line.calcEachItem == "true") {
+				curobj->llFlags = RE::TESLeveledList::Flag::kCalculateForEachItemInCount;
+				logger::debug(FMT_STRING("leveled lists {:08X} set to Calculate for each item in count"), curobj->formID);
+			}
+		}
+
+		if (!line.calcForLevelAndEachItem.empty() && line.calcForLevelAndEachItem != "none") {
+			if (line.calcForLevelAndEachItem == "yes" || line.calcForLevelAndEachItem == "true") {
+				curobj->llFlags = static_cast<RE::TESLeveledList::Flag>(
+					RE::TESLeveledList::Flag::kCalculateFromAllLevelsLTOrEqPCLevel |
+					RE::TESLeveledList::Flag::kCalculateForEachItemInCount);
+				logger::debug(FMT_STRING("leveled lists {:08X} set to  Calculate from all levels <= players level and for each item in count"), curobj->formID);
+			}
+		}
 
 		if (!line.calcUseAll.empty() && line.calcUseAll != "none") {
 			curobj->llFlags = RE::TESLeveledList::kUseAll;
-			logger::debug(FMT_STRING("leveled lists {:08X} set to Use All with amount {}"), curobj->formID, line.calcUseAll);
+			logger::debug(FMT_STRING("leveled lists {:08X} set to Use All"), curobj->formID);
+		}
+
+		if (!line.clearFlags.empty() && line.clearFlags != "none") {
+			curobj->llFlags = resetAllFlags(curobj->llFlags);
+			logger::debug(FMT_STRING("leveled lists {:08X} cleared all flags"), curobj->formID);
 		}
 
 		if (!line.addedObjects.empty()) {
 			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
-
+			//logger::debug(FMT_STRING("leveled Lists {:08X} size before adding {}"), curobj->formID, line.addedObjects.size());
 			for (const auto& objectToAdd : line.addedObjects) {
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
+				uint16_t level = 1;
+				uint16_t count = 1;
+
 				std::string  addFormStr = objectToAdd[0];
-				uint16_t     level = std::stoi(objectToAdd[1]);
-				uint16_t     count = std::stoi(objectToAdd[2]);
+				if (objectToAdd.size() > 1) {
+					level = std::stoi(objectToAdd[1]);
+				}
+				if (objectToAdd.size() > 2) {
+					count = std::stoi(objectToAdd[2]);
+				}
 				//uint8_t      chanceNone = std::stoi(objectToAdd[3]);
 				RE::TESForm* addForm = GetFormFromIdentifier(addFormStr);
-
 				if (addForm) {
 					llVec.push_back({ addForm, count, level });
 					logger::debug(FMT_STRING("leveled Lists {:08X} added Form {:08X}"), curobj->formID, addForm->formID);
-				} else {
+				}
+				else {
 					logger::critical(FMT_STRING("leveled Lists {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
 				}
 			}
 			std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
 				return a.level < b.level;
-			});
+				});
 			createLL(curobj, llVec);
 		}
-	}
 
-	void patchContainer(LEVELEDLIST::line_content line, RE::TESObjectCONT* curobj)
-	{
-		if (!line.addedContainerObjects.empty()) {
-			for (const auto& objectToAdd : line.addedContainerObjects) {
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-				std::string         addFormStr = objectToAdd[0];
-				uint32_t            count = std::stoi(objectToAdd[1]);
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
+		if (!line.addedObjectsOnce.empty()) {
+			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
+			//logger::debug(FMT_STRING("leveled Lists {:08X} size before adding {}"), curobj->formID, line.addedObjectsOnce.size());
+			for (const auto& objectToAdd : line.addedObjectsOnce) {
+				uint16_t level = 1;
+				uint16_t count = 1;
+
+				std::string  addFormStr = objectToAdd[0];
+				if (objectToAdd.size() > 1) {
+					level = std::stoi(objectToAdd[1]);
+				}
+				if (objectToAdd.size() > 2) {
+					count = std::stoi(objectToAdd[2]);
+				}
+				RE::TESForm* addForm = GetFormFromIdentifier(addFormStr);
 
 				if (addForm) {
-					curobj->AddObjectToContainer(addForm, count, nullptr);
-					logger::debug(FMT_STRING("leveled Lists - container {:08X} added Form {:08X}"), curobj->formID, addForm->formID);
-				} else {
-					logger::critical(FMT_STRING("leveled Lists - container {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
+					// Check if addForm already exists in llVec
+					auto it = std::find_if(llVec.begin(), llVec.end(), [addForm](const RE::LEVELED_OBJECT& obj) {
+						return obj.form->formID == addForm->formID;
+						});
+
+					if (it == llVec.end()) {
+						// addForm not found, add it to llVec
+						llVec.push_back({ addForm, count, level });
+						logger::debug(FMT_STRING("leveled Lists {:08X} added once Form {:08X}"), curobj->formID, addForm->formID);
+					}
+					else {
+						// addForm already exists, log a message or handle it accordingly
+						logger::debug(FMT_STRING("leveled Lists {:08X} Form {:08X} already exists"), curobj->formID, addForm->formID);
+					}
 				}
+				else {
+					logger::critical(FMT_STRING("leveled Lists {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
+				}
+			}
+
+			std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
+				return a.level < b.level;
+				});
+
+			createLL(curobj, llVec);
+		}
+
+
+		if (!line.llglobal.empty() && line.llglobal != "none") {
+			if (toLowerCase(line.llglobal) != "null") {
+				RE::TESForm* addForm = GetFormFromIdentifier(line.llglobal);
+				if (addForm && addForm->As<RE::TESGlobal>()) {
+					curobj->chanceGlobal = addForm->As<RE::TESGlobal>();
+					logger::debug(FMT_STRING("leveled lists {:08X} added global variable chance {:08X}"), curobj->formID, addForm->formID);
+				}
+			}
+			else {
+				curobj->chanceGlobal = nullptr;
+				logger::debug(FMT_STRING("leveled lists {:08X} removed global variable chance"), curobj->formID);
 			}
 		}
 
-		if (!line.removedContainerObjects.empty()) {
-			for (const auto& objectToAdd : line.removedContainerObjects) {
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-				std::string         addFormStr = objectToAdd;
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
+		if (!line.chanceNone.empty() && line.chanceNone != "none") {
+			curobj->chanceNone = static_cast<int8_t>(std::stoi(line.chanceNone));
+			logger::debug(FMT_STRING("leveled Lists {:08X} set chance of none to {}"), curobj->formID, curobj->chanceNone);
+		}
 
-				if (addForm) {
-					curobj->RemoveObjectFromContainer(addForm, 1);
-					logger::debug(FMT_STRING("leveled Lists - container {:08X} removed Form {:08X}"), curobj->formID, addForm->formID);
-				} else {
-					logger::critical(FMT_STRING("leveled Lists - container {:08X} Form not found: {}"), curobj->formID, objectToAdd);
+		if (!line.objectMultCount.empty() && curobj->numEntries > 0) {
+			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
+			for (const auto& objectToreplace : line.objectMultCount) {
+				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
+				std::string formToReplaceString = objectToreplace[0];
+				float multiplier = std::stof(objectToreplace[1]);
+				int          count = 0;
+				RE::TESForm* formToReplace = GetFormFromIdentifier(formToReplaceString);
+				// Replace logic for the entire vector
+				if (formToReplace  ) {
+					for (auto& obj : llVec) {
+						if (obj.form->formID == formToReplace->formID) {
+							obj.count = static_cast<uint16_t>(std::ceil(obj.count * multiplier));
+							count++;
+						}
+					}
+					std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
+						return a.level < b.level;
+						});
+					if (llVec.size() >= 1 && count > 0) {
+						createLL(curobj, llVec);
+						logger::debug(FMT_STRING("leveled Lists {:08X} all matching forms of {:08X} have their count multiplied by {}. Total changes: {}"), curobj->formID, formToReplace->formID, multiplier, count);
+					}
 				}
+
 			}
 		}
+
+
 	}
+
+
+
+	//void patchLevChar(LEVELEDLIST::line_content line, RE::TESLevCharacter* curobj)
+	//{
+	//	
+
+	//	if (!line.removedObjects.empty()) {
+	//		std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
+	//		//logger::debug(FMT_STRING("leveled Lists {:08X} size of line {} size of entries {}"), curobj->formID, line.removedObjects.size(), llVec.size());
+	//		for (const auto& objectsToRemove : line.removedObjects) {
+	//			RE::TESForm* delForm = GetFormFromIdentifier(objectsToRemove[0]);
+	//			if (!delForm) {
+	//				logger::debug(FMT_STRING("Form not found {}, skipping."), objectsToRemove[0]);
+	//				continue;
+	//			}
+
+	//			std::string relationSign = "";
+	//			uint16_t    number;
+	//			bool        hasNumberLvl = false;
+	//			bool        hasNumberCount = false;
+
+	//			if (objectsToRemove.size() >= 2) {
+	//				std::vector<std::string> templvl = splitRelationNumber(objectsToRemove[1]);
+	//				if (templvl.size() == 2 && templvl[0] != "none") {
+	//					number = std::stoi(templvl[0]);
+	//					relationSign = templvl[1];
+	//					hasNumberLvl = true;
+	//				} else if (templvl.size() == 1 && templvl[0] != "none") {
+	//					number = std::stoi(templvl[0]);
+	//					hasNumberLvl = true;
+	//				}
+
+	//				if (hasNumberLvl) {
+	//					if (relationSign == "<") {
+	//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+	//							return x.level < number && x.form == delForm;
+	//						}),
+	//							llVec.end());
+	//						logger::debug(FMT_STRING("leveled Lists {:08X} level < {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
+	//					} else if (relationSign == ">") {
+	//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+	//							return x.level > number && x.form == delForm;
+	//						}),
+	//							llVec.end());
+	//						logger::debug(FMT_STRING("leveled Lists {:08X} level > {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
+	//					} else if (relationSign == ">=") {
+	//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+	//							return x.level >= number && x.form == delForm;
+	//						}),
+	//							llVec.end());
+	//						logger::debug(FMT_STRING("leveled Lists {:08X} level >= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
+	//					} else if (relationSign == "<=") {
+	//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+	//							return x.level <= number && x.form == delForm;
+	//						}),
+	//							llVec.end());
+	//						logger::debug(FMT_STRING("leveled Lists {:08X} level <= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
+	//					} else if (relationSign == "") {
+	//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+	//							return x.level == number && x.form == delForm;
+	//						}),
+	//							llVec.end());
+	//						logger::debug(FMT_STRING("leveled Lists {:08X} level == {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
+	//					}
+	//				}
+	//			}
+
+	//			if (objectsToRemove.size() >= 3) {
+	//				std::vector<std::string> tempcount = splitRelationNumber(objectsToRemove[2]);
+
+	//				relationSign = "";
+
+	//				if (tempcount.size() == 2 && tempcount[0] != "none") {
+	//					number = std::stoi(tempcount[0]);
+	//					relationSign = tempcount[1];
+	//					hasNumberCount = true;
+	//				} else if (tempcount.size() == 1 && tempcount[0] != "none") {
+	//					number = std::stoi(tempcount[0]);
+	//					hasNumberCount = true;
+	//				}
+
+	//				if (hasNumberCount) {
+	//					if (relationSign == "<") {
+	//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+	//							return x.count < number && x.form == delForm;
+	//						}),
+	//							llVec.end());
+	//						logger::debug(FMT_STRING("leveled Lists {:08X} count < {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
+	//					} else if (relationSign == ">") {
+	//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+	//							return x.count > number && x.form == delForm;
+	//						}),
+	//							llVec.end());
+	//						logger::debug(FMT_STRING("leveled Lists {:08X} count > {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
+	//					} else if (relationSign == ">=") {
+	//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+	//							return x.count >= number && x.form == delForm;
+	//						}),
+	//							llVec.end());
+	//						logger::debug(FMT_STRING("leveled Lists {:08X} count >= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
+	//					} else if (relationSign == "<=") {
+	//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+	//							return x.count <= number && x.form == delForm;
+	//						}),
+	//							llVec.end());
+	//						logger::debug(FMT_STRING("leveled Lists {:08X} count <= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
+	//					} else if (relationSign == "") {
+	//						llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+	//							return x.count == number && x.form == delForm;
+	//						}),
+	//							llVec.end());
+	//						logger::debug(FMT_STRING("leveled Lists {:08X} count == {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
+	//					}
+	//				}
+	//			}
+
+	//			if (!hasNumberLvl && !hasNumberCount) {
+	//				llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+	//					return x.form == delForm;
+	//				}),
+	//					llVec.end());
+	//				logger::debug(FMT_STRING("leveled Lists {:08X} removed all Forms {:08X}"), curobj->formID, delForm->formID);
+	//			}
+
+	//		}
+
+	//		std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
+	//			return a.level < b.level;
+	//		});
+	//		
+	//		if (llVec.size() >= 1) {
+	//			createLL(curobj, llVec);
+	//		} else {
+	//			ClearLL(curobj);
+	//			logger::debug(FMT_STRING("leveled Lists {:08X} is now empty"), curobj->formID);
+	//		}
+
+	//	}
+
+	//	if (!line.removeItemsByKeyword.empty()) {
+	//		std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
+	//		for (size_t i = 0; i < line.removeItemsByKeyword.size(); i++) {
+	//			RE::TESForm* currentform = nullptr;
+	//			std::string  string_form = line.removeItemsByKeyword[i];
+	//			currentform = GetFormFromIdentifier(string_form);
+	//			if (currentform && currentform->formType == RE::FormType::Keyword) {
+	//				llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+	//					RE::BGSKeywordForm* keyForm = x.form->As<RE::BGSKeywordForm>();
+	//					if (keyForm && keyForm->HasKeyword((RE::BGSKeyword*)currentform)) {
+	//						logger::debug(FMT_STRING("leveled Lists {:08X} removed item {:08X} with keyword {:08X} {} "), curobj->formID, x.form->formID, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
+	//						return true;
+	//					}
+	//					return false;
+	//				}),
+	//					llVec.end());
+	//			}
+	//		}
+	//		if (llVec.size() >= 1) {
+	//			createLL(curobj, llVec);
+	//		} else {
+	//			ClearLL(curobj);
+	//			logger::debug(FMT_STRING("leveled Lists {:08X} is now empty"), curobj->formID);
+	//		}
+	//	}
+
+	//	//if (!line.formsToReplace.empty()) {
+	//	//	std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
+	//	//	if (!llVec.empty()) {
+	//	//		for (uint32_t i = 0; i < line.formsToReplace.size(); i++) {
+	//	//			RE::TESForm* currentform = nullptr;
+	//	//			RE::TESForm* currentform2 = nullptr;
+	//	//			std::string  string_form = line.formsToReplace[i];
+	//	//			std::string  string_form2 = line.formsToReplaceWith[i];
+	//	//			currentform = GetFormFromIdentifier(string_form);
+	//	//			currentform2 = GetFormFromIdentifier(string_form2);
+	//	//			if (currentform && currentform2 ) {
+	//	//				// Loop through all elements in arrayOfForms and replace matches
+	//	//				for (auto form : llVec) {
+	//	//					if (form.form && form.form->formID == currentform->formID) {
+	//	//						form.form = currentform2;  // Replace the matching form
+	//	//						logger::debug(FMT_STRING("leveled Lists: {:08X} replaced {:08X} with {:08X} "), curobj->formID, currentform->formID, currentform2->formID);
+	//	//					}
+	//	//				}
+	//	//			}
+	//	//		}
+	//	//	}
+	//	//}
+
+	//	
+	//	if (!line.clear.empty() && line.clear != "none") {
+	//		if (line.clear == "yes" || line.clear == "true") {
+	//			logger::debug(FMT_STRING("leveled lists {:08X} cleared"), curobj->formID);
+	//			ClearLL(curobj);
+	//		}
+	//	}
+	//	
+	//	if (!line.calcForLevel.empty() && line.calcForLevel != "none") {
+	//		if (line.calcForLevel == "yes" || line.calcForLevel == "true") {
+	//			curobj->llFlags = RE::TESLeveledList::Flag::kCalculateFromAllLevelsLTOrEqPCLevel;
+	//			logger::debug(FMT_STRING("leveled lists {:08X} set to Calculate from all levels <= players level"), curobj->formID);
+	//		}
+	//	}
+
+	//	if (!line.calcEachItem.empty() && line.calcEachItem != "none") {
+	//		if (line.calcEachItem == "yes" || line.calcEachItem == "true") {
+	//			curobj->llFlags = RE::TESLeveledList::Flag::kCalculateForEachItemInCount;
+	//			logger::debug(FMT_STRING("leveled lists {:08X} set to Calculate for each item in count"), curobj->formID);
+	//		}
+	//	}
+
+	//	if (!line.calcForLevelAndEachItem.empty() && line.calcForLevelAndEachItem != "none") {
+	//		if (line.calcForLevelAndEachItem == "yes" || line.calcForLevelAndEachItem == "true") {
+	//			curobj->llFlags = static_cast<RE::TESLeveledList::Flag>(
+	//				RE::TESLeveledList::Flag::kCalculateFromAllLevelsLTOrEqPCLevel |
+	//				RE::TESLeveledList::Flag::kCalculateForEachItemInCount);
+	//			logger::debug(FMT_STRING("leveled lists {:08X} set to  Calculate from all levels <= players level and for each item in count"), curobj->formID);
+	//		}
+	//	}
+
+	//	if (!line.calcUseAll.empty() && line.calcUseAll != "none") {
+	//		curobj->llFlags = RE::TESLeveledList::kUseAll;
+	//		logger::debug(FMT_STRING("leveled lists {:08X} set to Use All"), curobj->formID);
+	//	}
+
+	//	if (!line.clearFlags.empty() && line.clearFlags != "none") {
+	//		curobj->llFlags = resetAllFlags(curobj->llFlags);
+	//		logger::debug(FMT_STRING("leveled lists {:08X} cleared all flags"), curobj->formID);
+	//	}
+
+	//	if (!line.addedObjects.empty()) {
+	//		std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
+	//		//logger::debug(FMT_STRING("leveled Lists {:08X} size before adding {}"), curobj->formID, line.addedObjects.size());
+	//		for (const auto& objectToAdd : line.addedObjects) {
+	//			//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
+	//			std::string addFormStr = objectToAdd[0];
+	//			uint16_t    level = std::stoi(objectToAdd[1]);
+	//			uint16_t    count = std::stoi(objectToAdd[2]);
+	//			//uint8_t      chanceNone = std::stoi(objectToAdd[3]);
+	//			RE::TESForm* addForm = GetFormFromIdentifier(addFormStr);
+
+	//			if (addForm) {
+	//				llVec.push_back({ addForm, count, level });
+	//				logger::debug(FMT_STRING("leveled Lists {:08X} added Form {:08X}"), curobj->formID, addForm->formID);
+	//			} else {
+	//				logger::critical(FMT_STRING("leveled Lists {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
+	//			}
+	//		}
+	//		std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
+	//			return a.level < b.level;
+	//		});
+	//		createLL(curobj, llVec);
+	//		//logger::debug(FMT_STRING("leveled Lists {:08X} after adding {}"), curobj->formID, curobj->entries.size());
+	//	}
+
+	//	if (!line.addedObjectsOnce.empty()) {
+	//		std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
+	//		//logger::debug(FMT_STRING("leveled Lists {:08X} size before adding {}"), curobj->formID, line.addedObjectsOnce.size());
+	//		for (const auto& objectToAdd : line.addedObjectsOnce) {
+	//			std::string  addFormStr = objectToAdd[0];
+	//			uint16_t     level = std::stoi(objectToAdd[1]);
+	//			uint16_t     count = std::stoi(objectToAdd[2]);
+	//			RE::TESForm* addForm = GetFormFromIdentifier(addFormStr);
+
+	//			if (addForm) {
+	//				// Check if addForm already exists in llVec
+	//				auto it = std::find_if(llVec.begin(), llVec.end(), [addForm](const RE::LEVELED_OBJECT& obj) {
+	//					return obj.form->formID == addForm->formID;
+	//				});
+
+	//				if (it == llVec.end()) {
+	//					// addForm not found, add it to llVec
+	//					llVec.push_back({ addForm, count, level });
+	//					logger::debug(FMT_STRING("leveled Lists {:08X} added once Form {:08X}"), curobj->formID, addForm->formID);
+	//				} else {
+	//					// addForm already exists, log a message or handle it accordingly
+	//					logger::debug(FMT_STRING("leveled Lists {:08X} Form {:08X} already exists"), curobj->formID, addForm->formID);
+	//				}
+	//			} else {
+	//				logger::critical(FMT_STRING("leveled Lists {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
+	//			}
+	//		}
+	//	}
+
+
+	//}
 
 }

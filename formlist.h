@@ -21,6 +21,8 @@ namespace FORMLIST
 		std::vector<std::string> objectsRemove;
 		std::vector<std::string> formsToReplace;
 		std::vector<std::string> formsToReplaceWith;
+		std::vector<std::string> modNames;
+		std::string clear;
 	};
 
 	struct line_content create_patch_instruction(const std::string& line);
