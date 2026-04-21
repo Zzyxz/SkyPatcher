@@ -35,6 +35,7 @@ namespace ENCH
 		std::vector<std::vector<std::string>> changedObjects;
 		std::vector<std::vector<std::string>> changedAddObjects;
 		std::vector<std::vector<std::string>> changedFirstObjects;
+		std::vector<std::vector<std::string>> changedDamageHealthObjects;
 		std::vector<std::string>              filterByEditorIdContains;
 		std::vector<std::string>              filterByEditorIdContainsOr;
 		std::vector<std::string>              filterByEditorIdContainsExcluded;

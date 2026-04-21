@@ -34,7 +34,8 @@ namespace ALCH
 		std::vector<std::string> removedObjects;
 		std::vector<std::vector<std::string>> changedObjects;
 		std::vector<std::vector<std::string>> changedAddObjects;
-
+		std::vector<std::vector<std::string>> changedFirstObjects;
+		std::vector<std::vector<std::string>> changedDamageHealthObjects;
 		std::string                           clear;
 		std::vector<std::string>              modNames;
 		std::vector<std::vector<std::string>> alternateTextures;

@@ -20,7 +20,7 @@ namespace COBJ
 		extractData(line, "filterByCobjsExcluded\\s*=([^:]+)", l.objectExcluded);
 		extractData(line, "filterByIngredients\\s*=([^:]+)", l.keywords);
 		extractData(line, "filterByIngredientsOr\\s*=([^:]+)", l.keywordsOr);
-		extractData(line, "filterByIngredientsExcluded\\s*=([^:]+)", l.keywordsExcluded);
+		extractData(line, "filterByIngredientsExcluded\\s*=([^:]+)", l.filterByRecipeIngredientsExcluded);
 		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
 
 		extractToArr2D(line, "addToCobjs\\s*=([^:]+)", l.addedContainerObjects);
@@ -297,7 +297,7 @@ namespace COBJ
 					}
 				}
 
-				if (!line.keywordsNewExcluded.empty() && curobj->createdItem->As<RE::BGSKeywordForm>() && found) {
+				if (!line.keywordsNewExcluded.empty() && curobj->createdItem && curobj->createdItem->As<RE::BGSKeywordForm>() && found) {
 					//logger::info("keywords not empty");
 					for (const auto& keywordstring : line.keywordsNewExcluded) {
 						RE::TESForm*    currentform = nullptr;
@@ -329,7 +329,7 @@ namespace COBJ
 						if (currentform && currentform->formType == RE::FormType::Keyword) {
 							keyword = (RE::BGSKeyword*)currentform;
 
-							if (curobj->benchKeyword->formID == keyword->formID) {
+							if (curobj->benchKeyword && curobj->benchKeyword->formID == keyword->formID) {
 								found = false;
 
 								break;
@@ -358,11 +358,11 @@ namespace COBJ
 				if (!line.objectExcluded.empty() && found) {
 					for (const auto& npcstring : line.objectExcluded) {
 						RE::TESForm*       currentform = nullptr;
-						RE::TESObjectWEAP* npc = nullptr;
+						RE::BGSConstructibleObject* npc = nullptr;
 						std::string        string_form = npcstring;
 						currentform = GetFormFromIdentifier(string_form);
 						if (currentform && currentform->formType == RE::FormType::ConstructibleObject) {
-							npc = (RE::TESObjectWEAP*)currentform;
+							npc = (RE::BGSConstructibleObject*)currentform;
 							if (curobj->formID == npc->formID) {
 								found = false;
 								break;
@@ -553,7 +553,7 @@ namespace COBJ
 
 			int32_t newCount = 1;
 			try {
-				newCount = std::stof(multStr);
+				newCount = std::stoi(multStr);
 			} catch (...) {
 				logger::warn(FMT_STRING("Invalid count for cobj change: {}"), multStr);
 				continue;
@@ -666,7 +666,7 @@ namespace COBJ
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.keywordsToRemove[i];
 				currentform = GetFormFromIdentifier(string_form);
-				if (curobj->createdItem && currentform && currentform->formType == RE::FormType::Keyword) {
+				if (curobj->createdItem && currentform && currentform->formType == RE::FormType::Keyword && curobj->createdItem->As<RE::BGSKeywordForm>()) {
 					curobj->createdItem->As<RE::BGSKeywordForm>()->RemoveKeyword((RE::BGSKeyword*)currentform);
 					logger::debug(FMT_STRING("cobj formid: {:08X} {} object {} removed keyword {:08X} {} "), curobj->formID, clib_util::editorID::get_editorID(curobj), clib_util::editorID::get_editorID(curobj->createdItem), ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
 				}

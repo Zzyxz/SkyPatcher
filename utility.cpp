@@ -78,50 +78,25 @@ RE::BIPED_MODEL::BipedObjectSlot getBipedObjectSlot(int slot)
 
 AttributePoints calculateAttributePoints(int level, const StatWeights& weights, int points)
 {
-	AttributePoints result;
+	AttributePoints result{};
 
-	// Calculate the total number of points available
 	int totalPoints = points * (level - 1);
 
 	float healthWeight = weights.healthWeight;
 	float staminaWeight = weights.staminaWeight;
 	float magickaWeight = weights.magickaWeight;
 
-	// Check if the sum of weights is zero
 	float weightSum = healthWeight + staminaWeight + magickaWeight;
-	if (weightSum == 0) {
-		// Set default weights if the sum of weights is zero
+	if (weightSum == 0.0f) {
 		healthWeight = 1.0f;
 		staminaWeight = 1.0f;
 		magickaWeight = 1.0f;
-		weightSum = 3.0f;  // Update the sum of weights
+		weightSum = 3.0f;
 	}
 
-	// Check if healthWeight is zero
-	if (healthWeight == 0) {
-		result.health = 0;
-	} else {
-		// Calculate Health Points
-		result.health = totalPoints * healthWeight / weightSum;
-	}
-
-	// Check if magickaWeight is zero
-	if (magickaWeight == 0) {
-		result.magicka = 0;
-	} else {
-		// Calculate Magicka Points
-		int magickaPoints = totalPoints * magickaWeight / weightSum;
-		result.magicka = magickaPoints;
-	}
-
-	// Check if staminaWeight is zero
-	if (staminaWeight == 0) {
-		result.stamina = 0;
-	} else {
-		// Calculate Stamina Points
-		int staminaPoints = (totalPoints - result.magicka) * staminaWeight / weightSum;
-		result.stamina = staminaPoints;
-	}
+	result.health = static_cast<int>(totalPoints * healthWeight / weightSum);
+	result.magicka = static_cast<int>(totalPoints * magickaWeight / weightSum);
+	result.stamina = totalPoints - result.health - result.magicka;
 
 	return result;
 }
@@ -570,7 +545,7 @@ void addAltTexture(RE::TESModelTextureSwap* curobj, RE::TESModelTextureSwap::Alt
 // Copy existing elements
 	if (curobj->alternateTextures && curobj->numAlternateTextures > 0) {
 		std::copy(curobj->alternateTextures, curobj->alternateTextures + curobj->numAlternateTextures, newTextures);
-		RE::free(curobj->alternateTextures);
+		//RE::free(curobj->alternateTextures);
 	}
 
 
@@ -600,52 +575,91 @@ void clearAltTextures(RE::TESModelTextureSwap* curobj)
 	}
 }
 
+//bool removeAltTextureByTextureSet(RE::TESModelTextureSwap* curobj, RE::BGSTextureSet* textureSetToRemove)
+//{
+//	if (!curobj->alternateTextures || curobj->numAlternateTextures == 0) {
+//		// No textures to remove
+//		return false;
+//	}
+//
+//	// Find the iterator pointing to the element to remove
+//	auto iterToRemove = std::remove_if(curobj->alternateTextures,
+//		curobj->alternateTextures + curobj->numAlternateTextures,
+//		[textureSetToRemove](const RE::TESModelTextureSwap::AlternateTexture& altTex) {
+//			return altTex.textureSet == textureSetToRemove;
+//		});
+//
+//	// Check if the element was found
+//	if (iterToRemove != curobj->alternateTextures + curobj->numAlternateTextures) {
+//		// Element found, update the size
+//		curobj->numAlternateTextures = static_cast<std::size_t>(std::distance(curobj->alternateTextures, iterToRemove));
+//
+//		if (curobj->numAlternateTextures > 0) {
+//			// Allocate memory for the new array
+//			auto newTextures = reinterpret_cast<RE::TESModelTextureSwap::AlternateTexture*>(calloc(curobj->numAlternateTextures, sizeof(RE::TESModelTextureSwap::AlternateTexture)));
+//
+//			if (!newTextures) {
+//				// Handle allocation failure, e.g., by throwing an exception or returning an error code
+//				return false;
+//			}
+//
+//			// Copy existing elements excluding the removed one
+//			std::copy(curobj->alternateTextures, iterToRemove, newTextures);
+//			std::copy(iterToRemove + 1, curobj->alternateTextures + curobj->numAlternateTextures, newTextures);
+//
+//			// Free the old array
+//			RE::free(curobj->alternateTextures);
+//
+//			// Update the object with the new array
+//			curobj->alternateTextures = newTextures;
+//			return true;
+//		} else {
+//			// No remaining textures, free the old array
+//			std::free(curobj->alternateTextures);
+//			curobj->alternateTextures = nullptr;
+//			return true;
+//		}
+//	}
+//	return false;
+//}
+
 bool removeAltTextureByTextureSet(RE::TESModelTextureSwap* curobj, RE::BGSTextureSet* textureSetToRemove)
 {
-	if (!curobj->alternateTextures || curobj->numAlternateTextures == 0) {
-		// No textures to remove
+	if (!curobj || !curobj->alternateTextures || curobj->numAlternateTextures == 0) {
 		return false;
 	}
 
-	// Find the iterator pointing to the element to remove
-	auto iterToRemove = std::remove_if(curobj->alternateTextures,
-		curobj->alternateTextures + curobj->numAlternateTextures,
+	auto begin = curobj->alternateTextures;
+	auto end = begin + curobj->numAlternateTextures;
+
+	auto newEnd = std::remove_if(begin, end,
 		[textureSetToRemove](const RE::TESModelTextureSwap::AlternateTexture& altTex) {
 			return altTex.textureSet == textureSetToRemove;
 		});
 
-	// Check if the element was found
-	if (iterToRemove != curobj->alternateTextures + curobj->numAlternateTextures) {
-		// Element found, update the size
-		curobj->numAlternateTextures = static_cast<std::size_t>(std::distance(curobj->alternateTextures, iterToRemove));
-
-		if (curobj->numAlternateTextures > 0) {
-			// Allocate memory for the new array
-			auto newTextures = reinterpret_cast<RE::TESModelTextureSwap::AlternateTexture*>(calloc(curobj->numAlternateTextures, sizeof(RE::TESModelTextureSwap::AlternateTexture)));
-
-			if (!newTextures) {
-				// Handle allocation failure, e.g., by throwing an exception or returning an error code
-				return false;
-			}
-
-			// Copy existing elements excluding the removed one
-			std::copy(curobj->alternateTextures, iterToRemove, newTextures);
-			std::copy(iterToRemove + 1, curobj->alternateTextures + curobj->numAlternateTextures, newTextures);
-
-			// Free the old array
-			RE::free(curobj->alternateTextures);
-
-			// Update the object with the new array
-			curobj->alternateTextures = newTextures;
-			return true;
-		} else {
-			// No remaining textures, free the old array
-			std::free(curobj->alternateTextures);
-			curobj->alternateTextures = nullptr;
-			return true;
-		}
+	if (newEnd == end) {
+		return false;
 	}
-	return false;
+
+	std::size_t newSize = static_cast<std::size_t>(std::distance(begin, newEnd));
+
+	if (newSize == 0) {
+		curobj->alternateTextures = nullptr;
+		curobj->numAlternateTextures = 0;
+		return true;
+	}
+
+	auto* newTextures = RE::calloc<RE::TESModelTextureSwap::AlternateTexture>(newSize);
+	if (!newTextures) {
+		return false;
+	}
+
+	std::copy(begin, newEnd, newTextures);
+
+	// altes array absichtlich nicht free'n, ownership unklar
+	curobj->alternateTextures = newTextures;
+	curobj->numAlternateTextures = newSize;
+	return true;
 }
 
 bool findTextureSet(RE::TESModelTextureSwap* curobj, RE::BGSTextureSet* textureSetToFind)

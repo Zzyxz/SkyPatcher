@@ -34,7 +34,7 @@ namespace CELL
 		//}
 
 		extractData(line, "filterByCells\\s*=([^:]+)", l.object);
-
+		extractData(line, "filterByCellsExcluded\\s*=([^:]+)", l.objectExcluded);
 		extractValueString(line, "fogNear\\s*=([^:]+)", l.fogNear);
 		extractValueString(line, "fogFar\\s*=([^:]+)", l.fogFar);
 		extractValueString(line, "fogPower\\s*=([^:]+)", l.fogPower);
@@ -331,6 +331,23 @@ namespace CELL
 							}
 						}
 
+						bool excluded = false;
+						if (!line.objectExcluded.empty()) {
+							for (const auto& excludedString : line.objectExcluded) {
+								RE::TESForm* excludedForm = GetFormFromIdentifier(excludedString);
+								if (excludedForm && excludedForm->formType == RE::FormType::Cell) {
+									if (curobj->formID == excludedForm->formID) {
+										excluded = true;
+										break;
+									}
+								}
+							}
+						}
+
+						if (excluded) {
+							continue;
+						}
+
 						patch(line, curobj);
 					}
 				}
@@ -353,8 +370,25 @@ namespace CELL
 						//logger::debug("cell formid: {:08X} Lighting Template is from {} skip!", curobj->formID, curobj->lightingTemplate->GetFile(0)->fileName);
 						continue;
 					}
+
 				}
 
+										if (!line.skipByModContains.empty()) {
+					const auto* file = curobj->GetFile();
+					if (file) {
+						const std::string& fileName = file->fileName;
+						bool               allMatched = true;
+						for (const auto& modName : line.skipByModContains) {
+							if (toLowerCase(fileName).find(toLowerCase(modName)) == std::string::npos) {
+								allMatched = false;
+								break;
+							}
+						}
+						if (allMatched) {
+							continue;
+						}
+					}
+				}
 				//	//logger::info("processing npc");
 				bool found = false;
 
@@ -422,7 +456,7 @@ namespace CELL
 					}
 				}
 
-				if (!line.objectExcluded.empty()) {
+				if (found && !line.objectExcluded.empty()) {
 					//logger::info("npc not empty");
 					for (const auto& npcstring : line.objectExcluded) {
 						RE::TESForm*       currentform = nullptr;
@@ -750,7 +784,7 @@ namespace CELL
 			if (form && form->formType == RE::FormType::EncounterZone) {
 				auto* imsp = static_cast<RE::BGSEncounterZone*>(form);
 
-				if (curobj->extraList.HasType<RE::ExtraCellImageSpace>()) {
+				if (curobj->extraList.HasType<RE::ExtraEncounterZone>()) {
 					auto* extra = curobj->extraList.GetByType<RE::ExtraEncounterZone>();
 					if (extra) {
 						extra->zone = imsp;
@@ -765,8 +799,8 @@ namespace CELL
 					logger::debug(FMT_STRING("cell formid {:08X} added encounter zone {:08X}"), curobj->formID, imsp->formID);
 				}
 			}
-		} else if (toLowerCase(line.imageSpace) == "null") {
-			if (curobj->extraList.HasType<RE::ExtraCellImageSpace>()) {
+		} else if (toLowerCase(line.encounterZone) == "null") {
+			if (curobj->extraList.HasType<RE::ExtraEncounterZone>()) {
 				curobj->extraList.RemoveByType(RE::ExtraDataType::kEncounterZone);
 				logger::debug(FMT_STRING("cell formid {:08X} removed encounter zone"), curobj->formID);
 			}
@@ -998,11 +1032,6 @@ namespace CELL
 		if (!line.directionalAmbientSpecularGreen.empty() && line.directionalAmbientSpecularGreen != "none") {
 			curobj->cellData.interior->directionalAmbientLightingColors.specular.green = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientSpecularGreen));
 			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientSpecularGreen to {}"), curobj->formID, curobj->cellData.interior->directionalAmbientLightingColors.specular.green);
-		}
-
-		if (!line.directionalAmbientSpecularBlue.empty() && line.directionalAmbientSpecularBlue != "none") {
-			curobj->cellData.interior->directionalAmbientLightingColors.specular.blue = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientSpecularBlue));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientSpecularBlue to {}"), curobj->formID, curobj->cellData.interior->directionalAmbientLightingColors.specular.blue);
 		}
 
 		if (!line.directionalAmbientSpecularBlue.empty() && line.directionalAmbientSpecularBlue != "none") {

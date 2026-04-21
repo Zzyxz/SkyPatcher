@@ -844,7 +844,7 @@ namespace RACE
 					//logger::debug("processing attackMap {} objectArr {} ", newAttackData->event.c_str(), objectArr.size());
 					for (auto& object : objectArr) {
 						//logger::debug("object-> 0 {} 1 {}", object[0], object[1]);
-						if (object[1].empty()) {
+						if (object.size() < 2) {
 							continue;
 						}
 
@@ -1021,7 +1021,7 @@ namespace RACE
 					curobj->data.startingMagicka = randomValue;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), randomValue);
 				}
-				logger::debug(FMT_STRING("race formid: {:08X} {} changed {:08X} {} {}"), curobj->formID, curobj->formEditorID, ((RE::ActorValueInfo*)currentform)->formID, ((RE::ActorValueInfo*)currentform)->fullName, randomValue);
+				logger::debug(FMT_STRING("race formid: {:08X} {} changed {:08X} {} {}"), curobj->formID, curobj->formEditorID, ((RE::ActorValueInfo*)curobj)->formID, ((RE::ActorValueInfo*)curobj)->fullName, randomValue);
 			}
 		}
 
@@ -1043,6 +1043,9 @@ namespace RACE
 			//logger::info("found! patching values");
 			//for (const auto& avifstring : line.avifs)
 			for (const auto& objectToAdd : line.keywordsToAddIfKeywordsEIDDoNotContain) {
+				if (objectToAdd.size() < 2) {
+					continue;
+				}
 				std::string        eidkeyword = (objectToAdd[0]);
 				std::string  keywordString = (objectToAdd[1]);
 				RE::TESForm* currentform = nullptr;
@@ -1102,16 +1105,18 @@ namespace RACE
 				std::string  string_form = line.spellsToRemove[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Spell) {
-					curobj->actorEffects->RemoveSpell((RE::SpellItem*)currentform);
+					if (curobj->actorEffects) {
+						curobj->actorEffects->RemoveSpell((RE::SpellItem*)currentform);
+					}
 					logger::debug(FMT_STRING("race formid: {:08X} removed spell {:08X} "), curobj->formID, ((RE::SpellItem*)currentform)->formID);
 				}
 			}
 		}
 
 		if (!line.levSpellsToAdd.empty()) {
-			for (size_t i = 0; i < line.spellsToAdd.size(); i++) {
+			for (size_t i = 0; i < line.levSpellsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.spellsToAdd[i];
+				std::string  string_form = line.levSpellsToAdd[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::LeveledSpell) {
 					if (!curobj->actorEffects) {
@@ -1129,7 +1134,9 @@ namespace RACE
 				std::string  string_form = line.spellsToRemove[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::LeveledSpell) {
-					curobj->actorEffects->RemoveLevSpell((RE::TESLevSpell*)currentform);
+					if (!curobj->actorEffects) {
+						curobj->actorEffects->RemoveLevSpell((RE::TESLevSpell*)currentform);
+					}
 					logger::debug(FMT_STRING("race formid: {:08X} removed levSpell {:08X} "), curobj->formID, ((RE::TESLevSpell*)currentform)->formID);
 				}
 			}
@@ -1156,7 +1163,9 @@ namespace RACE
 				std::string  string_form = line.spellsToRemove[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Shout) {
-					curobj->actorEffects->RemoveShout((RE::TESShout*)currentform);
+					if (!curobj->actorEffects) {
+						curobj->actorEffects->RemoveShout((RE::TESShout*)currentform);
+					}
 					logger::debug(FMT_STRING("race formid: {:08X} removed shout {:08X} "), curobj->formID, ((RE::TESShout*)currentform)->formID);
 				}
 			}
@@ -1780,7 +1789,7 @@ namespace RACE
 
 						std::string string_form = npcstring;
 						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
+						if (currentform && currentform->formType == RE::FormType::Race) {
 							npc = (RE::TESRace*)currentform;
 
 							if (curobj->formID == npc->formID) {

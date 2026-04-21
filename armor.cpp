@@ -457,7 +457,7 @@ namespace ARMOR
 
 				if (!line.bipedSlotExcluded.empty() && found) {
 					//logger::info("keywords not empty");
-					for (const auto& bipedSlot : line.bipedSlot) {
+					for (const auto& bipedSlot : line.bipedSlotExcluded) {
 						int  iSlot = std::stoi(bipedSlot);
 						auto slot = getBipedObjectSlot(iSlot);
 						if (curobj->bipedModelData.bipedObjectSlots & slot) {
@@ -500,7 +500,7 @@ namespace ARMOR
 						if (currentform && currentform->formType == RE::FormType::Armature) {
 							keyword = (RE::TESObjectARMA*)currentform;
 							for (const auto& addon : curobj->armorAddons) {
-								if (addon->formID == keyword->formID) {
+								if (addon && addon->formID == keyword->formID) {
 									found = false;
 									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
 									//logger::info("Keyword found.");

@@ -433,7 +433,7 @@ namespace NPC
 				curobj->actorData.actorBaseFlags.set(RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats);
 				logger::debug(FMT_STRING("Enabled kAutoCalcStats for NPC {:08X} {}"), curobj->formID, curobj->fullName);
 			}
-			else if (curobj->IsAutoCalc() && (curobj->IsAutoCalc() && (line.calcStats == "no" || line.calcStats == "false"))) {
+			else if (curobj->IsAutoCalc() && (line.calcStats == "no" || line.calcStats == "false")) {
 				curobj->actorData.actorBaseFlags.reset(RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats);
 				logger::debug(FMT_STRING("Disabled kAutoCalcStats for NPC {:08X} {}"), curobj->formID, curobj->fullName);
 			}
@@ -512,7 +512,7 @@ namespace NPC
 
 					if (tempCs.size() > 1) {
 						aData.npcData[curobj->formID].npcCombatStyleChance = std::stoi(tempCs[1]);
-						logger::debug(FMT_STRING("NPC {:08X} {} will get random combat style from {:08X} with a chance of {}%"), curobj->formID, curobj->fullName, currentform->formID, tempCs[0]);
+						logger::debug(FMT_STRING("NPC {:08X} {} will get random combat style from {:08X} with a chance of {}%"), curobj->formID, curobj->fullName, currentform->formID, tempCs[1]);
 					}
 					else {
 						logger::debug(FMT_STRING("NPC {:08X} {} will get random combat style from {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
@@ -629,6 +629,7 @@ namespace NPC
 				logger::debug(FMT_STRING("npc formid: {:08X} {} enabled aggression radius"), curobj->formID, curobj->fullName);
 			}
 			else if (lowerString == "false") {
+				curobj->aiData.aggroRadiusBehaviour = false;
 				logger::debug(FMT_STRING("npc formid: {:08X} {} disabled aggression radius"), curobj->formID, curobj->fullName);
 			}
 			else {
@@ -681,7 +682,7 @@ namespace NPC
 
 				if (line.setRandomVisualStyle[0].size() > 1) {
 					logger::debug(FMT_STRING("NPC {:08X} {} will get random visual style from {:08X} with a chance of {}%"), curobj->formID, curobj->fullName, currentform->formID, line.setRandomVisualStyle[0][1]);
-					auto tempkywd = (RE::BGSKeyword*)GetFormFromIdentifier(line.setRandomVisualStyle[0][1]);
+					//auto tempkywd = (RE::BGSKeyword*)GetFormFromIdentifier(line.setRandomVisualStyle[0][1]);
 					aData.npcData[curobj->formID].styleChance = std::stoi(line.setRandomVisualStyle[0][1]);
 				}
 				else {
@@ -770,16 +771,38 @@ namespace NPC
 			}
 		}
 
+		//if (!line.factionsToRemove.empty()) {
+		//	for (size_t i = 0; i < line.factionsToRemove.size(); i++) {
+		//		RE::TESForm* currentform = nullptr;
+		//		std::string  string_form = line.factionsToRemove[i];
+		//		currentform = GetFormFromIdentifier(string_form);
+		//		if (currentform && currentform->formType == RE::FormType::Faction) {
+		//			for (auto& faction : curobj->factions) {
+		//				if (faction.faction && faction.faction->formID && faction.faction->formID == currentform->formID) {
+		//					curobj->factions.erase(&faction);
+		//					logger::debug(FMT_STRING("npc formid: {:08X} removed faction {:08X} {} "), curobj->formID, ((RE::TESFaction*)currentform)->formID, ((RE::TESFaction*)currentform)->fullName);
+		//					break;
+		//				}
+		//			}
+		//		}
+		//	}
+		//}
+
 		if (!line.factionsToRemove.empty()) {
 			for (size_t i = 0; i < line.factionsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.factionsToRemove[i];
 				currentform = GetFormFromIdentifier(string_form);
+
 				if (currentform && currentform->formType == RE::FormType::Faction) {
-					for (auto& faction : curobj->factions) {
-						if (faction.faction && faction.faction->formID && faction.faction->formID == currentform->formID) {
-							curobj->factions.erase(&faction);
-							logger::debug(FMT_STRING("npc formid: {:08X} removed faction {:08X} {} "), curobj->formID, ((RE::TESFaction*)currentform)->formID, ((RE::TESFaction*)currentform)->fullName);
+					for (auto it = curobj->factions.begin(); it != curobj->factions.end(); ++it) {
+						if (it->faction && it->faction->formID == currentform->formID) {
+							curobj->factions.erase(it);
+							logger::debug(
+								FMT_STRING("npc formid: {:08X} removed faction {:08X} {} "),
+								curobj->formID,
+								static_cast<RE::TESFaction*>(currentform)->formID,
+								static_cast<RE::TESFaction*>(currentform)->fullName);
 							break;
 						}
 					}
@@ -1282,16 +1305,18 @@ namespace NPC
 				std::string  string_form = line.spellsToRemove[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Spell) {
-					curobj->GetSpellList()->RemoveSpell((RE::SpellItem*)currentform);
+					if (curobj->actorEffects) {
+						curobj->GetSpellList()->RemoveSpell((RE::SpellItem*)currentform);
+					}
 					logger::debug(FMT_STRING("npc formid: {:08X} {} remove spell {:08X} {} "), curobj->formID, curobj->fullName, ((RE::SpellItem*)currentform)->formID, ((RE::SpellItem*)currentform)->fullName);
 				}
 			}
 		}
 
 		if (!line.levSpellsToAdd.empty()) {
-			for (size_t i = 0; i < line.spellsToAdd.size(); i++) {
+			for (size_t i = 0; i < line.levSpellsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.spellsToAdd[i];
+				std::string  string_form = line.levSpellsToAdd[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::LeveledSpell) {
 					if (!curobj->actorEffects) {
@@ -1304,21 +1329,23 @@ namespace NPC
 		}
 
 		if (!line.levSpellsToRemove.empty()) {
-			for (size_t i = 0; i < line.spellsToRemove.size(); i++) {
+			for (size_t i = 0; i < line.levSpellsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.spellsToRemove[i];
+				std::string  string_form = line.levSpellsToRemove[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::LeveledSpell) {
-					curobj->actorEffects->RemoveLevSpell((RE::TESLevSpell*)currentform);
+					if (curobj->actorEffects) {
+						curobj->actorEffects->RemoveLevSpell((RE::TESLevSpell*)currentform);
+					}
 					logger::debug(FMT_STRING("npc formid: {:08X} removed levSpell {:08X} "), curobj->formID, ((RE::TESLevSpell*)currentform)->formID);
 				}
 			}
 		}
 
 		if (!line.shoutsToAdd.empty()) {
-			for (size_t i = 0; i < line.spellsToAdd.size(); i++) {
+			for (size_t i = 0; i < line.shoutsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.spellsToAdd[i];
+				std::string  string_form = line.shoutsToAdd[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Shout) {
 					if (!curobj->actorEffects) {
@@ -1331,12 +1358,14 @@ namespace NPC
 		}
 
 		if (!line.shoutsToRemove.empty()) {
-			for (size_t i = 0; i < line.spellsToRemove.size(); i++) {
+			for (size_t i = 0; i < line.shoutsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.spellsToRemove[i];
+				std::string  string_form = line.shoutsToRemove[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Shout) {
-					curobj->actorEffects->RemoveShout((RE::TESShout*)currentform);
+					if (curobj->actorEffects) {
+						curobj->actorEffects->RemoveShout((RE::TESShout*)currentform);
+					}
 					logger::debug(FMT_STRING("npc formid: {:08X} removed shout {:08X} "), curobj->formID, ((RE::TESShout*)currentform)->formID);
 				}
 			}
@@ -1586,7 +1615,7 @@ namespace NPC
 
 
 
-		if (line.clearClassFromAttributes != "none") {
+		if (!line.clearClassFromAttributes.empty() && line.clearClassFromAttributes != "none") {
 			if (curobj->npcClass) {
 				auto newClass = copyClass(curobj->npcClass)->As<RE::TESClass>();
 				newClass->data.attributeWeights.health = 0;

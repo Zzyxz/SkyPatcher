@@ -95,7 +95,7 @@ namespace FORMLIST
 					curobj->forms.clear();
 				}
 
-				if (!line.objectsRemove.empty()) {
+				if (found && !line.objectsRemove.empty()) {
 					for (const auto& objectToRemove : line.objectsRemove) {
 						std::string        removeFormStr = objectToRemove;
 						auto removeForm = GetFormFromIdentifier(removeFormStr);

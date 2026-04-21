@@ -57,7 +57,7 @@ namespace LOCATION
 				}
 			}
 
-			if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByParentLoc.empty()) {
+			if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByParentLoc.empty()) {
 				continue;
 			}
 
@@ -213,13 +213,13 @@ namespace LOCATION
 					found = true;
 				}
 
-				if (line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByParentLoc.empty()) {
+				if (line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByParentLoc.empty()) {
 					found = true;
 				}
 
 
 
-				if (!line.objectExcluded.empty()) {
+				if (found && !line.objectExcluded.empty()) {
 					//logger::info("npc not empty");
 					for (const auto& npcstring : line.objectExcluded) {
 						RE::TESForm*       currentform = nullptr;
@@ -227,19 +227,19 @@ namespace LOCATION
 
 						std::string string_form = npcstring;
 						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Misc) {
+						if (currentform && currentform->formType == RE::FormType::Location) {
 							npc = (RE::BGSLocation*)currentform;
 
 							if (curobj->formID == npc->formID) {
 								found = false;
-								logger::info("Misc Excluded.");
+								//logger::info("Misc Excluded.");
 								break;
 							}
 						}
 					}
 				}
 
-				if (!line.filterByEditorIdContainsExcluded.empty() && found ) {
+				if (found && !line.filterByEditorIdContainsExcluded.empty() && found ) {
 					//logger::info("factions not empty");
 					for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
 						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
@@ -249,7 +249,7 @@ namespace LOCATION
 					}
 				}
 
-				if (!line.keywordsExcluded.empty()) {
+				if (found && !line.keywordsExcluded.empty()) {
 					//logger::info("keywords not empty");
 					for (const auto& keywordstring : line.keywordsExcluded) {
 						RE::TESForm*    currentform = nullptr;

@@ -734,11 +734,11 @@ namespace MGEF
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.enchantShader;
 				currentform = GetFormFromIdentifier(string_form);
-				if (currentform && currentform->formType == RE::FormType::EffectShader) {
-					curobj->data.effectShader = (RE::TESEffectShader*)currentform;
-					logger::debug(FMT_STRING("mgef formid: {:08X} {} changed enchantShader {:08X}"), curobj->formID, curobj->fullName, curobj->data.effectShader->formID);
+				if (currentform && currentform->formType == RE::FormType::EffectShader ) {
+					curobj->data.enchantShader = (RE::TESEffectShader*)currentform;
+					logger::debug(FMT_STRING("mgef formid: {:08X} {} changed enchantShader {:08X}"), curobj->formID, curobj->fullName, curobj->data.enchantShader->formID);
 				} else if (line.enchantShader == "null" || line.enchantShader == "clear") {
-					curobj->data.effectShader = nullptr;
+					curobj->data.enchantShader = nullptr;
 					logger::debug(FMT_STRING("mgef formid: {:08X} changed enchantShader null (none)"), curobj->formID);
 				}
 			} catch (const std::invalid_argument& e) {
@@ -1011,7 +1011,7 @@ namespace MGEF
 		if (!line.castingArt.empty() && line.castingArt != "none") {
 			try {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.projectile;
+				std::string  string_form = line.castingArt;
 				if (toLowerCase(string_form) != "null") {
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::ArtObject) {

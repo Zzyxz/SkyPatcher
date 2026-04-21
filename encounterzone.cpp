@@ -344,26 +344,36 @@ namespace ENCOUNTERZONE
 			}
 		}
 
-		if (!line.faction.empty() && line.faction != "none") {
-			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.faction;
-			currentform = GetFormFromIdentifier(string_form);
-			if (currentform && currentform->formType == RE::FormType::Faction) {
-				curobj->data.zoneOwner = (RE::TESFaction*)currentform;
-				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed zone owner to "), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->formID, clib_util::editorID::get_editorID(currentform));
-			} else if (line.faction != "null") {
-				curobj->data.zoneOwner = nullptr;
-				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} removed zone owner"), curobj->formID, clib_util::editorID::get_editorID(curobj));
-			}
-		}
+		//if (!line.faction.empty() && line.faction != "none") {
+		//	RE::TESForm* currentform = nullptr;
+		//	std::string  string_form = line.faction;
+		//	currentform = GetFormFromIdentifier(string_form);
+		//	if (currentform && currentform->formType == RE::FormType::Faction) {
+		//		curobj->data.zoneOwner = (RE::TESFaction*)currentform;
+		//		logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed zone owner to "), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->formID, clib_util::editorID::get_editorID(currentform));
+		//	} else if (toLowerCase(line.faction) == "null") {
+		//		curobj->data.zoneOwner = nullptr;
+		//		logger::debug(FMT_STRING("encounterzone formid: {:08X} {} removed zone owner"), curobj->formID, clib_util::editorID::get_editorID(curobj));
+		//	}
+		//}
 
-		if (!line.rank.empty() && line.rank != "none") {
-			int val = std::stoi(line.rank);
-			if (val < INT8_MIN || val > INT8_MAX) {
-				curobj->data.ownerRank = static_cast<int8_t>(val);
-				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed rank {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.ownerRank);
-			}
-		}
+		//if (!line.rank.empty() && line.rank != "none") {
+		//	try {
+		//		int val = std::stoi(line.rank);
+		//		if (val >= INT8_MIN && val <= INT8_MAX) {
+		//			curobj->data.ownerRank = static_cast<int8_t>(val);
+		//			logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed rank {}"),
+		//				curobj->formID,
+		//				clib_util::editorID::get_editorID(curobj),
+		//				curobj->data.ownerRank);
+		//		} else {
+		//			logger::debug(FMT_STRING("encounterzone formid: {:08X} {} rank out of bound"),
+		//				curobj->formID,
+		//				clib_util::editorID::get_editorID(curobj));
+		//		}
+		//	} catch (const std::invalid_argument&) {
+		//	}
+		//}
 		
 
 	}

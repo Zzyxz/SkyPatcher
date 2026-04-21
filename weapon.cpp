@@ -74,6 +74,7 @@ namespace WEAPON
 		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
 		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
 		extractValueString(line, "enchantAmount\\s*=([^:]+)", l.enchantAmount);
+
 		extractDataStrings(line, "filterByAnimationTypeOr\\s*=([^:]+)", l.filterAnimationTypeOr);
 		extractDataStrings(line, "animationType\\s*=([^:]+)", l.setAnimationType);
 		extractDataStrings(line, "skillType\\s*=([^:]+)", l.setSkillType);
@@ -95,6 +96,9 @@ namespace WEAPON
 
 		extractData(line, "filterByFirstPersonModelOr\\s*=([^:]+)", l.filterByFirstPersonModelOr);
 		extractValueString(line, "dwMatch\\s*=([^:]+)", l.dwMatch);
+
+		extractValueString(line, "soundLevel\\s*=([^:]+)", l.soundlevel);
+		extractValueString(line, "weaponHitType\\s*=([^:]+)", l.hittype);
 
 		return l;
 	}  //endStruct
@@ -216,21 +220,22 @@ namespace WEAPON
 					}
 				}
 
-				//filterByFirstPersonModelOr
-				for (const auto& keywordstring : line.filterByFirstPersonModelOr) {
-					RE::TESForm*    currentform = nullptr;
-					RE::TESObjectSTAT* fpmodel = nullptr;
+				if (!line.filterByFirstPersonModelOr.empty()) {
+					for (const auto& keywordstring : line.filterByFirstPersonModelOr) {
+						RE::TESForm*       currentform = nullptr;
+						RE::TESObjectSTAT* fpmodel = nullptr;
 
-					std::string string_form = keywordstring;
-					currentform = GetFormFromIdentifier(string_form);
-					if (currentform && currentform->formType == RE::FormType::Static) {
-						fpmodel = (RE::TESObjectSTAT*)currentform;
+						std::string string_form = keywordstring;
+						currentform = GetFormFromIdentifier(string_form);
+						if (currentform && currentform->formType == RE::FormType::Static) {
+							fpmodel = (RE::TESObjectSTAT*)currentform;
 
-						if (curobj->firstPersonModelObject && curobj->firstPersonModelObject->formID == fpmodel->formID) {
-							found = true;
-							//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-							//logger::info("Keyword found.");
-							break;
+							if (curobj->firstPersonModelObject && curobj->firstPersonModelObject->formID == fpmodel->formID) {
+								found = true;
+								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
+								//logger::info("Keyword found.");
+								break;
+							}
 						}
 					}
 				}
@@ -607,7 +612,7 @@ namespace WEAPON
 		if (!line.attackDamageToAdd.empty() && line.attackDamageToAdd != "none") {
 			try {
 				curobj->attackDamage = curobj->attackDamage + std::stof(line.attackDamageToAdd);
-				logger::debug(FMT_STRING("weapon formid: {:08X} {} added damage {} total "), curobj->formID, curobj->fullName, line.attackDamageToAdd, curobj->attackDamage);
+				logger::debug(FMT_STRING("weapon formid: {:08X} {} added damage {} total {}"), curobj->formID, curobj->fullName, line.attackDamageToAdd, curobj->attackDamage);
 			} catch (const std::invalid_argument& e) {
 			}
 		}
@@ -808,7 +813,7 @@ namespace WEAPON
 				} else if (hittypeLower == "silent") {
 					curobj->soundLevel = RE::SOUND_LEVEL::kSilent;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed sound level to silent"), curobj->formID, curobj->fullName);
-				} else if (hittypeLower == "veryload") {
+				} else if (hittypeLower == "veryloud") {
 					curobj->soundLevel = RE::SOUND_LEVEL::kVeryLoud;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed sound level to very load"), curobj->formID, curobj->fullName);
 				} else if (hittypeLower == "quiet") {
@@ -1018,7 +1023,7 @@ namespace WEAPON
 				RE::TESForm*       currentform = nullptr;
 				RE::TESObjectWEAP* object = nullptr;
 				currentform = GetFormFromIdentifier(line.attackDamageMatch);
-				if (currentform && currentform->formType == RE::FormType::Armor) {
+				if (currentform && currentform->formType == RE::FormType::Weapon) {
 					object = (RE::TESObjectWEAP*)currentform;
 					if (object) {
 						curobj->attackDamage = object->attackDamage;

@@ -36,7 +36,7 @@ namespace AMMO
 		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
 		extractValueString(line, "value\\s*=([^:]+)", l.value);
 		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
+		//extractValueString(line, "weight\\s*=([^:]+)", l.weight);
 		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
 
 		extractValueString(line, "model\\s*=([^:]+)", l.model);
@@ -92,8 +92,6 @@ namespace AMMO
 
 			for (const auto& curobj : AmmoArray) {
 				//logger::debug("Mod: {} || Weapon Type: {} || Damage: {} || Projectile: {} || addToFormList: {}", line.ammo.c_str(), line.type.c_str(), line.damage.c_str(), line.projectile.c_str(), line.armorPenetration.c_str());
-				RE::BSTArray<RE::TESForm*> listPistol;
-				RE::BSTArray<RE::TESForm*> listRifle;
 				bool found = false;
 				//logger::info("Bad");
 
@@ -431,7 +429,7 @@ namespace AMMO
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Keyword) {
 					if(curobj->AddKeyword((RE::BGSKeyword*)currentform))
-						logger::debug(FMT_STRING("weapon formid: {:08X} {} added keyword {:08X} {} "), curobj->formID, curobj->fullName, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
+						logger::debug(FMT_STRING("ammo formid: {:08X} {} added keyword {:08X} {} "), curobj->formID, curobj->fullName, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
 				}
 			}
 		}
@@ -492,34 +490,6 @@ namespace AMMO
 				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
 			} catch (const std::invalid_argument& e) {
-			}
-		}
-
-		
-		
-		if (!line.model.empty() && line.model != "none") {
-			try {
-				curobj->SetModel(line.model.c_str());
-				curobj->ReplaceModel();
-				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed model path {}"), curobj->formID, curobj->fullName, curobj->model.c_str());
-			} catch (const std::invalid_argument& e) {
-			}
-		}
-
-		if (!line.alternateTextures.empty()) {
-			for (const auto& objectToAdd : line.alternateTextures) {
-				std::string  texture = objectToAdd[0];
-				std::string  name = objectToAdd[1];
-				int32_t      index = std::stoi(objectToAdd[2]);
-				RE::TESForm* currentform = GetFormFromIdentifier(texture);
-				if (currentform && currentform->formType == RE::FormType::TextureSet) {
-					RE::TESModelTextureSwap::AlternateTexture newTex;
-					newTex.textureSet = currentform->As<RE::BGSTextureSet>();
-					newTex.name3D = name;
-					newTex.index3D = index;
-					addAltTexture(curobj, newTex);
-					logger::debug(FMT_STRING("ammo formid: {:08X} {} changed alternate textures {:08X} name3d {} index3d {}"), curobj->formID, curobj->fullName, newTex.textureSet->formID, newTex.name3D.c_str(), newTex.index3D);
-				}
 			}
 		}
 

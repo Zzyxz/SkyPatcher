@@ -35,8 +35,6 @@ namespace INGR
 
 		extractValueString(line, "filterByType\\s*=([^:]+)", l.filterType);
 
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-
 		extractValueString(line, "value\\s*=([^:]+)", l.capsvalue);
 		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
 		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
@@ -187,7 +185,7 @@ namespace INGR
 						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
 							keyword = (RE::EffectSetting*)currentform;
 							for (const auto& effect : curobj->effects) {
-								if (effect->baseEffect && effect->baseEffect->formID == keyword->formID) {
+								if (effect && effect->baseEffect && effect->baseEffect->formID == keyword->formID) {
 									foundInList = true;
 									break;
 								}
@@ -216,7 +214,7 @@ namespace INGR
 							keyword = (RE::EffectSetting*)currentform;
 
 							for (const auto& effect : curobj->effects) {
-								if (effect->baseEffect->formID == keyword->formID) {
+								if (effect && effect->baseEffect->formID == keyword->formID) {
 									mgefOr = true;
 									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
 									//logger::info("Keyword found.");
@@ -274,7 +272,7 @@ namespace INGR
 						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
 							keyword = (RE::EffectSetting*)currentform;
 							for (const auto& effect : curobj->effects) {
-								if (effect->baseEffect->formID == keyword->formID) {
+								if (effect && effect->baseEffect->formID == keyword->formID) {
 									found = false;
 									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
 									//logger::info("Keyword found.");
@@ -482,7 +480,7 @@ namespace INGR
 					}
 
 					for (const auto& effect : curobj->effects) {
-						if (effect->baseEffect && effect->baseEffect->formID == addForm->formID) {
+						if (effect && effect->baseEffect && effect->baseEffect->formID == addForm->formID) {
 							if (objectToAdd[1] != "null") {
 								effect->effectItem.magnitude = magnitude;
 								logger::debug(FMT_STRING("ingredient {:08X} {} changed magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, effect->effectItem.magnitude);
@@ -526,17 +524,17 @@ namespace INGR
 					}
 
 					for (const auto& effect : curobj->effects) {
-						if (effect->baseEffect && effect->baseEffect->formID == addForm->formID) {
+						if (effect && effect->baseEffect && effect->baseEffect->formID == addForm->formID) {
 							if (objectToAdd[1] != "null") {
-								effect->effectItem.magnitude = magnitude;
+								effect->effectItem.magnitude += magnitude;
 								logger::debug(FMT_STRING("ingredient {:08X} {} added {} to magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, magnitude, addForm->formID, addForm->fullName, effect->effectItem.magnitude);
 							}
 							if (objectToAdd[2] != "null") {
-								effect->effectItem.duration = duration;
+								effect->effectItem.duration += duration;
 								logger::debug(FMT_STRING("ingredient {:08X} {} added {} to duration of {:08X} {} to {}"), curobj->formID, curobj->fullName, duration, addForm->formID, addForm->fullName, effect->effectItem.duration);
 							}
 							if (objectToAdd[3] != "null") {
-								effect->effectItem.area = area;
+								effect->effectItem.area += area;
 								logger::debug(FMT_STRING("ingredient {:08X} {} added {} to area of {:08X} {} to {}"), curobj->formID, curobj->fullName, area, addForm->formID, addForm->fullName, effect->effectItem.area);
 							}
 						}

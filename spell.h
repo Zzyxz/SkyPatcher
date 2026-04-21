@@ -51,6 +51,7 @@ namespace SPELL
 		std::vector<std::vector<std::string>> changedObjects;
 		std::vector<std::vector<std::string>> changedAddObjects;
 		std::vector<std::vector<std::string>> changedFirstObjects;
+		std::vector<std::vector<std::string>> changedDamageHealthObjects;
 		
 		std::string                           baseCost;
 		std::string                           halfCostPerk;
@@ -58,6 +59,8 @@ namespace SPELL
 		std::string                           castType;
 		std::string                           equipSlot;
 		std::string                           clear;
+		std::string                           restrictToDamageEffects;
+		
 
 		std::vector<std::string> setFlags;
 		std::vector<std::string> removeFlags;

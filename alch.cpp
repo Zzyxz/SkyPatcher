@@ -50,6 +50,8 @@ namespace ALCH
 		extractToArr2D(line, "mgefsToAdd\\s*=([^:]+)", l.addedObjects);
 		extractToArr2D(line, "mgefsToChange\\s*=([^:]+)", l.changedObjects);
 		extractToArr2D(line, "mgefsToChangeAdd\\s*=([^:]+)", l.changedAddObjects);
+		extractToArr2D(line, "mgefsToChangeFirst\\s*=([^:]+)", l.changedFirstObjects);
+		extractToArr2D(line, "mgefsToChangeDamageHealthEffects\\s*=([^:]+)", l.changedDamageHealthObjects);
 		extractData(line, "mgefsToRemove\\s*=([^:]+)", l.removedObjects);
 		extractValueString(line, "filterByType\\s*=([^:]+)", l.filterType);
 		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
@@ -232,7 +234,7 @@ namespace ALCH
 						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
 							keyword = (RE::EffectSetting*)currentform;
 							for (const auto& effect : curobj->effects) {
-								if (effect->baseEffect && effect->baseEffect->formID == keyword->formID) {
+								if (effect && effect->baseEffect && effect->baseEffect->formID == keyword->formID) {
 									foundInList = true;
 									break;
 								}
@@ -261,7 +263,7 @@ namespace ALCH
 							keyword = (RE::EffectSetting*)currentform;
 
 							for (const auto& effect : curobj->effects) {
-								if (effect->baseEffect->formID == keyword->formID) {
+								if (effect && effect->baseEffect->formID == keyword->formID) {
 									mgefOr = true;
 									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
 									//logger::info("Keyword found.");
@@ -319,7 +321,7 @@ namespace ALCH
 						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
 							keyword = (RE::EffectSetting*)currentform;
 							for (const auto& effect : curobj->effects) {
-								if (effect->baseEffect->formID == keyword->formID) {
+								if (effect && effect->baseEffect->formID == keyword->formID) {
 									found = false;
 									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
 									//logger::info("Keyword found.");
@@ -544,7 +546,7 @@ namespace ALCH
 					}
 
 					for (const auto& effect : curobj->effects) {
-						if (effect->baseEffect && effect->baseEffect->formID == addForm->formID) {
+						if (effect && effect->baseEffect && effect->baseEffect->formID == addForm->formID) {
 							if (objectToAdd[1] != "null") {
 								effect->effectItem.magnitude = magnitude;
 								logger::debug(FMT_STRING("ingestible {:08X} {} changed magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, effect->effectItem.magnitude);
@@ -588,7 +590,7 @@ namespace ALCH
 					}
 
 					for (const auto& effect : curobj->effects) {
-						if (effect->baseEffect && effect->baseEffect->formID == addForm->formID) {
+						if (effect && effect->baseEffect && effect->baseEffect->formID == addForm->formID) {
 							if (objectToAdd[1] != "null") {
 								effect->effectItem.magnitude = effect->effectItem.magnitude + magnitude;
 								logger::debug(FMT_STRING("ingestible {:08X} {} added {} to magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, magnitude, addForm->formID, addForm->fullName, effect->effectItem.magnitude);
@@ -601,6 +603,95 @@ namespace ALCH
 								effect->effectItem.area = effect->effectItem.area + area;
 								logger::debug(FMT_STRING("ingestible {:08X} {} added {} to area of {:08X} {} to {}"), curobj->formID, curobj->fullName, area, addForm->formID, addForm->fullName, effect->effectItem.area);
 							}
+						}
+					}
+				}
+			}
+		}
+
+		if (!line.changedFirstObjects.empty()) {
+			for (const auto& objectToAdd : line.changedFirstObjects) {
+				float magnitude = 0.0f;
+				if (objectToAdd[0] != "null") {
+					magnitude = std::stof(objectToAdd[0]);
+				}
+
+				int32_t duration = 0;
+				if (objectToAdd[1] != "null") {
+					duration = std::stoi(objectToAdd[1]);
+				}
+
+				int32_t area = 0;
+				if (objectToAdd[2] != "null") {
+					area = std::stoi(objectToAdd[2]);
+				}
+
+				float multiplier = 0;
+				if (objectToAdd[3] != "null") {
+					multiplier = multiplier + std::stof(objectToAdd[3]);
+				}
+
+				auto& effect = curobj->effects.front();
+				if (effect && effect->baseEffect) {
+					if (objectToAdd[0] != "null") {
+						effect->effectItem.magnitude = magnitude;
+						logger::debug(FMT_STRING("enchantment {:08X} {} changed first {} to magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, magnitude, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
+					}
+					if (objectToAdd[1] != "null") {
+						effect->effectItem.duration = duration;
+						logger::debug(FMT_STRING("enchantment {:08X} {} changed first {} to duration of {:08X} {} to {}"), curobj->formID, curobj->fullName, duration, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.duration);
+					}
+					if (objectToAdd[2] != "null") {
+						effect->effectItem.area = area;
+						logger::debug(FMT_STRING("enchantment {:08X} {} changed first {} to area of {:08X} {} to {}"), curobj->formID, curobj->fullName, area, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.area);
+					}
+					if (objectToAdd[3] != "null") {
+						effect->effectItem.magnitude = effect->effectItem.magnitude * multiplier;
+						logger::debug(FMT_STRING("enchantment {:08X} {} changed(multiplied) first magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
+					}
+				}
+			}
+		}
+
+		if (!line.changedDamageHealthObjects.empty()) {
+			for (const auto& objectToAdd : line.changedDamageHealthObjects) {
+				float magnitude = 0.0f;
+				if (objectToAdd[0] != "null") {
+					magnitude = std::stof(objectToAdd[0]);
+				}
+
+				int32_t duration = 0;
+				if (objectToAdd[1] != "null") {
+					duration = std::stoi(objectToAdd[1]);
+				}
+
+				int32_t area = 0;
+				if (objectToAdd[2] != "null") {
+					area = std::stoi(objectToAdd[2]);
+				}
+
+				float multiplier = 0;
+				if (objectToAdd[3] != "null") {
+					multiplier = multiplier + std::stof(objectToAdd[3]);
+				}
+
+				for (const auto& effect : curobj->effects) {
+					if (effect && effect->baseEffect && effect->baseEffect->IsDetrimental() && (effect->baseEffect->data.primaryAV == RE::ActorValue::kHealth || effect->baseEffect->data.secondaryAV == RE::ActorValue::kHealth)) {
+						if (objectToAdd[0] != "null") {
+							effect->effectItem.magnitude = magnitude;
+							logger::debug(FMT_STRING("spell {:08X} {} changed damage effect {} to magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, magnitude, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
+						}
+						if (objectToAdd[1] != "null") {
+							effect->effectItem.duration = duration;
+							logger::debug(FMT_STRING("spell {:08X} {} changed damage effect {} to duration of {:08X} {} to {}"), curobj->formID, curobj->fullName, duration, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.duration);
+						}
+						if (objectToAdd[2] != "null") {
+							effect->effectItem.area = area;
+							logger::debug(FMT_STRING("spell {:08X} {} changed damage effect {} to area of {:08X} {} to {}"), curobj->formID, curobj->fullName, area, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.area);
+						}
+						if (objectToAdd[3] != "null") {
+							effect->effectItem.magnitude = effect->effectItem.magnitude * multiplier;
+							logger::debug(FMT_STRING("spell {:08X} {} changed(multiplied) damage effect magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
 						}
 					}
 				}
