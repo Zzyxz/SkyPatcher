@@ -4,6 +4,33 @@
 #include <regex>
 #include <unordered_map>
 
+namespace {
+// Config parsing runs single-threaded at kDataLoaded, and every call site passes
+// a string literal, so the cache is bounded by the number of distinct patterns
+// in the source (~400 across all parsers).
+//
+// Thread-safety note: this cache is safe only because parsing is single-threaded.
+// If parallelism is ever introduced here, this becomes a data race and would need
+// a lock or a thread-local cache instead.
+//
+// The cache key is the pattern text alone, not (pattern, flags): every call site's
+// pattern already embeds a unique key name (e.g. "setEssential\\s*=([^:]+)"), so two
+// sites never share a pattern string with different flags in practice — verified by
+// grepping every extract*() call site across the SkyPatcher source tree, including
+// extractValueString's lone non-icase caller. If a future call site ever reuses an
+// existing pattern string with different flags, it will silently get the first
+// caller's compiled regex (and thus the first caller's flags) instead of its own.
+const std::regex& cached_regex(const std::string& pattern, std::regex::flag_type flags)
+{
+	static std::unordered_map<std::string, std::regex> cache;
+	auto it = cache.find(pattern);
+	if (it == cache.end()) {
+		it = cache.emplace(pattern, std::regex(pattern, flags)).first;
+	}
+	return it->second;
+}
+}  // namespace
+
 RE::BIPED_MODEL::BipedObjectSlot getBipedObjectSlot(int slot)
 {
 	switch (slot) {
@@ -297,7 +324,7 @@ std::vector<std::string> splitRelationNumber(const std::string& input)
 // Function to extract data from a line using a regex pattern
 void extractData(const std::string& line, const std::string& pattern, std::vector<std::string>& destination)
 {
-	std::regex  regex_pattern(pattern, std::regex::icase);
+	const std::regex& regex_pattern = cached_regex(pattern, std::regex::icase);
 	std::smatch match;
 
 	// Find all matches in the input line
@@ -326,7 +353,7 @@ void extractData(const std::string& line, const std::string& pattern, std::vecto
 
 void extractDataStrings(const std::string& line, const std::string& pattern, std::vector<std::string>& destination)
 {
-	std::regex  regex_pattern(pattern, std::regex::icase);
+	const std::regex& regex_pattern = cached_regex(pattern, std::regex::icase);
 	std::smatch match;
 	std::regex_search(line, match, regex_pattern);
 
@@ -355,7 +382,7 @@ void extractDataStrings(const std::string& line, const std::string& pattern, std
 void extractMultiDataString(const std::string& line, const std::string& pattern, std::vector<std::string>& pcMultFlag,
 	std::vector<std::string>& pcMultFlag_min_values, std::vector<std::string>& pcMultFlag_max_values)
 {
-	std::regex  pcMultFlag_regex(pattern, std::regex::icase);
+	const std::regex& pcMultFlag_regex = cached_regex(pattern, std::regex::icase);
 	std::smatch pcMultFlag_match;
 	std::regex_search(line, pcMultFlag_match, pcMultFlag_regex);
 
@@ -387,7 +414,7 @@ void extractMultiDataString(const std::string& line, const std::string& pattern,
 void extractMultiDataInt(const std::string& line, const std::string& pattern, std::vector<std::string>& pcMultFlag,
 	std::vector<int>& pcMultFlag_min_values, std::vector<int>& pcMultFlag_max_values)
 {
-	std::regex  pcMultFlag_regex(pattern, std::regex::icase);
+	const std::regex& pcMultFlag_regex = cached_regex(pattern, std::regex::icase);
 	std::smatch pcMultFlag_match;
 	std::regex_search(line, pcMultFlag_match, pcMultFlag_regex);
 
@@ -419,7 +446,7 @@ void extractMultiDataInt(const std::string& line, const std::string& pattern, st
 void extractMultiDataFloat(const std::string& line, const std::string& pattern, std::vector<std::string>& pcMultFlag,
 	std::vector<float>& pcMultFlag_min_values, std::vector<float>& pcMultFlag_max_values)
 {
-	std::regex  pcMultFlag_regex(pattern, std::regex::icase);
+	const std::regex& pcMultFlag_regex = cached_regex(pattern, std::regex::icase);
 	std::smatch pcMultFlag_match;
 	std::regex_search(line, pcMultFlag_match, pcMultFlag_regex);
 
@@ -450,7 +477,9 @@ void extractMultiDataFloat(const std::string& line, const std::string& pattern, 
 
 void extractValueString(const std::string& line, const std::string& regex_pattern_str, std::string& target_value)
 {
-	std::regex  regex_pattern(regex_pattern_str);
+	// No std::regex::icase here — preserved exactly as-is; this is the one extractor
+	// that matches case-sensitively, and changing that is a separate behavior change.
+	const std::regex& regex_pattern = cached_regex(regex_pattern_str, std::regex::ECMAScript);
 	std::smatch match;
 	std::regex_search(line, match, regex_pattern);
 
@@ -470,7 +499,7 @@ void extractValueString(const std::string& line, const std::string& regex_patter
 
 void extractToArr2D(const std::string& line, const std::string& regex_pattern_str, std::vector<std::vector<std::string>>& target_value)
 {
-	std::regex  regex_pattern(regex_pattern_str, std::regex::icase);
+	const std::regex& regex_pattern = cached_regex(regex_pattern_str, std::regex::icase);
 	std::smatch match;
 	std::regex_search(line, match, regex_pattern);
 	std::vector<std::string> arr;
