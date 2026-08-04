@@ -53,7 +53,7 @@ namespace NPC
 		extractValueString(line, "setProtected\\s*=([^:]+)", l.kProtected);
 
 		// extract getLevelRange
-		std::regex  levelRange_regex("levelRange\\s*=\\s*(\\d+)\\s*~\\s*(\\d+)", regex::icase);
+		static const std::regex levelRange_regex("levelRange\\s*=\\s*(\\d+)\\s*~\\s*(\\d+)", regex::icase);
 		std::smatch levelRange;
 		std::regex_search(line, levelRange, levelRange_regex);
 		if (levelRange.empty() || levelRange.size() < 3) {
@@ -71,7 +71,7 @@ namespace NPC
 
 		extractToArr2D(line, "restrictToSkill\\s*=([^:]+)", l.skillRestrict);
 		// extract Faction
-		std::regex  Faction_regex("factionsToAdd\\s*=([^:]+)", std::regex::icase);
+		static const std::regex Faction_regex("factionsToAdd\\s*=([^:]+)", std::regex::icase);
 		std::smatch Faction_match;
 		std::regex_search(line, Faction_match, Faction_regex);
 		if (!Faction_match.empty() && !Faction_match[1].str().empty()) {
@@ -107,7 +107,7 @@ namespace NPC
 
 		extractData(line, "perksToAdd\\s*=([^:]+)", l.perksToAdd);
 
-		std::regex  objectsToAdd_regex("objectsToAdd\\s*=([^:]+)", regex::icase);
+		static const std::regex objectsToAdd_regex("objectsToAdd\\s*=([^:]+)", regex::icase);
 		std::smatch objectsToAdd_match;
 		std::regex_search(line, objectsToAdd_match, objectsToAdd_regex);
 		std::vector<std::string> objectsToAdd;
@@ -224,7 +224,7 @@ namespace NPC
 		extractToArr2D(line, "objectsToReplace\\s*=([^:]+)", l.objectsToReplace);
 
 		//extractToArr2D(line, "overlayToAdd\\s*=([^:]+)", l.overlayToAdd);
-		std::regex  add_regex("attackDataToAdd\\s*=([^:]+)", regex::icase);
+		static const std::regex add_regex("attackDataToAdd\\s*=([^:]+)", regex::icase);
 		std::smatch add_match;
 		std::regex_search(line, add_match, add_regex);
 		std::vector<std::string> add;
@@ -286,7 +286,7 @@ namespace NPC
 			l.addedAttackData = arr3D;
 		}
 
-		std::regex  change_regex("attackDataToChange\\s*=([^:]+)", regex::icase);
+		static const std::regex change_regex("attackDataToChange\\s*=([^:]+)", regex::icase);
 		std::smatch change_match;
 		std::regex_search(line, change_match, change_regex);
 		std::vector<std::string> change;

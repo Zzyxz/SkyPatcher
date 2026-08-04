@@ -307,7 +307,7 @@ void extractData(const std::string& line, const std::string& pattern, std::vecto
 		std::string data_str = match[1];
 
 		// Check if data_str contains "|"
-		std::regex           list_regex("[^,]+", std::regex::icase);
+		static const std::regex list_regex("[^,]+", std::regex::icase);
 		std::sregex_iterator iterator(data_str.begin(), data_str.end(), list_regex);
 		std::sregex_iterator end;
 
@@ -333,7 +333,7 @@ void extractDataStrings(const std::string& line, const std::string& pattern, std
 	std::shared_ptr<std::vector<std::string>> data = std::make_shared<std::vector<std::string>>();
 	if (!match.empty() && !match[1].str().empty()) {
 		std::string          data_str = match[1];
-		std::regex           list_regex("[^,]+", std::regex::icase);
+		static const std::regex list_regex("[^,]+", std::regex::icase);
 		std::sregex_iterator iterator(data_str.begin(), data_str.end(), list_regex);
 		std::sregex_iterator end;
 
@@ -361,7 +361,7 @@ void extractMultiDataString(const std::string& line, const std::string& pattern,
 
 	if (!pcMultFlag_match.empty() && !pcMultFlag_match[1].str().empty()) {
 		std::string pcMultFlag_str = pcMultFlag_match[1];
-		std::regex  pcMultFlag_list_regex("(\\w+)\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", std::regex::icase);
+		static const std::regex pcMultFlag_list_regex("(\\w+)\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", std::regex::icase);
 
 		std::sregex_iterator pcMultFlag_iterator(pcMultFlag_str.begin(), pcMultFlag_str.end(), pcMultFlag_list_regex);
 		std::sregex_iterator pcMultFlag_end;
@@ -393,7 +393,7 @@ void extractMultiDataInt(const std::string& line, const std::string& pattern, st
 
 	if (!pcMultFlag_match.empty() && !pcMultFlag_match[1].str().empty()) {
 		std::string pcMultFlag_str = pcMultFlag_match[1];
-		std::regex  pcMultFlag_list_regex("(\\w+)\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", std::regex::icase);
+		static const std::regex pcMultFlag_list_regex("(\\w+)\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", std::regex::icase);
 
 		std::sregex_iterator pcMultFlag_iterator(pcMultFlag_str.begin(), pcMultFlag_str.end(), pcMultFlag_list_regex);
 		std::sregex_iterator pcMultFlag_end;
@@ -425,7 +425,7 @@ void extractMultiDataFloat(const std::string& line, const std::string& pattern, 
 
 	if (!pcMultFlag_match.empty() && !pcMultFlag_match[1].str().empty()) {
 		std::string pcMultFlag_str = pcMultFlag_match[1];
-		std::regex  pcMultFlag_list_regex("(\\w+)\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", std::regex::icase);
+		static const std::regex pcMultFlag_list_regex("(\\w+)\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", std::regex::icase);
 
 		std::sregex_iterator pcMultFlag_iterator(pcMultFlag_str.begin(), pcMultFlag_str.end(), pcMultFlag_list_regex);
 		std::sregex_iterator pcMultFlag_end;
