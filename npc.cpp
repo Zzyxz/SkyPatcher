@@ -499,10 +499,9 @@ namespace NPC
 		}
 
 		if (!line.rcslist.empty()) {
-			for (auto tempCs : line.rcslist) {
+			for (const auto& tempCs : line.rcslist) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = tempCs[0];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(tempCs[0]);
 				if (currentform && currentform->formType == RE::FormType::FormList) {
 					aData.npcData[curobj->formID].npcCombatStyleList = ((RE::BGSListForm*)currentform);
 
@@ -671,8 +670,7 @@ namespace NPC
 		if (!line.setRandomVisualStyle.empty()) {
 			//logger::debug(" line.setRandomVisualStyle {}", line.setRandomVisualStyle);
 			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.setRandomVisualStyle[0][0];
-			currentform = GetFormFromIdentifier(string_form);
+			currentform = GetFormFromIdentifier(line.setRandomVisualStyle[0][0]);
 			if (currentform && currentform->formType == RE::FormType::FormList) {
 				aData.npcData[curobj->formID].npcVisualStyleList = ((RE::BGSListForm*)currentform);
 
@@ -697,8 +695,7 @@ namespace NPC
 		if (!line.addRandomVisualStyle.empty()) {
 			//logger::debug(" line.addRandomVisualStyle {}", line.addRandomVisualStyle);
 			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.addRandomVisualStyle[0][0];
-			currentform = GetFormFromIdentifier(string_form);
+			currentform = GetFormFromIdentifier(line.addRandomVisualStyle[0][0]);
 			int added = 0;
 			if (currentform && currentform->formType == RE::FormType::FormList) {
 
@@ -746,8 +743,7 @@ namespace NPC
 			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.keywordsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.keywordsToAdd[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.keywordsToAdd[i]);
 				if (currentform && currentform->formType == RE::FormType::Keyword) {
 					if(curobj->AddKeyword((RE::BGSKeyword*)currentform))
 						logger::debug(FMT_STRING("npc formid: {:08X} {} added keyword {:08X} {} "), curobj->formID, curobj->fullName, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
@@ -758,8 +754,7 @@ namespace NPC
 		if (!line.keywordsToRemove.empty()) {
 			for (size_t i = 0; i < line.keywordsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.keywordsToRemove[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.keywordsToRemove[i]);
 				if (currentform && currentform->formType == RE::FormType::Keyword) {
 					curobj->RemoveKeyword((RE::BGSKeyword*)currentform);
 					logger::debug(FMT_STRING("npc formid: {:08X} removed keyword {:08X} {} "), curobj->formID, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
@@ -787,8 +782,7 @@ namespace NPC
 		if (!line.factionsToRemove.empty()) {
 			for (size_t i = 0; i < line.factionsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.factionsToRemove[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.factionsToRemove[i]);
 
 				if (currentform && currentform->formType == RE::FormType::Faction) {
 					for (auto it = curobj->factions.begin(); it != curobj->factions.end(); ++it) {
@@ -812,8 +806,7 @@ namespace NPC
 			//logger::debug("factionsToAdd 1");
 			for (size_t i = 0; i < line.factionsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.factionsToAdd[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.factionsToAdd[i]);
 				//logger::debug("factionsToAdd 2");
 				if (currentform && currentform->formType == RE::FormType::Faction) {
 					//logger::debug("factionsToAdd 3");
@@ -844,6 +837,7 @@ namespace NPC
 			for (size_t i = 0; i < line.avifs.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.avifs[i];
+				const std::string lowerAvif = toLowerCase(string_form);
 
 				//logger::info("avif valid!");
 				float finalValue = 0;
@@ -911,7 +905,7 @@ namespace NPC
 
 				auto it2 = aData.npcData.find(curobj->formID);
 
-				if (toLowerCase(string_form) == "health") {
+				if (lowerAvif == "health") {
 					curobj->actorData.healthOffset = finalValue;
 					if (it2 == aData.npcData.end()) {
 						aData.npcData[curobj->formID].health = finalValue;
@@ -923,7 +917,7 @@ namespace NPC
 					curobj->SetBaseActorValue(RE::ActorValue::kHealth, curobj->actorData.healthOffset);
 					curobj->playerSkills.health = curobj->actorData.healthOffset;
 				}
-				else if (toLowerCase(string_form) == "healthmult") {
+				else if (lowerAvif == "healthmult") {
 					logger::debug(FMT_STRING("npc formid: {:08X} {} multiplied health to {} * {} = {}"), curobj->formID, curobj->fullName, curobj->actorData.healthOffset, line.values1[i], curobj->actorData.healthOffset * line.values1[i]);
 					curobj->actorData.healthOffset = curobj->actorData.healthOffset * line.values1[i];
 					curobj->SetBaseActorValue(RE::ActorValue::kHealth, curobj->actorData.healthOffset);
@@ -936,7 +930,7 @@ namespace NPC
 					}
 
 				}
-				else if (toLowerCase(string_form) == "stamina") {
+				else if (lowerAvif == "stamina") {
 					curobj->actorData.staminaOffset = finalValue;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), curobj->actorData.staminaOffset);
 					curobj->SetBaseActorValue(RE::ActorValue::kStamina, curobj->actorData.staminaOffset);
@@ -948,7 +942,7 @@ namespace NPC
 						it2->second.stamina = curobj->actorData.staminaOffset;
 					}
 				}
-				else if (toLowerCase(string_form) == "staminamult") {
+				else if (lowerAvif == "staminamult") {
 					logger::debug(FMT_STRING("npc formid: {:08X} {} multiplied stamina to {} * {} = {}"), curobj->formID, curobj->fullName, curobj->actorData.staminaOffset, line.values1[i], curobj->actorData.staminaOffset * line.values1[i]);
 					curobj->actorData.staminaOffset = curobj->actorData.staminaOffset * line.values1[i];
 					curobj->SetBaseActorValue(RE::ActorValue::kStamina, curobj->actorData.staminaOffset);
@@ -960,7 +954,7 @@ namespace NPC
 						it2->second.stamina = curobj->actorData.staminaOffset;
 					}
 				}
-				else if (toLowerCase(string_form) == "magicka") {
+				else if (lowerAvif == "magicka") {
 					curobj->actorData.magickaOffset = finalValue;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), curobj->actorData.magickaOffset);
 					curobj->SetBaseActorValue(RE::ActorValue::kMagicka, curobj->actorData.magickaOffset);
@@ -972,7 +966,7 @@ namespace NPC
 						it2->second.magicka = curobj->actorData.magickaOffset;
 					}
 				}
-				else if (toLowerCase(string_form) == "magickamult") {
+				else if (lowerAvif == "magickamult") {
 					logger::debug(FMT_STRING("npc formid: {:08X} {} multiplied magicka to {} * {} = {}"), curobj->formID, curobj->fullName, curobj->actorData.magickaOffset, line.values1[i], curobj->actorData.magickaOffset * line.values1[i]);
 					curobj->actorData.magickaOffset = curobj->actorData.magickaOffset * line.values1[i];
 					curobj->SetBaseActorValue(RE::ActorValue::kMagicka, curobj->actorData.magickaOffset);
@@ -984,7 +978,7 @@ namespace NPC
 						it2->second.magicka = curobj->actorData.magickaOffset;
 					}
 				}
-				else if (toLowerCase(string_form) == "calchealth") {
+				else if (lowerAvif == "calchealth") {
 					auto tempResult = calculateAttributePoints(curobj->actorData.level, sw, line.values1[i]);
 
 					if (!line.healthBonus.empty() && line.healthBonus != "none") {
@@ -1003,7 +997,7 @@ namespace NPC
 						it2->second.health = curobj->actorData.healthOffset;
 					}
 				}
-				else if (toLowerCase(string_form) == "calcstamina") {
+				else if (lowerAvif == "calcstamina") {
 					auto tempResult = calculateAttributePoints(curobj->actorData.level, sw, line.values1[i]);
 
 					if (!line.staminaBonus.empty() && line.staminaBonus != "none") {
@@ -1022,7 +1016,7 @@ namespace NPC
 						it2->second.stamina = curobj->actorData.staminaOffset;
 					}
 				}
-				else if (toLowerCase(string_form) == "calcmagicka") {
+				else if (lowerAvif == "calcmagicka") {
 					auto tempResult = calculateAttributePoints(curobj->actorData.level, sw, line.values1[i]);
 
 					if (!line.magickaBonus.empty() && line.magickaBonus != "none") {
@@ -1041,7 +1035,7 @@ namespace NPC
 						it2->second.magicka = curobj->actorData.magickaOffset;
 					}
 				}
-				else if (toLowerCase(string_form) == "byclassstamina") {
+				else if (lowerAvif == "byclassstamina") {
 					AttributePoints tempResult;
 
 					if (sw.staminaWeight > 0) {
@@ -1067,7 +1061,7 @@ namespace NPC
 						it2->second.stamina = curobj->actorData.staminaOffset;
 					}
 				}
-				else if (toLowerCase(string_form) == "byclassmagicka") {
+				else if (lowerAvif == "byclassmagicka") {
 					AttributePoints tempResult;
 
 					if (sw.magickaWeight > 0) {
@@ -1105,8 +1099,7 @@ namespace NPC
 			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.perksToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.perksToAdd[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.perksToAdd[i]);
 				if (currentform && currentform->formType == RE::FormType::Perk) {
 					curobj->AddPerk((RE::BGSPerk*)currentform, 1);
 					logger::debug(FMT_STRING("npc formid: {:08X} added perk {:08X} {} "), curobj->formID, ((RE::BGSPerk*)currentform)->formID, ((RE::BGSPerk*)currentform)->fullName);
@@ -1124,8 +1117,7 @@ namespace NPC
 
 		if (!line.outfitDefault.empty() && line.outfitDefault != "none") {
 			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.outfitDefault;
-			currentform = GetFormFromIdentifier(string_form);
+			currentform = GetFormFromIdentifier(line.outfitDefault);
 			if (currentform && currentform->formType == RE::FormType::Outfit) {
 				curobj->defaultOutfit = (RE::BGSOutfit*)currentform;
 				//curobj->defOutfit->outfitItems.add
@@ -1135,8 +1127,7 @@ namespace NPC
 
 		if (!line.outfitSleep.empty() && line.outfitSleep != "none") {
 			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.outfitSleep;
-			currentform = GetFormFromIdentifier(string_form);
+			currentform = GetFormFromIdentifier(line.outfitSleep);
 			if (currentform && currentform->formType == RE::FormType::Outfit) {
 				curobj->sleepOutfit = (RE::BGSOutfit*)currentform;
 				logger::debug(FMT_STRING("npc formid: {:08X} changed outfit sleep to {:08X} "), curobj->formID, ((RE::BGSOutfit*)currentform)->formID);
@@ -1145,8 +1136,7 @@ namespace NPC
 
 		if (!line.deathItem.empty() && line.deathItem != "none") {
 			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.deathItem;
-			currentform = GetFormFromIdentifier(string_form);
+			currentform = GetFormFromIdentifier(line.deathItem);
 			if (currentform && currentform->formType == RE::FormType::LeveledItem) {
 				curobj->deathItem = (RE::TESLevItem*)currentform;
 				logger::debug(FMT_STRING("npc formid: {:08X} changed deathItem to {:08X} "), curobj->formID, ((RE::TESLevItem*)currentform)->formID);
@@ -1159,8 +1149,7 @@ namespace NPC
 
 		if (!line.skin.empty() && line.skin != "none") {
 			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.skin;
-			currentform = GetFormFromIdentifier(string_form);
+			currentform = GetFormFromIdentifier(line.skin);
 			if (currentform && currentform->formType == RE::FormType::Armor) {
 				curobj->skin = (RE::TESObjectARMO*)currentform;
 				logger::debug(FMT_STRING("npc formid: {:08X} changed skin to {:08X} "), curobj->formID, ((RE::TESObjectARMO*)currentform)->formID);
@@ -1177,8 +1166,7 @@ namespace NPC
 
 		if (!line.race.empty() && line.race != "none") {
 			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.race;
-			currentform = GetFormFromIdentifier(string_form);
+			currentform = GetFormFromIdentifier(line.race);
 			if (currentform && currentform->formType == RE::FormType::Race) {
 				curobj->race = (RE::TESRace*)currentform;
 				logger::debug(FMT_STRING("npc formid: {:08X} changed race to {:08X} "), curobj->formID, ((RE::TESRace*)currentform)->formID);
@@ -1187,8 +1175,7 @@ namespace NPC
 
 		if (!line.Class.empty() && line.Class != "none") {
 			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.Class;
-			currentform = GetFormFromIdentifier(string_form);
+			currentform = GetFormFromIdentifier(line.Class);
 			if (currentform && currentform->formType == RE::FormType::Class) {
 				curobj->npcClass = (RE::TESClass*)currentform;
 				logger::debug(FMT_STRING("npc formid: {:08X} changed class to {:08X} "), curobj->formID, ((RE::TESClass*)currentform)->formID);
@@ -1197,8 +1184,7 @@ namespace NPC
 
 		if (!line.haircolor.empty() && line.haircolor != "none") {
 			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.haircolor;
-			currentform = GetFormFromIdentifier(string_form);
+			currentform = GetFormFromIdentifier(line.haircolor);
 			if (currentform && currentform->formType == RE::FormType::ColorForm) {
 				curobj->SetHairColor((RE::BGSColorForm*)currentform);
 				logger::debug(FMT_STRING("npc formid: {:08X} changed hair color to {:08X} "), curobj->formID, currentform->formID);
@@ -1208,8 +1194,7 @@ namespace NPC
 
 		if (!line.voiceType.empty() && line.voiceType != "none") {
 			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.voiceType;
-			currentform = GetFormFromIdentifier(string_form);
+			currentform = GetFormFromIdentifier(line.voiceType);
 			if (currentform && currentform->formType == RE::FormType::VoiceType) {
 				curobj->voiceType = ((RE::BGSVoiceType*)currentform);
 				aData.npcData[curobj->formID].voiceType = (RE::BGSVoiceType*)currentform;
@@ -1277,8 +1262,7 @@ namespace NPC
 			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.spellsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.spellsToAdd[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.spellsToAdd[i]);
 				if (currentform && currentform->formType == RE::FormType::Spell) {
 					curobj->GetSpellList()->AddSpell((RE::SpellItem*)currentform);
 					logger::debug(FMT_STRING("npc formid: {:08X} {} added spell {:08X} {} "), curobj->formID, curobj->fullName, ((RE::SpellItem*)currentform)->formID, ((RE::SpellItem*)currentform)->fullName);
@@ -1298,8 +1282,7 @@ namespace NPC
 			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.spellsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.spellsToRemove[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.spellsToRemove[i]);
 				if (currentform && currentform->formType == RE::FormType::Spell) {
 					if (curobj->actorEffects) {
 						curobj->GetSpellList()->RemoveSpell((RE::SpellItem*)currentform);
@@ -1312,8 +1295,7 @@ namespace NPC
 		if (!line.levSpellsToAdd.empty()) {
 			for (size_t i = 0; i < line.levSpellsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.levSpellsToAdd[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.levSpellsToAdd[i]);
 				if (currentform && currentform->formType == RE::FormType::LeveledSpell) {
 					if (!curobj->actorEffects) {
 						curobj->actorEffects = new RE::TESSpellList::SpellData();
@@ -1327,8 +1309,7 @@ namespace NPC
 		if (!line.levSpellsToRemove.empty()) {
 			for (size_t i = 0; i < line.levSpellsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.levSpellsToRemove[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.levSpellsToRemove[i]);
 				if (currentform && currentform->formType == RE::FormType::LeveledSpell) {
 					if (curobj->actorEffects) {
 						curobj->actorEffects->RemoveLevSpell((RE::TESLevSpell*)currentform);
@@ -1341,8 +1322,7 @@ namespace NPC
 		if (!line.shoutsToAdd.empty()) {
 			for (size_t i = 0; i < line.shoutsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.shoutsToAdd[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.shoutsToAdd[i]);
 				if (currentform && currentform->formType == RE::FormType::Shout) {
 					if (!curobj->actorEffects) {
 						curobj->actorEffects = new RE::TESSpellList::SpellData();
@@ -1356,8 +1336,7 @@ namespace NPC
 		if (!line.shoutsToRemove.empty()) {
 			for (size_t i = 0; i < line.shoutsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.shoutsToRemove[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.shoutsToRemove[i]);
 				if (currentform && currentform->formType == RE::FormType::Shout) {
 					if (curobj->actorEffects) {
 						curobj->actorEffects->RemoveShout((RE::TESShout*)currentform);
@@ -1378,8 +1357,7 @@ namespace NPC
 			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.objectsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.objectsToRemove[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.objectsToRemove[i]);
 				if (currentform) {
 					RE::TESBoundObject* bo = (RE::TESBoundObject*)currentform;
 					if (bo) {
@@ -1395,8 +1373,7 @@ namespace NPC
 			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.objectsToRemoveNew.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.objectsToRemoveNew[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.objectsToRemoveNew[i]);
 				if (currentform) {
 					RE::TESBoundObject* bo = (RE::TESBoundObject*)currentform;
 					if (bo) {
@@ -1412,9 +1389,8 @@ namespace NPC
 		if (!line.removeContainerObjectsByCount.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjectsByCount) {
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-				std::string         addFormStr = objectToAdd[0];
 				uint32_t            count = std::stoi(objectToAdd[1]);
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
+				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(objectToAdd[0]);
 
 				if (addForm) {
 					curobj->RemoveObjectFromContainer(addForm, count);
@@ -1429,8 +1405,7 @@ namespace NPC
 		if (!line.removeContainerObjectsByKeyword.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjectsByKeyword) {
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-				std::string     addFormStr = objectToAdd;
-				RE::BGSKeyword* addForm = (RE::BGSKeyword*)GetFormFromIdentifier(addFormStr);
+				RE::BGSKeyword* addForm = (RE::BGSKeyword*)GetFormFromIdentifier(objectToAdd);
 				if (addForm) {
 					curobj->RemoveObjectFromContainerByKeyword(addForm);
 					logger::debug(FMT_STRING("npc formid: {:08X} removed by keyword Form {:08X}"), curobj->formID, addForm->formID);
@@ -1446,8 +1421,7 @@ namespace NPC
 			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.objectsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.objectsToAdd[i];
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(line.objectsToAdd[i]);
 				if (currentform) {
 					RE::TESBoundObject* bo = (RE::TESBoundObject*)currentform;
 					if (bo) {
@@ -1460,9 +1434,8 @@ namespace NPC
 
 		if (!line.addedContainerObjectsOnce.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjectsOnce) {
-				std::string         addFormStr = objectToAdd[0];
 				uint32_t            count = std::stoi(objectToAdd[1]);
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
+				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(objectToAdd[0]);
 				if (addForm) {
 					// Check if addForm already exists in the container
 					bool formExists = curobj->CountObjectsInContainer(addForm) != 0;
@@ -1529,76 +1502,77 @@ namespace NPC
 			for (size_t i = 0; i < line.skills.size(); i++) {
 				std::string skill = line.skills[i];
 				int         value = line.skillvalues1[i];
+				const std::string lower = toLowerCase(skill);
 
-				if (toLowerCase(skill) == "onehanded") {
+				if (lower == "onehanded") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kOneHanded] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "twohanded") {
+				else if (lower == "twohanded") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kTwoHanded] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "marksman") {
+				else if (lower == "marksman") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kMarksman] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "block") {
+				else if (lower == "block") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kBlock] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "smithing") {
+				else if (lower == "smithing") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kSmithing] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "heavyarmor") {
+				else if (lower == "heavyarmor") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kHeavyArmor] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "lightarmor") {
+				else if (lower == "lightarmor") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kLightArmor] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "pickpocket") {
+				else if (lower == "pickpocket") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kPickpocket] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "lockpicking") {
+				else if (lower == "lockpicking") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kLockpicking] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "sneak") {
+				else if (lower == "sneak") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kSneak] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "alchemy") {
+				else if (lower == "alchemy") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kAlchemy] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "speechcraft") {
+				else if (lower == "speechcraft") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kSpeechcraft] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "alteration") {
+				else if (lower == "alteration") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kAlteration] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "conjuration") {
+				else if (lower == "conjuration") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kConjuration] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "destruction") {
+				else if (lower == "destruction") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kDestruction] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "illusion") {
+				else if (lower == "illusion") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kIllusion] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "restoration") {
+				else if (lower == "restoration") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kRestoration] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
-				else if (toLowerCase(skill) == "enchanting") {
+				else if (lower == "enchanting") {
 					curobj->playerSkills.values[RE::TESNPC::Skills::kEnchanting] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
@@ -1778,8 +1752,7 @@ namespace NPC
 
 		if (!line.copyVisualStyle.empty() && line.copyVisualStyle != "none") {
 			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.copyVisualStyle;
-			currentform = GetFormFromIdentifier(string_form);
+			currentform = GetFormFromIdentifier(line.copyVisualStyle);
 			if (currentform) {
 				RE::TESNPC* bo = (RE::TESNPC*)currentform;
 				if (bo) {
@@ -1804,8 +1777,7 @@ namespace NPC
 
 		if (!line.baseObject.empty() && line.baseObject != "none") {
 			RE::TESForm* currentform = nullptr;
-			std::string  string_form = line.baseObject;
-			currentform = GetFormFromIdentifier(string_form);
+			currentform = GetFormFromIdentifier(line.baseObject);
 			if (currentform && currentform->formType == RE::FormType::NPC) {
 				aData.npcData[curobj->formID].baseObject = (RE::TESNPC*)currentform;
 				logger::debug(FMT_STRING("npc formid: {:08X} Replace with {:08X}"), curobj->formID, currentform->formID);
@@ -1869,21 +1841,22 @@ namespace NPC
 			curobj->attackDataMap->attackDataMap.insert({ newAttackData->event, RE::NiPointer(newAttackData) });
 			//logger::debug("attackData size after {}", curobj->attackDataMap.get()->attackDataMap.size());
 
-			for (auto objectArr : line.addedAttackData) {
-				for (auto object : objectArr) {
-					if (toLowerCase(object[0]) == "key") {
+			for (const auto& objectArr : line.addedAttackData) {
+				for (const auto& object : objectArr) {
+					const std::string lowerKey = toLowerCase(object[0]);
+					if (lowerKey == "key") {
 						newAttackData->event = object[1];
 						logger::debug("added event: {}", object[1]);
 					}
-					else if (toLowerCase(object[0]) == "damagemult") {
+					else if (lowerKey == "damagemult") {
 						newAttackData->data.damageMult = std::stof(object[1]);
 						logger::debug("npc formid: {:08X} attackData - damagemult {}", curobj->formID, newAttackData->data.damageMult);
 					}
-					else if (toLowerCase(object[0]) == "attackchance") {
+					else if (lowerKey == "attackchance") {
 						newAttackData->data.attackChance = std::stof(object[1]);
 						logger::debug("npc formid: {:08X} attackData - attackchance {}", curobj->formID, newAttackData->data.attackChance);
 					}
-					else if (toLowerCase(object[0]) == "attackspell") {
+					else if (lowerKey == "attackspell") {
 						if (object[1] != "null") {
 							auto form = GetFormFromIdentifier(object[1]);
 							if (form) {
@@ -1896,19 +1869,19 @@ namespace NPC
 							logger::debug("npc formid: {:08X} attackData - attackspell nullptr", curobj->formID);
 						}
 					}
-					else if (toLowerCase(object[0]) == "attackangle") {
+					else if (lowerKey == "attackangle") {
 						newAttackData->data.attackAngle = std::stof(object[1]);
 						logger::debug("npc formid: {:08X} attackData - attackangle {}", curobj->formID, newAttackData->data.attackAngle);
 					}
-					else if (toLowerCase(object[0]) == "strikeangle") {
+					else if (lowerKey == "strikeangle") {
 						newAttackData->data.strikeAngle = std::stof(object[1]);
 						logger::debug("npc formid: {:08X} attackData - strikeangle {}", curobj->formID, newAttackData->data.strikeAngle);
 					}
-					else if (toLowerCase(object[0]) == "staggeroffset") {
+					else if (lowerKey == "staggeroffset") {
 						newAttackData->data.staggerOffset = std::stof(object[1]);
 						logger::debug("npc formid: {:08X} attackData - staggeroffset {}", curobj->formID, newAttackData->data.staggerOffset);
 					}
-					else if (toLowerCase(object[0]) == "attacktype") {
+					else if (lowerKey == "attacktype") {
 						if (object[1] != "null") {
 							auto form = GetFormFromIdentifier(object[1]);
 							if (form) {
@@ -1921,23 +1894,23 @@ namespace NPC
 							logger::debug("npc formid: {:08X} attackData - attacktype nullptr", curobj->formID);
 						}
 					}
-					else if (toLowerCase(object[0]) == "knockdown") {
+					else if (lowerKey == "knockdown") {
 						newAttackData->data.knockDown = std::stof(object[1]);
 						logger::debug("npc formid: {:08X} attackData - knockdown {}", curobj->formID, newAttackData->data.knockDown);
 					}
-					else if (toLowerCase(object[0]) == "recoverytime") {
+					else if (lowerKey == "recoverytime") {
 						newAttackData->data.recoveryTime = std::stof(object[1]);
 						logger::debug("npc formid: {:08X} attackData - recoverytime {}", curobj->formID, newAttackData->data.recoveryTime);
 					}
-					else if (toLowerCase(object[0]) == "staminamult") {
+					else if (lowerKey == "staminamult") {
 						newAttackData->data.staminaMult = std::stof(object[1]);
 						logger::debug("npc formid: {:08X} attackData - staminamult {}", curobj->formID, newAttackData->data.staminaMult);
 					}
-					else if (toLowerCase(object[0]) == "resetflags") {
+					else if (lowerKey == "resetflags") {
 						newAttackData->data.flags = RE::AttackData::AttackFlag::kNone;
 						logger::debug(FMT_STRING("npc formid: {:08X} attackData - all flags reset"), curobj->formID);
 					}
-					else if (toLowerCase(object[0]) == "removeflags") {
+					else if (lowerKey == "removeflags") {
 						for (int i = 1; i < object.size(); ++i) {
 							auto lowerRemoveFlag = toLowerCase(object[i]);
 							if (lowerRemoveFlag == "ignoreweapon") {
@@ -1975,7 +1948,7 @@ namespace NPC
 						}
 
 					}
-					else if (toLowerCase(object[0]) == "setflags") {
+					else if (lowerKey == "setflags") {
 						for (int i = 1; i < object.size(); ++i) {
 							auto lowerSetFlag = toLowerCase(object[i]);
 							if (lowerSetFlag == "ignoreweapon") {
@@ -2022,11 +1995,12 @@ namespace NPC
 		}
 
 		if (!line.removeAttackData.empty()) {
-			for (auto attackData : line.removeAttackData) {
+			for (const auto& attackData : line.removeAttackData) {
 				//logger::debug("string {}", attackData);
+				const std::string lowerAttackData = toLowerCase(attackData);
 				for (auto it = curobj->attackDataMap->attackDataMap.begin(); it != curobj->attackDataMap->attackDataMap.end();) {
 					//logger::debug("for {}", it->second.get()->event.c_str());
-					if (toLowerCase(it->second.get()->event.c_str()) == toLowerCase(attackData)) {
+					if (toLowerCase(it->second.get()->event.c_str()) == lowerAttackData) {
 						logger::debug("npc formid: {:08X} removing attackData with event {} ", curobj->formID, it->second.get()->event.c_str());
 						it = curobj->attackDataMap->attackDataMap.erase(it);
 					}
@@ -2075,15 +2049,16 @@ namespace NPC
 							}
 						}
 
-						if (toLowerCase(object[0]) == "damagemult") {
+						const std::string lowerKey = toLowerCase(object[0]);
+						if (lowerKey == "damagemult") {
 							newAttackData->data.damageMult = std::stof(object[1]);
 							logger::debug("npc formid: {:08X} attackData changed - damagemult {}", curobj->formID, newAttackData->data.damageMult);
 						}
-						else if (toLowerCase(object[0]) == "attackchance") {
+						else if (lowerKey == "attackchance") {
 							newAttackData->data.attackChance = std::stof(object[1]);
 							logger::debug("npc formid: {:08X} attackData changed - attackchance {}", curobj->formID, newAttackData->data.attackChance);
 						}
-						else if (toLowerCase(object[0]) == "attackspell") {
+						else if (lowerKey == "attackspell") {
 							if (object[1] != "null") {
 								auto form = GetFormFromIdentifier(object[1]);
 								if (form) {
@@ -2096,19 +2071,19 @@ namespace NPC
 								logger::debug("npc formid: {:08X} attackData changed - attackspell nullptr", curobj->formID);
 							}
 						}
-						else if (toLowerCase(object[0]) == "attackangle") {
+						else if (lowerKey == "attackangle") {
 							newAttackData->data.attackAngle = std::stof(object[1]);
 							logger::debug("npc formid: {:08X} attackData changed - attackangle {}", curobj->formID, newAttackData->data.attackAngle);
 						}
-						else if (toLowerCase(object[0]) == "strikeangle") {
+						else if (lowerKey == "strikeangle") {
 							newAttackData->data.strikeAngle = std::stof(object[1]);
 							logger::debug("npc formid: {:08X} attackData changed - strikeangle {}", curobj->formID, newAttackData->data.strikeAngle);
 						}
-						else if (toLowerCase(object[0]) == "staggeroffset") {
+						else if (lowerKey == "staggeroffset") {
 							newAttackData->data.staggerOffset = std::stof(object[1]);
 							logger::debug("npc formid: {:08X} attackData changed - staggeroffset {}", curobj->formID, newAttackData->data.staggerOffset);
 						}
-						else if (toLowerCase(object[0]) == "attacktype") {
+						else if (lowerKey == "attacktype") {
 							if (object[1] != "null") {
 								auto form = GetFormFromIdentifier(object[1]);
 								if (form) {
@@ -2121,23 +2096,23 @@ namespace NPC
 								logger::debug("npc formid: {:08X} attackData changed - attacktype nullptr", curobj->formID);
 							}
 						}
-						else if (toLowerCase(object[0]) == "knockdown") {
+						else if (lowerKey == "knockdown") {
 							newAttackData->data.knockDown = std::stof(object[1]);
 							logger::debug("npc formid: {:08X} attackData changed - knockdown {}", curobj->formID, newAttackData->data.knockDown);
 						}
-						else if (toLowerCase(object[0]) == "recoverytime") {
+						else if (lowerKey == "recoverytime") {
 							newAttackData->data.recoveryTime = std::stof(object[1]);
 							logger::debug("npc formid: {:08X} attackData changed - recoverytime {}", curobj->formID, newAttackData->data.recoveryTime);
 						}
-						else if (toLowerCase(object[0]) == "staminamult") {
+						else if (lowerKey == "staminamult") {
 							newAttackData->data.staminaMult = std::stof(object[1]);
 							logger::debug("npc formid: {:08X} attackData changed - staminamult {}", curobj->formID, newAttackData->data.staminaMult);
 						}
-						else if (toLowerCase(object[0]) == "resetflags") {
+						else if (lowerKey == "resetflags") {
 							newAttackData->data.flags = RE::AttackData::AttackFlag::kNone;
 							logger::debug(FMT_STRING("npc formid: {:08X} attackData - all flags reset"), curobj->formID);
 						}
-						else if (toLowerCase(object[0]) == "removeflags") {
+						else if (lowerKey == "removeflags") {
 							for (int i = 1; i < object.size(); ++i) {
 								auto lowerRemoveFlag = toLowerCase(object[i]);
 								if (lowerRemoveFlag == "ignoreweapon") {
@@ -2175,7 +2150,7 @@ namespace NPC
 							}
 
 						}
-						else if (toLowerCase(object[0]) == "setflags") {
+						else if (lowerKey == "setflags") {
 							for (int i = 1; i < object.size(); ++i) {
 								auto lowerSetFlag = toLowerCase(object[i]);
 								if (lowerSetFlag == "ignoreweapon") {
@@ -2223,11 +2198,12 @@ namespace NPC
 
 				//
 
-				for (auto attackData : line.removeAttackData) {
+				for (const auto& attackData : line.removeAttackData) {
 					//logger::debug("string {}", attackData);
+					const std::string lowerAttackData = toLowerCase(attackData);
 					for (auto it = curobj->attackDataMap->attackDataMap.begin(); it != curobj->attackDataMap->attackDataMap.end();) {
 						//logger::debug("for {}", it->second.get()->event.c_str());
-						if (toLowerCase(it->second.get()->event.c_str()) == toLowerCase(attackData)) {
+						if (toLowerCase(it->second.get()->event.c_str()) == lowerAttackData) {
 							logger::debug("npc formid: {:08X} removing attackData with event {} ", curobj->formID, it->second.get()->event.c_str());
 							it = curobj->attackDataMap->attackDataMap.erase(it);
 						}
@@ -2456,8 +2432,7 @@ namespace NPC
 				RE::TESForm* currentform = nullptr;
 				RE::TESRace* race = nullptr;
 
-				std::string string_form = racestring;
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(racestring);
 				if (currentform && currentform->formType == RE::FormType::Race) {
 					race = (RE::TESRace*)currentform;
 
@@ -2479,8 +2454,7 @@ namespace NPC
 				RE::TESForm* currentform = nullptr;
 				RE::BGSOutfit* npc = nullptr;
 
-				std::string string_form = npcstring;
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(npcstring);
 				if (currentform && currentform->formType == RE::FormType::Outfit) {
 					npc = (RE::BGSOutfit*)currentform;
 
@@ -2501,8 +2475,7 @@ namespace NPC
 				RE::TESForm* currentform = nullptr;
 				RE::TESClass* npc = nullptr;
 
-				std::string string_form = npcstring;
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(npcstring);
 				if (currentform && currentform->formType == RE::FormType::Class) {
 					npc = (RE::TESClass*)currentform;
 
@@ -2521,8 +2494,7 @@ namespace NPC
 				RE::TESForm* currentform = nullptr;
 				RE::TESCombatStyle* npc = nullptr;
 
-				std::string string_form = npcstring;
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(npcstring);
 				if (currentform && currentform->formType == RE::FormType::CombatStyle) {
 					npc = (RE::TESCombatStyle*)currentform;
 
@@ -2622,8 +2594,7 @@ namespace NPC
 				RE::TESForm* currentform = nullptr;
 				RE::TESFaction* keyword = nullptr;
 
-				std::string string_form = filterByFactiontring;
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(filterByFactiontring);
 				if (currentform && currentform->formType == RE::FormType::Faction) {
 					keyword = (RE::TESFaction*)currentform;
 
@@ -2650,8 +2621,7 @@ namespace NPC
 				RE::TESForm* currentform = nullptr;
 				RE::TESFaction* keyword = nullptr;
 
-				std::string string_form = keywordstring;
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(keywordstring);
 				if (currentform && currentform->formType == RE::FormType::Faction) {
 					keyword = (RE::TESFaction*)currentform;
 
@@ -2738,8 +2708,7 @@ namespace NPC
 				RE::TESForm* currentform = nullptr;
 				RE::TESFaction* keyword = nullptr;
 
-				std::string string_form = factionstring;
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(factionstring);
 				if (currentform && currentform->formType == RE::FormType::Faction) {
 					keyword = (RE::TESFaction*)currentform;
 
@@ -2767,8 +2736,7 @@ namespace NPC
 				RE::TESForm* currentform = nullptr;
 				RE::TESClass* npc = nullptr;
 
-				std::string string_form = npcstring;
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(npcstring);
 				if (currentform && currentform->formType == RE::FormType::Class) {
 					npc = (RE::TESClass*)currentform;
 
@@ -2790,66 +2758,67 @@ namespace NPC
 
 		if (!line.skillRestrict.empty()) {
 			for (size_t i = 0; i < line.skillRestrict.size(); i++) {
-				auto        skillArr = line.skillRestrict[i];
+				const auto& skillArr = line.skillRestrict[i];
 				std::string skill = skillArr[0];
 				int         value = -99;
 				int         value1 = -99;
 				int         value2 = -99;
 				value1 = std::stoi(skillArr[1]);
 				value2 = std::stoi(skillArr[2]);
+				const std::string lower = toLowerCase(skill);
 
-				if (toLowerCase(skill) == "onehanded") {
+				if (lower == "onehanded") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kOneHanded];
 				}
-				else if (toLowerCase(skill) == "twohanded") {
+				else if (lower == "twohanded") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kTwoHanded];
 				}
-				else if (toLowerCase(skill) == "marksman") {
+				else if (lower == "marksman") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kMarksman];
 				}
-				else if (toLowerCase(skill) == "block") {
+				else if (lower == "block") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kBlock];
 				}
-				else if (toLowerCase(skill) == "smithing") {
+				else if (lower == "smithing") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kSmithing];
 				}
-				else if (toLowerCase(skill) == "heavyarmor") {
+				else if (lower == "heavyarmor") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kHeavyArmor];
 				}
-				else if (toLowerCase(skill) == "lightarmor") {
+				else if (lower == "lightarmor") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kLightArmor];
 				}
-				else if (toLowerCase(skill) == "pickpocket") {
+				else if (lower == "pickpocket") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kPickpocket];
 				}
-				else if (toLowerCase(skill) == "lockpicking") {
+				else if (lower == "lockpicking") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kLockpicking];
 				}
-				else if (toLowerCase(skill) == "sneak") {
+				else if (lower == "sneak") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kSneak];
 				}
-				else if (toLowerCase(skill) == "alchemy") {
+				else if (lower == "alchemy") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kAlchemy];
 				}
-				else if (toLowerCase(skill) == "speechcraft") {
+				else if (lower == "speechcraft") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kSpeechcraft];
 				}
-				else if (toLowerCase(skill) == "alteration") {
+				else if (lower == "alteration") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kAlteration];
 				}
-				else if (toLowerCase(skill) == "conjuration") {
+				else if (lower == "conjuration") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kConjuration];
 				}
-				else if (toLowerCase(skill) == "destruction") {
+				else if (lower == "destruction") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kDestruction];
 				}
-				else if (toLowerCase(skill) == "illusion") {
+				else if (lower == "illusion") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kIllusion];
 				}
-				else if (toLowerCase(skill) == "restoration") {
+				else if (lower == "restoration") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kRestoration];
 				}
-				else if (toLowerCase(skill) == "enchanting") {
+				else if (lower == "enchanting") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kEnchanting];
 				}
 				else {
@@ -2959,7 +2928,7 @@ namespace NPC
 			for (const auto& setFlag : line.restrictToFlags) {
 				std::string lowerFlag = toLowerCase(setFlag);
 
-				const std::unordered_map<std::string, RE::ACTOR_BASE_DATA::Flag> flagMap = {
+				static const std::unordered_map<std::string, RE::ACTOR_BASE_DATA::Flag> flagMap = {
 					{"female", RE::ACTOR_BASE_DATA::Flag::kFemale},
 					{"essential", RE::ACTOR_BASE_DATA::Flag::kEssential},
 					{"ischargenfacepreset", RE::ACTOR_BASE_DATA::Flag::kIsChargenFacePreset},
@@ -3006,13 +2975,13 @@ namespace NPC
 			for (const auto& restrictObject : line.restrictToCombatStyle) {
 				RE::TESForm* currentform = nullptr;
 				RE::TESCombatStyle* tempForm = nullptr;
-				std::string         string_form = restrictObject;
 
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(restrictObject);
 				if (currentform && currentform->formType == RE::FormType::CombatStyle) {
 					tempForm = (RE::TESCombatStyle*)currentform;
 					if (curobj->combatStyle && curobj->combatStyle->formID == tempForm->formID) {
 						hasObject = true;
+						break;
 					}
 				}
 			}
@@ -3026,13 +2995,13 @@ namespace NPC
 			for (const auto& restrictObject : line.restrictToRaces) {
 				RE::TESForm* currentform = nullptr;
 				RE::TESRace* tempForm = nullptr;
-				std::string         string_form = restrictObject;
 
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(restrictObject);
 				if (currentform && currentform->formType == RE::FormType::Race) {
 					tempForm = (RE::TESRace*)currentform;
 					if (curobj->race && curobj->race->formID == tempForm->formID) {
 						hasObject = true;
+						break;
 					}
 				}
 			}
@@ -3046,13 +3015,13 @@ namespace NPC
 			for (const auto& restrictObject : line.restrictToVoiceType) {
 				RE::TESForm* currentform = nullptr;
 				RE::BGSVoiceType* tempForm = nullptr;
-				std::string         string_form = restrictObject;
 
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(restrictObject);
 				if (currentform && currentform->formType == RE::FormType::VoiceType) {
 					tempForm = (RE::BGSVoiceType*)currentform;
 					if (curobj->voiceType && curobj->voiceType->formID == tempForm->formID) {
 						hasObject = true;
+						break;
 					}
 				}
 			}
@@ -3068,12 +3037,12 @@ namespace NPC
 			for (const auto& restrictObject : line.restrictToKeyword) {
 				RE::TESForm* currentform = nullptr;
 				RE::BGSKeyword* tempForm = nullptr;
-				std::string         string_form = restrictObject;
-				currentform = GetFormFromIdentifier(string_form);
+				currentform = GetFormFromIdentifier(restrictObject);
 				if (currentform && currentform->formType == RE::FormType::Keyword) {
 					tempForm = (RE::BGSKeyword*)currentform;
 					if (tempForm && curobj->HasKeyword(tempForm) || curobj->race && curobj->race->HasKeyword(tempForm)) {
 						hasObject = true;
+						break;
 					}
 				}
 			}

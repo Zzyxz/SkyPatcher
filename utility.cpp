@@ -403,19 +403,21 @@ std::string trim(const std::string& str)
 
 std::vector<std::string> splitRelationNumber(const std::string& input)
 {
-	std::regex               re(R"(([<>]=?|[<>])\s*(\d+))");
-	std::smatch              match;
-	std::vector<std::string> result;
+	const std::regex&         re = cached_regex(R"(([<>]=?|[<>])\s*(\d+))", std::regex::ECMAScript);
+	std::smatch               match;
+	std::vector<std::string>  result;
+	result.reserve(2);
 
 	if (std::regex_search(input, match, re)) {
-		std::string relation_sign = match[1];
-		std::string number_str = match[2];
-		result.push_back(number_str);
-		result.push_back(relation_sign);
-	} else if (std::regex_search(input, std::regex(R"(\d+)"))) {
-		result.push_back(input);
+		result.emplace_back(match[2].first, match[2].second);
+		result.emplace_back(match[1].first, match[1].second);
 	} else {
-		result.push_back("none");
+		const std::regex& digitRe = cached_regex(R"(\d+)", std::regex::ECMAScript);
+		if (std::regex_search(input, digitRe)) {
+			result.push_back(input);
+		} else {
+			result.push_back("none");
+		}
 	}
 
 	return result;

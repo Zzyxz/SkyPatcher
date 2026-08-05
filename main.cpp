@@ -27,7 +27,9 @@
 #include <unordered_map>
 #include <weapon.h>
 #include <location.h>
+#include <random>
 #include <unordered_map>
+#include <unordered_set>
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 
@@ -43,7 +45,9 @@ bool                                  RefPatchingEnabled = false;
 bool                                  statRefreshExcludeEnabled = false;
 std::string                           excludeNPCs = "";
 std::vector<std::vector<std::string>> excludedNPCsArr;
-std::vector<RE::FormID>               excludedNPCsFormIDs = {};
+// Hot path: looked up once per actor 3D load (Load3D::thunk). Was a std::vector scanned
+// linearly; a hash set makes the exclusion test O(1) instead of O(number of excluded NPCs).
+std::unordered_set<RE::FormID>        excludedNPCsFormIDs = {};
 bool                                  loadOnlyOnce = true;
 int									  iUpdateNPCVisualsOnLoad = 1;
 RE::BGSKeyword* SkyPatcher_VisualStyleApply = nullptr;
@@ -51,6 +55,19 @@ bool								  loadStylesAfterLoad = false;
 std::unordered_map<RE::FormID, int> npcStyles;
 inline constexpr std::array headSlots = { RE::BIPED_OBJECT::kHair, RE::BIPED_OBJECT::kLongHair, RE::BIPED_OBJECT::kCirclet };
 inline constexpr auto HAIR_TINT = "ZZYXZZ_HAIRTINT"sv;
+
+// Shared per-thread PRNG. The style/combat-style roll sites below used to construct a
+// std::random_device (an OS entropy syscall) plus a std::mt19937 (a 2.5 KB state array that
+// must be fully seeded) on every single actor 3D load. The engine is stateful, so seeding it
+// once per thread and drawing from it thereafter is both far cheaper and better distributed
+// than re-seeding per draw. Note the rolls are cosmetic-only (visual style / combat style
+// selection); nothing here is persisted to a save or replayed, so the changed sequence is not
+// observable beyond a different random pick.
+static std::mt19937& RandomEngine()
+{
+	static thread_local std::mt19937 engine{ std::random_device{}() };
+	return engine;
+}
 
 void LoadIniFilesRecursive(const std::string& folderPath)
 {
@@ -522,13 +539,15 @@ struct Load3D
 		//	logger::debug("color {} {} {} ", a_this->GetParentCell()->cellData.interior->ambient.red, a_this->GetParentCell()->cellData.interior->ambient.green, a_this->GetParentCell()->cellData.interior->ambient.blue);
 		//logger::debug("TESObjectREFR {:08X}", a_this->formID);
 		if (statRefreshExcludeEnabled) {
-			for (RE::FormID formid : excludedNPCsFormIDs) {
-				auto base = a_this->GetActorBase();
-				if (base && base->formID == formid) {
-					//logger::debug("NPC excluded {:08X} {}", base->formID, base->fullName);
-					const auto root = func(a_this, a_arg1);
-					return root;
-				}
+			// GetActorBase() is a virtual call that walks the leveled-creature/template chain,
+			// so it is resolved once here rather than once per excluded-NPC entry, and the
+			// membership test is a single hash lookup rather than a linear scan.
+			// NOTE: the original 3D load (func) already ran above and its result is in `root`.
+			// This branch used to call func() a *second* time, re-running the whole character
+			// 3D load (skeleton, biped objects, shaders) and orphaning the first root.
+			if (const auto base = a_this->GetActorBase(); base && excludedNPCsFormIDs.contains(base->formID)) {
+				//logger::debug("NPC excluded {:08X} {}", base->formID, base->fullName);
+				return root;
 			}
 		}
 		//if (auto style = GetFormFromIdentifier("skyai_csHumanMeleeLvl1")->As<RE::TESCombatStyle>(); a_this->combatController)
@@ -667,33 +686,38 @@ struct Load3D
 
 
 
-			if (it->second.updateFlags) {
-				RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
-				if (npcForm) {
-					npc->actorData.actorBaseFlags = npcForm->actorData.actorBaseFlags;
-					logger::debug("Load3D: {:08X} updated actor flags", it->first);
-				}
-			}
-
-			if (it->second.updateTemplateFlags) {
-				RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
-				if (npcForm) {
-					npc->actorData.templateUseFlags = npcForm->actorData.templateUseFlags;
-					logger::debug("Load3D: {:08X} updated template flags", it->first);
-				}
-			}
-
-			if (it->second.minLevelWasSet || it->second.maxLevelWasSet) {  // Check conditions first
-				RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
-				if (npcForm) {  // Check if the form is a valid NPC
-					if (it->second.minLevelWasSet) {
-						npcForm->actorData.calcLevelMin = it->second.minLevel;
-						logger::debug("Load3D: {:08X} setminlevel {}", it->first, it->second.minLevel);
+			// `it` is only valid if the lookup at the top of this block (or the templateBase
+			// re-lookup) actually found an entry, which for most actors it does not. The three
+			// blocks below dereferenced it unconditionally. One guard covers the whole run.
+			if (it != actData.npcData.end()) {
+				if (it->second.updateFlags) {
+					RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
+					if (npcForm) {
+						npc->actorData.actorBaseFlags = npcForm->actorData.actorBaseFlags;
+						logger::debug("Load3D: {:08X} updated actor flags", it->first);
 					}
+				}
 
-					if (it->second.maxLevelWasSet) {
-						npcForm->actorData.calcLevelMax = it->second.maxLevel;
-						logger::debug("Load3D: {:08X} setmaxlevel {}", it->first, it->second.maxLevel);
+				if (it->second.updateTemplateFlags) {
+					RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
+					if (npcForm) {
+						npc->actorData.templateUseFlags = npcForm->actorData.templateUseFlags;
+						logger::debug("Load3D: {:08X} updated template flags", it->first);
+					}
+				}
+
+				if (it->second.minLevelWasSet || it->second.maxLevelWasSet) {  // Check conditions first
+					RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
+					if (npcForm) {  // Check if the form is a valid NPC
+						if (it->second.minLevelWasSet) {
+							npcForm->actorData.calcLevelMin = it->second.minLevel;
+							logger::debug("Load3D: {:08X} setminlevel {}", it->first, it->second.minLevel);
+						}
+
+						if (it->second.maxLevelWasSet) {
+							npcForm->actorData.calcLevelMax = it->second.maxLevel;
+							logger::debug("Load3D: {:08X} setmaxlevel {}", it->first, it->second.maxLevel);
+						}
 					}
 				}
 			}
@@ -797,25 +821,40 @@ struct Load3D
 			//	//updater.startUpdate(a_this);
 			//}
 
-			if ((it != actData.npcData.end() && it->second.npcVisualStyleList || originalBaseHasStyleList) ) {
+			// Parenthesised to state the existing precedence explicitly (&& already bound
+			// tighter than ||). The originalBaseHasStyleList path is deliberately kept able to
+			// run with it == end(): it is set from a *different* lookup (data->originalBase)
+			// further up, and the body below re-derives its data from that same original base
+			// via `itr`. Narrowing the condition to `it != end() && (...)` would have silently
+			// disabled visual styles for every leveled/templated actor whose template base has
+			// no patch entry but whose original base does -- so the body is made safe instead.
+			if ((it != actData.npcData.end() && it->second.npcVisualStyleList) || originalBaseHasStyleList) {
 				//logger::debug("NPC assign rd vs: {:08X} {:08X} style: {:08X}", a_this->formID, npc->formID, it->second.npcVisualStyleList->formID);
 
-				NPC::NPCData& aNPCData = it->second;
+				// Was `NPC::NPCData& aNPCData = it->second;` with a later `aNPCData = itr->second;`.
+				// A reference cannot be rebound, so that assignment did not select the original
+				// base's data -- it deep-copied itr->second *into* it->second, permanently
+				// corrupting that entry of actData.npcData (and every actor that later resolves
+				// to it) for the rest of the session. A pointer is what the code meant. It also
+				// starts null when `it` is end(), which is exactly the originalBaseHasStyleList
+				// case above, where the pointer is then filled in from `itr`.
+				NPC::NPCData* aNPCData = (it != actData.npcData.end()) ? &it->second : nullptr;
 				auto actorData = (RE::ExtraLeveledCreature*)a_this->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
 				if (actorData && actorData->originalBase) {
 					if (auto itr = actData.npcData.find(actorData->originalBase->formID); itr != actData.npcData.end() && itr->second.npcVisualStyleList) {
 						//forms = itr->second.npcVisualStyleList->forms;
-						aNPCData = itr->second;
+						aNPCData = &itr->second;
 						//logger::debug("Use alternative");
-						//logger::debug("CopyVisual: actor {:08X} list {:08X} base {:08X}", a_this->formID, aNPCData.npcVisualStyleList->formID, actorData->originalBase->formID);
+						//logger::debug("CopyVisual: actor {:08X} list {:08X} base {:08X}", a_this->formID, aNPCData->npcVisualStyleList->formID, actorData->originalBase->formID);
 					}
 				}
 
-				if (aNPCData.npcVisualStyleList \
-					&& aNPCData.npcVisualStyleList->formID \
-					&& !aNPCData.npcVisualStyleList->forms.empty()) {
+				if (aNPCData \
+					&& aNPCData->npcVisualStyleList \
+					&& aNPCData->npcVisualStyleList->formID \
+					&& !aNPCData->npcVisualStyleList->forms.empty()) {
 
-					auto& forms = aNPCData.npcVisualStyleList->forms;
+					auto& forms = aNPCData->npcVisualStyleList->forms;
 
 					// Check if the NPC already has an assigned style
 					auto styleIt = npcStyles.find(a_this->formID);
@@ -840,14 +879,13 @@ struct Load3D
 
 					// If no valid style was found, roll for a new one
 					if (styleIt == npcStyles.end()) {
-						std::random_device randomDevice;
-						std::mt19937 generator(randomDevice());
+						auto& generator = RandomEngine();
 						std::uniform_int_distribution<int> chanceDist(1, 100);
 						int rolledChance = chanceDist(generator);
-						if (rolledChance > aNPCData.styleChance) {
+						if (rolledChance > aNPCData->styleChance) {
 							// Failed chance roll, mark NPC as having no style
 							npcStyles[a_this->formID] = -1;
-							logger::debug("Load3D: NPC with FormID {:X} failed style chance {} rolled {} and will not receive a style.", a_this->formID, aNPCData.styleChance, rolledChance);
+							logger::debug("Load3D: NPC with FormID {:X} failed style chance {} rolled {} and will not receive a style.", a_this->formID, aNPCData->styleChance, rolledChance);
 							styleIndex = -1;
 						}
 						else if (!forms.empty()) {
@@ -881,17 +919,16 @@ struct Load3D
 					}
 
 					// Wende den Stil nur an, wenn npcToCopyFrom gültig ist und CopyVisual erfolgreich war
-					if (npcToCopyFrom && CopyVisual(npcToCopyFrom, a_this, aNPCData)) {
+					if (npcToCopyFrom && CopyVisual(npcToCopyFrom, a_this, *aNPCData)) {
 						npcStyles[a_this->formID] = styleIndex;
-						logger::debug("--> Load3D: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.", styleIndex, a_this->formID, aNPCData.npcVisualStyleList->formID, npcToCopyFrom->formID);
+						logger::debug("--> Load3D: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.", styleIndex, a_this->formID, aNPCData->npcVisualStyleList->formID, npcToCopyFrom->formID);
 					}
 				}
 			}
 
 			if (it != actData.npcData.end() && it->second.npcCombatStyleList) {
 				// Generate a random value between 1 and 100 (inclusive)
-				std::random_device rd;                      // Obtain a random number from hardware
-				std::mt19937 gen(rd());                     // Seed the generator
+				auto& gen = RandomEngine();                 // Per-thread engine, seeded once
 				std::uniform_int_distribution<int> dis(1, 100); // Define the range from 0 to 100
 				int randomValueThatNeedsTobeGen = dis(gen);  // Generate the random number
 
@@ -914,7 +951,9 @@ struct Load3D
 				}
 			}
 
-			if (it->second.voiceType) {
+			// Same end()-iterator hazard as the guarded run above; this site sits after the
+			// style blocks, so it carries its own check rather than joining that guard.
+			if (it != actData.npcData.end() && it->second.voiceType) {
 				RE::TESNPC* npc = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
 				if (npc) {
 					npc->voiceType = it->second.voiceType;
@@ -1080,8 +1119,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 							if (it->second.npcCombatStyleList) {
 								// Generate a random value between 1 and 100 (inclusive)
-								std::random_device rd;                      // Obtain a random number from hardware
-								std::mt19937 gen(rd());                     // Seed the generator
+								auto& gen = RandomEngine();                 // Per-thread engine, seeded once
 								std::uniform_int_distribution<int> dis(1, 100); // Define the range from 1 to 100
 								int randomValueThatNeedsTobeGen = dis(gen);  // Generate the random number
 
@@ -1237,20 +1275,25 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 							if (it != actData.npcData.end() && it->second.npcVisualStyleList || originalBaseHasStyleList) {
 
-								NPC::NPCData& aNPCData = it->second;
+								// Same reference-rebinding bug as in Load3D::thunk above: assigning
+								// through a reference overwrote it->second in actData.npcData rather than
+								// selecting the original base's entry. `it` is guaranteed valid here (the
+								// enclosing block is inside `it != end()`), so this site was not UB -- but
+								// it corrupted the map identically. A pointer is what was intended.
+								NPC::NPCData* aNPCData = &it->second;
 								auto actorData = (RE::ExtraLeveledCreature*)actor->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
 								if (actorData && actorData->originalBase) {
 									if (auto itr = actData.npcData.find(actorData->originalBase->formID); itr != actData.npcData.end() && itr->second.npcVisualStyleList) {
 										//forms = itr->second.npcVisualStyleList->forms;
-										aNPCData = itr->second;
+										aNPCData = &itr->second;
 										//logger::debug("Use alternative");
-										//logger::debug("CopyVisual: actor {:08X} list {:08X} base {:08X}", a_this->formID, aNPCData.npcVisualStyleList->formID, actorData->originalBase->formID);
+										//logger::debug("CopyVisual: actor {:08X} list {:08X} base {:08X}", a_this->formID, aNPCData->npcVisualStyleList->formID, actorData->originalBase->formID);
 									}
 								}
 
-								if (aNPCData.npcVisualStyleList && !aNPCData.npcVisualStyleList->forms.empty()) {
+								if (aNPCData->npcVisualStyleList && !aNPCData->npcVisualStyleList->forms.empty()) {
 
-									auto& forms = aNPCData.npcVisualStyleList->forms;
+									auto& forms = aNPCData->npcVisualStyleList->forms;
 
 									// Check if the NPC already has an assigned style
 									auto styleIt = npcStyles.find(actor->formID);
@@ -1278,16 +1321,15 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 									// If no valid style was found, roll for a new one
 									if (styleIt == npcStyles.end()) {
-										std::random_device randomDevice;
-										std::mt19937 generator(randomDevice());
+										auto& generator = RandomEngine();  // Per-thread engine, seeded once
 										std::uniform_int_distribution<int> chanceDist(1, 100);
 
 										int rolledChance = chanceDist(generator);
-										if (rolledChance > aNPCData.styleChance) {
+										if (rolledChance > aNPCData->styleChance) {
 											// Failed chance roll, mark NPC as having no style
 											npcStyles[actor->formID] = -1;
 											logger::debug("PostLoadGame: NPC with FormID {:X} failed style chance {} rolled {} and will not receive a style.",
-												actor->formID, aNPCData.styleChance, rolledChance);
+												actor->formID, aNPCData->styleChance, rolledChance);
 											styleIndex = -1;
 										}
 										else if (!forms.empty()) {
@@ -1322,10 +1364,10 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 									}
 
 									// Wende den Stil nur an, wenn npcToCopyFrom gültig ist und CopyVisual erfolgreich war
-									if (npcToCopyFrom && CopyVisual(npcToCopyFrom, actor, aNPCData)) {
+									if (npcToCopyFrom && CopyVisual(npcToCopyFrom, actor, *aNPCData)) {
 										npcStyles[actor->formID] = styleIndex;
 										logger::debug("--> PostLoadGame: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.",
-											styleIndex, actor->formID, aNPCData.npcVisualStyleList->formID, npcToCopyFrom->formID);
+											styleIndex, actor->formID, aNPCData->npcVisualStyleList->formID, npcToCopyFrom->formID);
 									}
 
 
@@ -1839,7 +1881,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 					for (int i = 1; i < arr.size(); i++) {
 						RE::TESForm* npc = GetFormFromIdentifier(arr[i].c_str());
 						if (npc && npc->formType == RE::FormType::NPC)
-							excludedNPCsFormIDs.push_back(npc->formID);
+							excludedNPCsFormIDs.insert(npc->formID);
 					}
 				}
 			}
