@@ -366,7 +366,7 @@ namespace RACE
 	{
 		logger::debug("processing patch instructions");
 		const auto                 dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESRace*> RaceArray = dataHandler->GetFormArray<RE::TESRace>();
+		auto& RaceArray = dataHandler->GetFormArray<RE::TESRace>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -662,7 +662,7 @@ namespace RACE
 	}
 
 	//
-	void hookpatch(RACE::patch_instruction line, RE::TESRace* curobj)
+	void hookpatch(const RACE::patch_instruction& line, RE::TESRace* curobj)
 	{
 		//logger::debug("start Patch race {:08X}", curobj->formID);
 		if (!line.addedObjects.empty()) {
@@ -995,7 +995,7 @@ namespace RACE
 	}
 	//
 
-	void patch(RACE::patch_instruction line, RE::TESRace* curobj)
+	void patch(const RACE::patch_instruction& line, RE::TESRace* curobj)
 	{
 		if (!line.avifs.empty()) {
 			//logger::info("found! patching values");

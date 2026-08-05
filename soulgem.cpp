@@ -90,7 +90,7 @@ namespace SOULGEM
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESSoulGem*> ObjectArray = dataHandler->GetFormArray<RE::TESSoulGem>();
+		auto& ObjectArray = dataHandler->GetFormArray<RE::TESSoulGem>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -303,7 +303,7 @@ namespace SOULGEM
 		}
 	}
 
-	void* patch(SOULGEM::patch_instruction line, RE::TESSoulGem* curobj)
+	void* patch(const SOULGEM::patch_instruction& line, RE::TESSoulGem* curobj)
 	{
 		if (!line.weight.empty() && line.weight != "none") {
 			try {

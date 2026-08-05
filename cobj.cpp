@@ -53,7 +53,7 @@ namespace COBJ
 	{
 		logger::debug("processing patch instructions");
 		const auto                                dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::BGSConstructibleObject*> ObjectArray = dataHandler->GetFormArray<RE::BGSConstructibleObject>();
+		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSConstructibleObject>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -444,7 +444,7 @@ namespace COBJ
 		}
 	}
 
-	void* patch(COBJ::patch_instruction line, RE::BGSConstructibleObject* curobj)
+	void* patch(const COBJ::patch_instruction& line, RE::BGSConstructibleObject* curobj)
 	{
 
 

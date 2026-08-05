@@ -288,7 +288,7 @@ namespace CELL
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESObjectCELL*> ObjectArray = dataHandler->GetFormArray<RE::TESObjectCELL>();
+		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectCELL>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -595,7 +595,7 @@ namespace CELL
 		}
 	}
 
-	void* patch(CELL::patch_instruction line, RE::TESObjectCELL* curobj)
+	void* patch(const CELL::patch_instruction& line, RE::TESObjectCELL* curobj)
 	{
 
 

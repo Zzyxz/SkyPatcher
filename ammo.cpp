@@ -67,7 +67,7 @@ namespace AMMO
 	{
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESAmmo*> AmmoArray = dataHandler->GetFormArray<RE::TESAmmo>();
+		auto& AmmoArray = dataHandler->GetFormArray<RE::TESAmmo>();
 		for (const auto& line : tokens) {
 
 			if (!line.ammo.empty()) {
@@ -299,7 +299,7 @@ namespace AMMO
 		}
 	}
 
-	void* patch(AMMO::line_content line, RE::TESAmmo* curobj) {
+	void* patch(const AMMO::line_content& line, RE::TESAmmo* curobj) {
 		
 		if (!line.damage.empty() && line.damage != "none") {
 				curobj->data.damage = stof(line.damage);

@@ -39,7 +39,7 @@ namespace LOCATION
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::BGSLocation*> ObjectArray = dataHandler->GetFormArray<RE::BGSLocation>();
+		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSLocation>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -345,7 +345,7 @@ namespace LOCATION
 		}
 	}
 
-	void* patch(LOCATION::patch_instruction line, RE::BGSLocation* curobj)
+	void* patch(const LOCATION::patch_instruction& line, RE::BGSLocation* curobj)
 	{
 
 		if (!line.keywordsToRemove.empty()) {

@@ -95,7 +95,7 @@ namespace REFERENCE
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	RefrData readConfig(const std::string& folder);
-	void* patch(REFERENCE::patch_instruction line, RE::FormID curobj);
+	void* patch(const REFERENCE::patch_instruction& line, RE::FormID curobj);
 }
 
 #endif

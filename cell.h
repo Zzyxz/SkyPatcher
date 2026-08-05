@@ -139,7 +139,7 @@ namespace CELL
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
-	void* patch(CELL::patch_instruction line, RE::TESObjectCELL* curobj);
+	void* patch(const CELL::patch_instruction& line, RE::TESObjectCELL* curobj);
 }
 
 #endif

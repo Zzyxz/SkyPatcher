@@ -121,7 +121,7 @@ namespace REFERENCE
 		return rData;
 	}
 
-	void* patch(REFERENCE::patch_instruction line, RE::FormID curobj)
+	void* patch(const REFERENCE::patch_instruction& line, RE::FormID curobj)
 	{
 		//logger::debug(FMT_STRING("refr 11 formid: {:08X} "), curobj);
 		if (!line.baseobject.empty() && line.baseobject != "none") {

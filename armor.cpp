@@ -111,7 +111,7 @@ namespace ARMOR
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESObjectARMO*> ArmorArray = dataHandler->GetFormArray<RE::TESObjectARMO>();
+		auto& ArmorArray = dataHandler->GetFormArray<RE::TESObjectARMO>();
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
@@ -568,7 +568,7 @@ namespace ARMOR
 		}
 	}
 
-	void* patch(ARMOR::patch_instruction_armor line, RE::TESObjectARMO* curobj)
+	void* patch(const ARMOR::patch_instruction_armor& line, RE::TESObjectARMO* curobj)
 	{
 
 		if (!line.mirrorArmor.empty() && line.mirrorArmor != "none") {

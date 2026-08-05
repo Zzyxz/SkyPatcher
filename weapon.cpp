@@ -108,7 +108,7 @@ namespace WEAPON
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESObjectWEAP*> ObjectArray = dataHandler->GetFormArray<RE::TESObjectWEAP>();
+		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectWEAP>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -471,7 +471,7 @@ namespace WEAPON
 		}
 	}
 
-	void* patch(WEAPON::patch_instruction line, RE::TESObjectWEAP* curobj)
+	void* patch(const WEAPON::patch_instruction& line, RE::TESObjectWEAP* curobj)
 	{
 		
 

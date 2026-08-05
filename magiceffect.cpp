@@ -76,7 +76,7 @@ namespace MGEF
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::EffectSetting*> ObjectArray = dataHandler->GetFormArray<RE::EffectSetting>();
+		auto& ObjectArray = dataHandler->GetFormArray<RE::EffectSetting>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -710,7 +710,7 @@ namespace MGEF
 		}
 	}
 
-	void* patch(MGEF::patch_instruction line, RE::EffectSetting* curobj)
+	void* patch(const MGEF::patch_instruction& line, RE::EffectSetting* curobj)
 	{
 		
 		if (!line.enchantArt.empty() && line.enchantArt != "none") {

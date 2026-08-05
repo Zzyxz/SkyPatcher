@@ -40,7 +40,7 @@ namespace MOVETYPE
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
-	void* patch(MOVETYPE::patch_instruction line, RE::BGSMovementType* curobj);
+	void* patch(const MOVETYPE::patch_instruction& line, RE::BGSMovementType* curobj);
 }
 
 #endif

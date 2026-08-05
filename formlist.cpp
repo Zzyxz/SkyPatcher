@@ -41,7 +41,7 @@ namespace FORMLIST
 	{
 		logger::debug("processing patch instructions");
 		const auto                     dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::BGSListForm*> objectArray = dataHandler->GetFormArray<RE::BGSListForm>();
+		auto& objectArray = dataHandler->GetFormArray<RE::BGSListForm>();
 		for (const auto& line : tokens) {
 			for (const auto& curobj : objectArray) {
 

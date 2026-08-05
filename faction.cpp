@@ -78,7 +78,7 @@ namespace FACTION
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESFaction*> ObjectArray = dataHandler->GetFormArray<RE::TESFaction>();
+		auto& ObjectArray = dataHandler->GetFormArray<RE::TESFaction>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -231,7 +231,7 @@ namespace FACTION
 		}
 	}
 
-	void* patch(FACTION::patch_instruction line, RE::TESFaction* curobj)
+	void* patch(const FACTION::patch_instruction& line, RE::TESFaction* curobj)
 	{
 
 

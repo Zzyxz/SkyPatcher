@@ -46,7 +46,7 @@ namespace MOVETYPE
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::BGSMovementType*> ObjectArray = dataHandler->GetFormArray<RE::BGSMovementType>();
+		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSMovementType>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -192,7 +192,7 @@ namespace MOVETYPE
 		}
 	}
 
-	void* patch(MOVETYPE::patch_instruction line, RE::BGSMovementType* curobj)
+	void* patch(const MOVETYPE::patch_instruction& line, RE::BGSMovementType* curobj)
 	{
 
 		if (!line.walkLeft.empty() && line.walkLeft != "none") {

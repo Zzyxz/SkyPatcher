@@ -73,7 +73,7 @@ namespace ALCH
 	{
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::AlchemyItem*> objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
+		auto& objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
 		//RE::BSTArray<RE::IngredientItem*> objectIngredientArray = dataHandler->GetFormArray<RE::IngredientItem>();
 		for (const auto& line : tokens) {
 			
@@ -446,7 +446,7 @@ namespace ALCH
 		}
 	}
 
-	void patch(ALCH::line_content line, RE::AlchemyItem* curobj) {
+	void patch(const ALCH::line_content& line, RE::AlchemyItem* curobj) {
 
 		if ( !line.keywordsToAdd.empty()) {
 			for (size_t i = 0; i < line.keywordsToAdd.size(); i++) {

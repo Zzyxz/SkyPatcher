@@ -76,7 +76,7 @@ namespace CONTAINER
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESObjectCONT*> ObjectArray = dataHandler->GetFormArray<RE::TESObjectCONT>();
+		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectCONT>();
 
 		for (const auto& line : tokens) {
 
@@ -262,7 +262,7 @@ namespace CONTAINER
 
 
 
-	void patchContainer(CONTAINER::line_content line, RE::TESObjectCONT* curobj)
+	void patchContainer(const CONTAINER::line_content& line, RE::TESObjectCONT* curobj)
 	{
 
 
@@ -416,7 +416,7 @@ namespace CONTAINER
 	}
 
 
-	bool findObject(line_content line, RE::TESObjectCONT* curobj)
+	bool findObject(const line_content& line, RE::TESObjectCONT* curobj)
 	{
 		bool found = false;
 		bool keywordAnd = false;

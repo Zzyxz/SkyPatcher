@@ -62,7 +62,7 @@ namespace BOOK
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESObjectBOOK*> ObjectArray = dataHandler->GetFormArray<RE::TESObjectBOOK>();
+		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectBOOK>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -371,7 +371,7 @@ namespace BOOK
 		}
 	}
 
-	void* patch(BOOK::patch_instruction line, RE::TESObjectBOOK* curobj)
+	void* patch(const BOOK::patch_instruction& line, RE::TESObjectBOOK* curobj)
 	{
 
 		if (!line.weight.empty() && line.weight != "none") {

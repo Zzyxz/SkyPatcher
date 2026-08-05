@@ -66,7 +66,7 @@ namespace ENCH
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
 		//RE::BSTArray<RE::AlchemyItem*> objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
-		RE::BSTArray<RE::EnchantmentItem*> objectSpellArray = dataHandler->GetFormArray<RE::EnchantmentItem>();
+		auto& objectSpellArray = dataHandler->GetFormArray<RE::EnchantmentItem>();
 		for (const auto& line : tokens) {
 			
 				if (!line.objects.empty()) {
@@ -579,7 +579,7 @@ namespace ENCH
 		}
 	}
 
-	void patch(ENCH::line_content line, RE::EnchantmentItem* curobj) {
+	void patch(const ENCH::line_content& line, RE::EnchantmentItem* curobj) {
 		
 
 		if (!line.keywordsToAdd.empty()) {

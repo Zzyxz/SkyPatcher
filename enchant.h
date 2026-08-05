@@ -60,7 +60,7 @@ namespace ENCH
 	struct line_content create_patch_instruction(const std::string& line);
 	void process_patch_instructions(const std::list<line_content>& tokens);
 	void* readConfig(const std::string& folder);
-	void               patch(ENCH::line_content line, RE::EnchantmentItem* curobj);
+	void               patch(const ENCH::line_content& line, RE::EnchantmentItem* curobj);
 }
 
 #endif

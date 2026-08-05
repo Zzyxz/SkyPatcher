@@ -296,7 +296,7 @@ namespace LEVELEDLIST
 			}
 
 			if (!line.noFilterLL.empty() && toLowerCase(line.noFilterLL) == "true") {
-				RE::BSTArray<RE::TESLevItem*> objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
+				auto& objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
 				for (const auto& curobj : objectArray) {
 					if (static_cast<uint32_t>(curobj->numEntries) > 120) {
 						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
@@ -308,7 +308,7 @@ namespace LEVELEDLIST
 			}
 
 			if (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty() || !line.filterByEditorIdContainsExcluded.empty()) {
-				RE::BSTArray<RE::TESLevItem*> objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
+				auto& objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
 				for (const auto& curobj : objectArray) {
 
 					bool contains = false;
@@ -371,7 +371,7 @@ namespace LEVELEDLIST
 
 
 			if (!line.noFilterLLNPC.empty() && toLowerCase(line.noFilterLLNPC) == "true") {
-				RE::BSTArray<RE::TESLevCharacter*> tesLevCharArray = dataHandler->GetFormArray<RE::TESLevCharacter>();
+				auto& tesLevCharArray = dataHandler->GetFormArray<RE::TESLevCharacter>();
 				for (const auto& curobj : tesLevCharArray) {
 					if (static_cast<uint32_t>(curobj->numEntries) > 120) {
 						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
@@ -455,7 +455,7 @@ namespace LEVELEDLIST
 		}
 	}
 	template <typename T>
-	void patch(LEVELEDLIST::line_content line, T* curobj)
+	void patch(const LEVELEDLIST::line_content& line, T* curobj)
 	{
 
 
