@@ -5,6 +5,7 @@ using namespace std;
 
 #include "PCH.h"
 #include "dirent.h"
+#include "formfilter.h"
 #include "utility.h"
 #include <fstream>
 #include <iostream>
@@ -226,6 +227,11 @@ namespace NPC
 	void*     patchActor(NPC::patch_instruction line, RE::Character* curActObj);
 	void      setbEnableSetLevelDirectlyByPCMult();
 	bool      findObject(const patch_instruction& line, RE::TESNPC* curobj);
+	// PROTOTYPE (proto/common-filters): the view is built once per RULE, outside
+	// the form loop. The two-argument overload above builds one per call and
+	// forwards, so existing callers (and the benchmark) are unaffected.
+	bool      findObject(const patch_instruction& line, const formfilter::CommonFilterView& view, RE::TESNPC* curobj);
+	formfilter::CommonFilterView makeFilterView(const patch_instruction& line);
 	void*     readConfigHook(const std::string& folder);
 }
 

@@ -1,4 +1,5 @@
 #include "npc.h"
+#include "formfilter.h"
 #include <algorithm>
 #include <unordered_map>
 //#include <execution>
@@ -388,29 +389,24 @@ namespace NPC
 				continue;
 			}
 
+			// PROTOTYPE: one view per rule, not per (rule, NPC) pair.
+			const formfilter::CommonFilterView view = makeFilterView(line);
+
 			for (const auto& curobj : NPCArray) {
 				if (!curobj) {
 					logger::debug("Skipping nullptr NPC in NPCArray.");
 					continue;
 				}
-				
+
 				if (!curobj || curobj->IsDeleted()) {
 					continue;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
-				if (findObject(line, curobj)) {
+				if (findObject(line, view, curobj)) {
 					patch(line, curobj);
 				}
 			}
@@ -2393,7 +2389,32 @@ namespace NPC
 		//return;
 	}
 
+	// PROTOTYPE (proto/common-filters): binds patch_instruction's filter vectors
+	// by reference. The struct itself is untouched, so the golden snapshots are
+	// unaffected. NPC has no hasPlugin/hasPluginOr keys, so those bind to the
+	// shared empty vector.
+	formfilter::CommonFilterView makeFilterView(const patch_instruction& line)
+	{
+		return formfilter::CommonFilterView{
+			line.modNames,
+			formfilter::noStrings(),
+			formfilter::noStrings(),
+			line.keywords,
+			line.keywordsOr,
+			line.keywordsExcluded,
+			line.filterByEditorIdContains,
+			line.filterByEditorIdContainsOr,
+			line.filterByEditorIdContainsExcluded,
+			line.objectExcluded
+		};
+	}
+
 	bool findObject(const patch_instruction& line, RE::TESNPC* curobj)
+	{
+		return findObject(line, makeFilterView(line), curobj);
+	}
+
+	bool findObject(const patch_instruction& line, const formfilter::CommonFilterView& view, RE::TESNPC* curobj)
 	{
 		bool found = false;
 		bool keywordAnd = false;
@@ -2403,46 +2424,19 @@ namespace NPC
 		bool factionAnd = false;
 		bool factionOr = false;
 
+		// NPC is the one form type whose keyword test also consults the race's
+		// keywords; every other type passes nullptr for the second holder.
+		const RE::BGSKeywordForm* raceKeywords = static_cast<const RE::BGSKeywordForm*>(curobj->race);
+
 		if (!found && !line.keywords.empty() && curobj->formID != 0x000007) {
-			for (const auto& keywordstring : line.keywords) {
-				RE::TESForm* currentform = nullptr;
-				RE::BGSKeyword* keyword = nullptr;
-
-				std::string string_form = keywordstring;
-				currentform = GetFormFromIdentifier(string_form);
-				if (currentform && currentform->formType == RE::FormType::Keyword) {
-					keyword = (RE::BGSKeyword*)currentform;
-
-					if (curobj->HasKeyword(keyword) || curobj->race && curobj->race->HasKeyword(keyword)) {
-						keywordAnd = true;
-					}
-					else {
-						keywordAnd = false;
-						break;
-					}
-				}
-			}
+			keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, raceKeywords);
 		}
 		else if (curobj->formID != 0x000007) {
 			keywordAnd = true;
 		}
 
 		if (!found && !line.keywordsOr.empty() && curobj->formID != 0x000007) {
-			for (const auto& keywordstring : line.keywordsOr) {
-				RE::TESForm* currentform = nullptr;
-				RE::BGSKeyword* keyword = nullptr;
-
-				std::string string_form = keywordstring;
-				currentform = GetFormFromIdentifier(string_form);
-				if (currentform && currentform->formType == RE::FormType::Keyword) {
-					keyword = (RE::BGSKeyword*)currentform;
-
-					if (curobj->HasKeyword(keyword) || curobj->race && curobj->race->HasKeyword(keyword)) {
-						keywordOr = true;
-						break;
-					}
-				}
-			}
+			keywordOr = formfilter::matchesKeywordsOr(view, curobj, raceKeywords);
 		}
 		else if (curobj->formID != 0x000007) {
 			//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
@@ -2676,15 +2670,7 @@ namespace NPC
 		}
 
 		if (!found && !line.filterByEditorIdContains.empty() && curobj->formID != 0x000007) {
-			for (const auto& editorString : line.filterByEditorIdContains) {
-				if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-					contains = true;
-				}
-				else {
-					contains = false;
-					break;
-				}
-			}
+			contains = formfilter::matchesEditorIdAnd(view, curobj);
 		}
 		else if (curobj->formID != 0x000007) {
 			contains = true;
@@ -2692,12 +2678,7 @@ namespace NPC
 
 		if (!found && !line.filterByEditorIdContainsOr.empty() && curobj->formID != 0x000007) {
 			//logger::info("keywords not empty");
-			for (const auto& editorString : line.filterByEditorIdContainsOr) {
-				if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-					containsOr = true;
-					break;
-				}
-			}
+			containsOr = formfilter::matchesEditorIdOr(view, curobj);
 		}
 		else if (curobj->formID != 0x000007) {
 			containsOr = true;
@@ -2745,19 +2726,9 @@ namespace NPC
 		}
 
 		if (!line.keywordsExcluded.empty() && found && curobj->formID != 0x000007) {
-			//logger::info("keywords not empty");
-			for (const auto& keywordstring : line.keywordsExcluded) {
-				RE::TESForm* currentform = nullptr;
-				RE::BGSKeyword* keyword = nullptr;
-				std::string     string_form = keywordstring;
-				currentform = GetFormFromIdentifier(string_form);
-				if (currentform && currentform->formType == RE::FormType::Keyword) {
-					keyword = (RE::BGSKeyword*)currentform;
-					if (curobj->HasKeyword(keyword) || curobj->race && curobj->race->HasKeyword(keyword)) {
-						found = false;
-						break;
-					}
-				}
+			//logger::info("keywords not empty")
+			if (formfilter::hasExcludedKeyword(view, curobj, raceKeywords)) {
+				found = false;
 			}
 		}
 
@@ -2784,11 +2755,8 @@ namespace NPC
 
 		if (!line.filterByEditorIdContainsExcluded.empty() && found && curobj->formID != 0x000007) {
 			//logger::info("factions not empty");
-			for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
-				if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-					found = false;
-					break;
-				}
+			if (formfilter::hasExcludedEditorId(view, curobj)) {
+				found = false;
 			}
 		}
 
@@ -2815,21 +2783,8 @@ namespace NPC
 
 		if (!line.objectExcluded.empty() && found) {
 			//logger::info("npc not empty");
-			for (const auto& npcstring : line.objectExcluded) {
-				RE::TESForm* currentform = nullptr;
-				RE::TESNPC* npc = nullptr;
-
-				std::string string_form = npcstring;
-				currentform = GetFormFromIdentifier(string_form);
-				if (currentform && currentform->formType == RE::FormType::NPC) {
-					npc = (RE::TESNPC*)currentform;
-
-					if (curobj->formID == npc->formID) {
-						found = false;
-						//logger::info("NPC found.");
-						break;
-					}
-				}
+			if (formfilter::isObjectExcluded(view, curobj, RE::FormType::NPC)) {
+				found = false;
 			}
 		}
 

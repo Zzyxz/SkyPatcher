@@ -1,4 +1,5 @@
  #include "ammo.h"
+#include "formfilter.h"
 namespace AMMO
 {
 
@@ -89,6 +90,21 @@ namespace AMMO
 				continue;
 			}
 
+			// PROTOTYPE: one view per rule, not per (rule, ammo) pair.
+			const formfilter::CommonFilterView view{
+				line.modNames, line.hasPlugin, line.hasPluginOr,
+				line.keywords, line.keywordsOr, line.keywordsExcluded,
+				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
+				line.filterByEditorIdContainsExcluded, line.objectExcluded
+			};
+
+			// hasPlugin / hasPluginOr consult no form at all.
+			if (!line.hasPlugin.empty() && !formfilter::hasAllPlugins(line.hasPlugin)) {
+				continue;
+			}
+			if (!line.hasPluginOr.empty() && !formfilter::hasAnyPlugin(line.hasPluginOr)) {
+				continue;
+			}
 
 			for (const auto& curobj : AmmoArray) {
 				//logger::debug("Mod: {} || Weapon Type: {} || Damage: {} || Projectile: {} || addToFormList: {}", line.ammo.c_str(), line.type.c_str(), line.damage.c_str(), line.projectile.c_str(), line.armorPenetration.c_str());
@@ -105,42 +121,10 @@ namespace AMMO
 					continue;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
-				if (!line.hasPlugin.empty()) {
-					bool isPluginMissing = false;
-					for (auto const modName : line.hasPlugin) {
-						if (!IsPluginInstalled(modName.c_str())) {
-							isPluginMissing = true;
-						}
-					}
-					if (isPluginMissing) {
-						continue;
-					}
-				}
-
-				if (!line.hasPluginOr.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.hasPluginOr) {
-						if (IsPluginInstalled(modName.c_str())) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
-				}
-				
 				if (!line.alternateTexturesFind.empty()) {
 					for (const auto& textureString : line.alternateTexturesFind) {
 						RE::TESForm* currentform = nullptr;
@@ -157,26 +141,14 @@ namespace AMMO
 				}
 
 				if (!found && !line.filterByEditorIdContains.empty()) {
-					for (const auto& editorString : line.filterByEditorIdContains) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							contains = true;
-						} else {
-							contains = false;
-							break;
-						}
-					}
+					contains = formfilter::matchesEditorIdAnd(view, curobj);
 				} else {
 					contains = true;
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& editorString : line.filterByEditorIdContainsOr) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							containsOr = true;
-							break;
-						}
-					}
+					containsOr = formfilter::matchesEditorIdOr(view, curobj);
 				} else {
 					containsOr = true;
 				}
@@ -189,48 +161,14 @@ namespace AMMO
 
 				if (!line.keywords.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywords) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordAnd = true;
-							} else {
-								keywordAnd = false;
-								//logger::debug(FMT_STRING("KeywordAnd Weapon does not have all keywords"));
-								break;
-							}
-							//logger::debug(FMT_STRING("KeywordAnd Weapon true"));
-						}
-					}
+					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsOr) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordOr = true;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
-					}
+					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
@@ -256,22 +194,8 @@ namespace AMMO
 
 				if (!line.keywordsExcluded.empty() && found) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsExcluded) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								found = false;
-								//logger::debug(FMT_STRING("KeywordExcluded has a keyword that is excluded.{:08X}"),keyword->formID);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
+					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
+						found = false;
 					}
 				}
 
@@ -287,31 +211,15 @@ namespace AMMO
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
 					//logger::info("factions not empty");
-					for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							found = false;
-							break;
-						}
+					if (formfilter::hasExcludedEditorId(view, curobj)) {
+						found = false;
 					}
 				}
 
 				if (!line.objectExcluded.empty() && found) {
 					//logger::info("npc not empty");
-					for (const auto& npcstring : line.objectExcluded) {
-						RE::TESForm*       currentform = nullptr;
-						RE::TESAmmo* npc = nullptr;
-
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Ammo) {
-							npc = (RE::TESAmmo*)currentform;
-
-							if (curobj->formID == npc->formID) {
-								found = false;
-								//logger::info("Projectile Excluded.");
-								break;
-							}
-						}
+					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Ammo)) {
+						found = false;
 					}
 				}
 
