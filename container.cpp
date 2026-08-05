@@ -1,75 +1,48 @@
 #include "container.h"
 #include "formfilter.h"
+#include "parsetable.h"
 namespace CONTAINER
 {
 
 	std::list<line_content> hooktokens;
 	int                     iAllowLeveledListsAddedToContainers = 0;
 
+	// ==================================================================
+	// PHASE 2 -- CONTAINER's key table. One row per upstream extract*()
+	// call, in the same order. See parsetable.h.
+	// ==================================================================
+	namespace
+	{
+#define CONT_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
+
+		constexpr sp::KeySpec kContainerKeys[] = {
+			{ "filterByContainers", sp::FieldKind::List, CONT_F(containerObjects) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, CONT_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, CONT_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, CONT_F(filterByEditorIdContainsExcluded) },
+			{ "addToContainers", sp::FieldKind::Arr2D, CONT_F(addedContainerObjects) },
+			{ "replaceInContainers", sp::FieldKind::Arr2D, CONT_F(objectsToReplace) },
+			{ "addOnceToContainers", sp::FieldKind::Arr2D, CONT_F(addedContainerObjectsOnce) },
+			{ "removeFromContainers", sp::FieldKind::List, CONT_F(removedContainerObjects) },
+			{ "removeContainerObjectsByCount", sp::FieldKind::Arr2D, CONT_F(removeContainerObjectsByCount) },
+			{ "clear", sp::FieldKind::Value, CONT_F(clear) },
+			{ "removeContainerObjectsByKeywords", sp::FieldKind::List, CONT_F(removeContainerObjectsByKeyword) },
+			{ "objectMultCount", sp::FieldKind::Arr2D, CONT_F(objectMultCount) },
+		};
+
+#undef CONT_F
+
+		const sp::KeyTable& containerKeyTable()
+		{
+			static const sp::KeyTable table(kContainerKeys, std::size(kContainerKeys));
+			return table;
+		}
+	}
 
 	struct line_content create_patch_instruction(const std::string& line)
 	{
 		line_content l;
-
-
-		extractData(line, "filterByContainers\\s*=([^:]+)", l.containerObjects);
-
-		//std::regex  addContainer_regex("addToContainers\\s*=([^:]+)", regex::icase);
-		//std::smatch addContainer_match;
-		//std::regex_search(line, addContainer_match, addContainer_regex);
-		//std::vector<std::string> addContainer;
-		//if (addContainer_match.empty() || addContainer_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string              valueLine = addContainer_match[1].str();
-		//	std::vector<std::string> arr;
-
-		//	// exclude the addToLL= part from the first string
-		//	size_t      startPos = valueLine.find("=") + 1;
-		//	size_t      pos = 0;
-		//	std::string token;
-		//	while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
-		//		token = valueLine.substr(startPos, pos - startPos);
-		//		token = trim(token);  // remove leading and trailing white spaces
-		//		arr.push_back(token);
-		//		startPos = pos + 1;
-		//	}
-		//	token = valueLine.substr(startPos);
-		//	token = trim(token);  // remove leading and trailing white spaces
-		//	arr.push_back(token);
-
-		//	std::vector<std::vector<std::string>> arr2D(arr.size());
-
-		//	for (int i = 0; i < arr.size(); i++) {
-		//		std::vector<std::string> splitArr;
-		//		size_t                   innerPos = 0;
-		//		std::string              innerToken;
-		//		while ((innerPos = arr[i].find("~")) != std::string::npos) {
-		//			innerToken = arr[i].substr(0, innerPos);
-		//			innerToken = trim(innerToken);  // remove leading and trailing white spaces
-		//			splitArr.push_back(innerToken);
-		//			arr[i].erase(0, innerPos + 1);
-		//		}
-		//		innerToken = arr[i];
-		//		innerToken = trim(innerToken);  // remove leading and trailing white spaces
-		//		splitArr.push_back(innerToken);
-		//		arr2D[i] = splitArr;
-		//	}
-		//	l.addedContainerObjects = arr2D;
-		//}
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-		extractToArr2D(line, "addToContainers\\s*=([^:]+)", l.addedContainerObjects);
-		extractToArr2D(line, "replaceInContainers\\s*=([^:]+)", l.objectsToReplace);
-		extractToArr2D(line, "addOnceToContainers\\s*=([^:]+)", l.addedContainerObjectsOnce);
-
-		extractData(line, "removeFromContainers\\s*=([^:]+)", l.removedContainerObjects);
-		extractToArr2D(line, "removeContainerObjectsByCount\\s*=([^:]+)", l.removeContainerObjectsByCount);
-		extractValueString(line, "clear\\s*=([^:]+)", l.clear);
-		extractData(line, "removeContainerObjectsByKeywords\\s*=([^:]+)", l.removeContainerObjectsByKeyword);
-		extractToArr2D(line, "objectMultCount\\s*=([^:]+)", l.objectMultCount);
-
+		containerKeyTable().parse(line, &l);
 		return l;
 	}
 

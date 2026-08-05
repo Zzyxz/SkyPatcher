@@ -1,5 +1,6 @@
 #include "movementType.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 #include <cmath>
 
@@ -10,36 +11,47 @@
 namespace MOVETYPE
 {
 
+	// ==================================================================
+	// PHASE 2 -- MOVETYPE's key table. One row per upstream extract*()
+	// call, in the same order. See parsetable.h.
+	//
+	// NOTE: upstream's `filterByModNames` extract call is commented out,
+	// so `modNames` is never populated; no row is added for it here,
+	// preserving that (dead) behaviour exactly.
+	// ==================================================================
+	namespace
+	{
+#define MOVE_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kMoveTypeKeys[] = {
+			{ "filterByMovementTypes", sp::FieldKind::List, MOVE_F(object) },
+			{ "filterByMovementTypesExcluded", sp::FieldKind::List, MOVE_F(objectExcluded) },
+			{ "walkLeft", sp::FieldKind::Value, MOVE_F(walkLeft) },
+			{ "runLeft", sp::FieldKind::Value, MOVE_F(runLeft) },
+			{ "walkRight", sp::FieldKind::Value, MOVE_F(walkRight) },
+			{ "runRight", sp::FieldKind::Value, MOVE_F(runRight) },
+			{ "walkForward", sp::FieldKind::Value, MOVE_F(walkForward) },
+			{ "runForward", sp::FieldKind::Value, MOVE_F(runForward) },
+			{ "walkBack", sp::FieldKind::Value, MOVE_F(walkBack) },
+			{ "runBack", sp::FieldKind::Value, MOVE_F(runBack) },
+			{ "rotateInPlaceRun", sp::FieldKind::Value, MOVE_F(rotateInPlaceRun) },
+			{ "rotateInPlaceWalk", sp::FieldKind::Value, MOVE_F(rotateInPlaceWalk) },
+			{ "rotateWhileMovingRun", sp::FieldKind::Value, MOVE_F(rotateWhileMovingRun) },
+		};
+
+#undef MOVE_F
+
+		const sp::KeyTable& moveTypeKeyTable()
+		{
+			static const sp::KeyTable table(kMoveTypeKeys, std::size(kMoveTypeKeys));
+			return table;
+		}
+	}
+
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-
-
-
-		extractData(line, "filterByMovementTypes\\s*=([^:]+)", l.object);
-
-
-
-		extractData(line, "filterByMovementTypesExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		//extractValueString(line, "speed\\s *= ([^:] +)", l.speed);
-
-		//extractValueString(line, "speed\\s*=([^:]+)", l.speed);
-		//extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-
-		extractValueString(line, "walkLeft\\s*=([^:]+)", l.walkLeft);
-		extractValueString(line, "runLeft\\s*=([^:]+)", l.runLeft);
-		extractValueString(line, "walkRight\\s*=([^:]+)", l.walkRight);
-		extractValueString(line, "runRight\\s*=([^:]+)", l.runRight);
-		extractValueString(line, "walkForward\\s*=([^:]+)", l.walkForward);
-		extractValueString(line, "runForward\\s*=([^:]+)", l.runForward);
-		extractValueString(line, "walkBack\\s*=([^:]+)", l.walkBack);
-		extractValueString(line, "runBack\\s*=([^:]+)", l.runBack);
-
-		extractValueString(line, "rotateInPlaceRun\\s*=([^:]+)", l.rotateInPlaceRun);
-		extractValueString(line, "rotateInPlaceWalk\\s*=([^:]+)", l.rotateInPlaceWalk);
-		extractValueString(line, "rotateWhileMovingRun\\s*=([^:]+)", l.rotateWhileMovingRun);
-
+		moveTypeKeyTable().parse(line, &l);
 		return l;
 	}  //endStruct
 

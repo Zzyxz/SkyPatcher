@@ -1,89 +1,59 @@
 #include "soulgem.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace SOULGEM
 {
 
+	// ==================================================================
+	// PHASE 2 -- SOULGEM's key table. One row per upstream (active)
+	// extract*() call, in the same order. See parsetable.h.
+	//
+	// Several members (keywords, keywordsOr, keywordsExcluded, filterAmmos,
+	// damageTypes, ...) are declared in the struct but have no active
+	// extract call upstream (dead fields) -- no row is added for them,
+	// preserving that (dead) behaviour exactly.
+	// ==================================================================
+	namespace
+	{
+#define SOUL_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kSoulGemKeys[] = {
+			{ "filterBySoulGems", sp::FieldKind::List, SOUL_F(object) },
+			{ "filterBySoulGemsExcluded", sp::FieldKind::List, SOUL_F(objectExcluded) },
+			{ "value", sp::FieldKind::Value, SOUL_F(value) },
+			{ "valueMult", sp::FieldKind::Value, SOUL_F(valueMult) },
+			{ "weight", sp::FieldKind::Value, SOUL_F(weight) },
+			{ "weightMult", sp::FieldKind::Value, SOUL_F(weightMult) },
+			{ "keywordsToAdd", sp::FieldKind::List, SOUL_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, SOUL_F(keywordsToRemove) },
+			{ "pickUpSound", sp::FieldKind::Value, SOUL_F(pickUpSound) },
+			{ "putDownSound", sp::FieldKind::Value, SOUL_F(putDownSound) },
+			{ "currentSoul", sp::FieldKind::Value, SOUL_F(currentSoul) },
+			{ "soulCapacity", sp::FieldKind::Value, SOUL_F(soulCapacity) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, SOUL_F(modNames) },
+			{ "fullName", sp::FieldKind::ValueTilde, SOUL_F(fullName) },
+			{ "model", sp::FieldKind::Value, SOUL_F(model) },
+			{ "alternateTexturesToAdd", sp::FieldKind::Arr2D, SOUL_F(alternateTextures) },
+			{ "alternateTexturesToRemove", sp::FieldKind::List, SOUL_F(alternateTexturesRemove) },
+			{ "alternateTexturesClear", sp::FieldKind::Value, SOUL_F(alternateTexturesClear) },
+			{ "filterByAlternateTextures", sp::FieldKind::List, SOUL_F(alternateTexturesFind) },
+		};
+
+#undef SOUL_F
+
+		const sp::KeyTable& soulGemKeyTable()
+		{
+			static const sp::KeyTable table(kSoulGemKeys, std::size(kSoulGemKeys));
+			return table;
+		}
+	}
+
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-
-		//// extract objects
-		//std::regex  objects_regex("filterBySoulGems\\s*=([^:]+)", regex::icase);
-		//std::smatch objects_match;
-		//std::regex_search(line, objects_match, objects_regex);
-		//std::vector<std::string> objects;
-		//if (objects_match.empty() || objects_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objects_str = objects_match[1];
-		//	std::regex           objects_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objects_iterator(objects_str.begin(), objects_str.end(), objects_list_regex);
-		//	std::sregex_iterator objects_end;
-		//	while (objects_iterator != objects_end) {
-		//		std::string tempVar = (*objects_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Projectile String: {}"), tempVar);
-		//		if (tempVar != "none") {
-		//			objects.push_back(tempVar);
-		//		}
-		//		++objects_iterator;
-		//	}
-		//	l.object = objects;
-		//}
-
-		extractData(line, "filterBySoulGems\\s*=([^:]+)", l.object);
-
-		//// extract objectsExcluded
-		//std::regex  objectsExcluded_regex("filterBySoulGemsExcluded\\s*=([^:]+)", regex::icase);
-		//std::smatch objectsExcluded_match;
-		//std::regex_search(line, objectsExcluded_match, objectsExcluded_regex);
-		//std::vector<std::string> objectsExcluded;
-		//if (objectsExcluded_match.empty() || objectsExcluded_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objectsExcluded_str = objectsExcluded_match[1];
-		//	std::regex           objectsExcluded_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objectsExcluded_iterator(objectsExcluded_str.begin(), objectsExcluded_str.end(), objectsExcluded_list_regex);
-		//	std::sregex_iterator objectsExcluded_end;
-		//	while (objectsExcluded_iterator != objectsExcluded_end) {
-		//		std::string tempVar = (*objectsExcluded_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Race: {}"), race);
-		//		if (tempVar != "none") {
-		//			objectsExcluded.push_back(tempVar);
-		//		}
-		//		++objectsExcluded_iterator;
-		//	}
-		//	l.objectExcluded = objectsExcluded;
-		//}
-
-		extractData(line, "filterBySoulGemsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		//extractValueString(line, "speed\\s *= ([^:] +)", l.speed);
-
-		extractValueString(line, "value\\s*=([^:]+)", l.value);
-		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-		extractValueString(line, "pickUpSound\\s*=([^:]+)", l.pickUpSound);
-		extractValueString(line, "putDownSound\\s*=([^:]+)", l.putDownSound);
-		extractValueString(line, "currentSoul\\s*=([^:]+)", l.currentSoul);
-		extractValueString(line, "soulCapacity\\s*=([^:]+)", l.soulCapacity);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-
-		extractValueString(line, "model\\s*=([^:]+)", l.model);
-		extractToArr2D(line, "alternateTexturesToAdd\\s*=([^:]+)", l.alternateTextures);
-		extractData(line, "alternateTexturesToRemove\\s*=([^:]+)", l.alternateTexturesRemove);
-		extractValueString(line, "alternateTexturesClear\\s*=([^:]+)", l.alternateTexturesClear);
-		extractData(line, "filterByAlternateTextures\\s*=([^:]+)", l.alternateTexturesFind);
-
+		soulGemKeyTable().parse(line, &l);
 		return l;
 	}  //endStruct
 

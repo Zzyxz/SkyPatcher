@@ -1,21 +1,54 @@
 #include "outfit.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace OUTFIT
 {
 
+	// ==================================================================
+	// PHASE 2 -- OUTFIT's key table. One row per upstream extract*() call
+	// that fits an existing FieldKind. See parsetable.h.
+	//
+	// NOT converted: "formsToReplace". Its value is scanned with
+	// `([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\s*=\s*([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})`
+	// -- both capture groups constrained to the "mod|id"-shaped pattern.
+	// The engine's closest kind, FieldKind::ObjectsToAdd, uses
+	// `...=\s*([^,]+)` for the second group (npc.cpp's objectsToAddRegex),
+	// which is a strictly looser match and would accept values the
+	// upstream pattern rejects, so it is not an exact substitute. Left on
+	// the original bespoke regex block below.
+	// ==================================================================
+	namespace
+	{
+#define OUTFIT_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kOutfitKeys[] = {
+			{ "filterByOutfits", sp::FieldKind::List, OUTFIT_F(object) },
+			{ "filterByForms", sp::FieldKind::List, OUTFIT_F(formAnd) },
+			{ "filterByFormsOr", sp::FieldKind::List, OUTFIT_F(formOr) },
+			{ "filterByFormsExclude", sp::FieldKind::List, OUTFIT_F(formExcluded) },
+			{ "formsToAdd", sp::FieldKind::List, OUTFIT_F(addedObjects) },
+			{ "formsToRemove", sp::FieldKind::List, OUTFIT_F(objectsRemove) },
+			{ "clear", sp::FieldKind::Value, OUTFIT_F(clear) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, OUTFIT_F(modNames) },
+		};
+
+#undef OUTFIT_F
+
+		const sp::KeyTable& outfitKeyTable()
+		{
+			static const sp::KeyTable table(kOutfitKeys, std::size(kOutfitKeys));
+			return table;
+		}
+	}
+
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
+		outfitKeyTable().parse(line, &l);
 
-
-		extractData(line, "filterByOutfits\\s*=([^:]+)", l.object);
-
-		extractData(line, "filterByForms\\s*=([^:]+)", l.formAnd);
-		extractData(line, "filterByFormsOr\\s*=([^:]+)", l.formOr);
-		extractData(line, "filterByFormsExclude\\s*=([^:]+)", l.formExcluded);
-
+		// GAP: not on the table -- see comment above kOutfitKeys.
 		std::regex  formListReplace_regex("formsToReplace\\s*=([^:]+)", regex::icase);
 		std::smatch formListReplace_match;
 		std::regex_search(line, formListReplace_match, formListReplace_regex);
@@ -38,10 +71,6 @@ namespace OUTFIT
 			}
 		}
 
-		extractData(line, "formsToAdd\\s*=([^:]+)", l.addedObjects);
-		extractData(line, "formsToRemove\\s*=([^:]+)", l.objectsRemove);
-		extractValueString(line, "clear\\s*=([^:]+)", l.clear);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
 		return l;
 	}  //endStruct
 

@@ -1,75 +1,85 @@
 #include "magiceffect.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace MGEF
 {
+	// ==================================================================
+	// PHASE 2 -- MagicEffect's key table.
+	//
+	// This replaces 44 extract*() calls, each of which ran its own
+	// std::regex_search over the whole line. See parsetable.h for the
+	// equivalence argument; the table below is a transliteration of the old
+	// call list, one row per call, IN THE SAME ORDER, so the two can be
+	// diffed by eye. (A commented-out "speed" extractValueString call
+	// predates this change and was already dead code; it is not carried
+	// forward.)
+	// ==================================================================
+	namespace
+	{
+#define ME_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kMagicEffectKeys[] = {
+			{ "filterByMgefs", sp::FieldKind::List, ME_F(object) },
+			{ "filterBySounds", sp::FieldKind::List, ME_F(filterBySounds) },
+			{ "filterByDamageHealthMgefs", sp::FieldKind::Value, ME_F(filterByDamageHealthMgefs) },
+			{ "filterByMgefsExcluded", sp::FieldKind::List, ME_F(objectExcluded) },
+			{ "effectShadersExcluded", sp::FieldKind::List, ME_F(effectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, ME_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, ME_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, ME_F(keywordsExcluded) },
+			{ "fullName", sp::FieldKind::ValueTilde, ME_F(fullName) },
+			{ "magicItemDescription", sp::FieldKind::ValueTilde, ME_F(magicItemDescription) },
+			{ "enchantArt", sp::FieldKind::Value, ME_F(enchantArt) },
+			{ "enchantShader", sp::FieldKind::Value, ME_F(enchantShader) },
+			{ "setFlags", sp::FieldKind::ListAssign, ME_F(setFlags) },
+			{ "removeFlags", sp::FieldKind::ListAssign, ME_F(removeFlags) },
+			{ "keywordsToAdd", sp::FieldKind::List, ME_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, ME_F(keywordsToRemove) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, ME_F(modNames) },
+			{ "modNamesLastOverriddenExcluded", sp::FieldKind::ListAssign, ME_F(filterByModNamesLastOverriddenExcluded) },
+			{ "modNamesExcluded", sp::FieldKind::ListAssign, ME_F(ModNamesExcluded) },
+			{ "hitShaderExcluded", sp::FieldKind::ListAssign, ME_F(hitShaderExcluded) },
+			{ "impactDataSet", sp::FieldKind::Value, ME_F(impactDataSet) },
+			{ "baseCost", sp::FieldKind::Value, ME_F(baseCost) },
+			{ "minimumSkillLevel", sp::FieldKind::Value, ME_F(minimumSkillLevel) },
+			{ "spellmakingCastingTime", sp::FieldKind::Value, ME_F(spellmakingCastingTime) },
+			{ "spellmakingArea", sp::FieldKind::Value, ME_F(spellmakingArea) },
+			{ "projectile", sp::FieldKind::Value, ME_F(projectile) },
+			{ "castingType", sp::FieldKind::Value, ME_F(castType) },
+			{ "castingArt", sp::FieldKind::Value, ME_F(castingArt) },
+			{ "perkToApply", sp::FieldKind::Value, ME_F(perk) },
+			{ "restrictToCastingType", sp::FieldKind::List, ME_F(restrictToCastingType) },
+			{ "restrictToDeliveryType", sp::FieldKind::List, ME_F(restrictToDeliveryType) },
+			{ "restrictToMagicSkill", sp::FieldKind::List, ME_F(restrictToMagicSkill) },
+			{ "removeEdgeGlow", sp::FieldKind::Value, ME_F(removeEdgeGlow) },
+			{ "skillUsageMult", sp::FieldKind::Value, ME_F(skillUsageMult) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, ME_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, ME_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, ME_F(filterByEditorIdContainsExcluded) },
+			{ "filterByArchetypes", sp::FieldKind::ListAssign, ME_F(filterArchetype) },
+			{ "restrictToActorValue", sp::FieldKind::ListAssign, ME_F(restrictToActorValue) },
+			{ "restrictToAreaEffects", sp::FieldKind::Value, ME_F(restrictToArea) },
+			{ "restrictToDetrimentalEffects", sp::FieldKind::Value, ME_F(restrictToDetrimental) },
+			{ "restrictToResistType", sp::FieldKind::ListAssign, ME_F(restrictToResistType) },
+			{ "hitShader", sp::FieldKind::Value, ME_F(hitShader) },
+			{ "soundsToChange", sp::FieldKind::Arr2D, ME_F(soundsToChange) },
+		};
+
+#undef ME_F
+
+		const sp::KeyTable& magicEffectKeyTable()
+		{
+			static const sp::KeyTable table(kMagicEffectKeys, std::size(kMagicEffectKeys));
+			return table;
+		}
+	}
 
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-			
-
-		extractData(line, "filterByMgefs\\s*=([^:]+)", l.object);
-		extractData(line, "filterBySounds\\s*=([^:]+)", l.filterBySounds);
-		extractValueString(line, "filterByDamageHealthMgefs\\s*=([^:]+)", l.filterByDamageHealthMgefs);
-
-		extractData(line, "filterByMgefsExcluded\\s*=([^:]+)", l.objectExcluded);
-		
-		extractData(line, "effectShadersExcluded\\s*=([^:]+)", l.effectExcluded);
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-		
-
-		//extractValueString(line, "speed\\s *= ([^:] +)", l.speed);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-		extractValueString(line, "magicItemDescription\\s*=\\s*~([^~]+)~", l.magicItemDescription);
-		extractValueString(line, "enchantArt\\s*=([^:]+)", l.enchantArt);
-		extractValueString(line, "enchantShader\\s*=([^:]+)", l.enchantShader);
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-		
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractDataStrings(line, "modNamesLastOverriddenExcluded\\s*=([^:]+)", l.filterByModNamesLastOverriddenExcluded);
-		extractDataStrings(line, "modNamesExcluded\\s*=([^:]+)", l.ModNamesExcluded);
-		extractDataStrings(line, "hitShaderExcluded\\s*=([^:]+)", l.hitShaderExcluded);
-		
-
-		extractValueString(line, "impactDataSet\\s*=([^:]+)", l.impactDataSet);
-		extractValueString(line, "baseCost\\s*=([^:]+)", l.baseCost);
-		extractValueString(line, "minimumSkillLevel\\s*=([^:]+)", l.minimumSkillLevel);
-		extractValueString(line, "spellmakingCastingTime\\s*=([^:]+)", l.spellmakingCastingTime);
-		extractValueString(line, "spellmakingArea\\s*=([^:]+)", l.spellmakingArea);
-		extractValueString(line, "projectile\\s*=([^:]+)", l.projectile);
-		extractValueString(line, "castingType\\s*=([^:]+)", l.castType);
-		extractValueString(line, "castingArt\\s*=([^:]+)", l.castingArt);
-		extractValueString(line, "perkToApply\\s*=([^:]+)", l.perk);
-		extractData(line, "restrictToCastingType\\s*=([^:]+)", l.restrictToCastingType);
-		extractData(line, "restrictToDeliveryType\\s*=([^:]+)", l.restrictToDeliveryType);
-		extractData(line, "restrictToMagicSkill\\s*=([^:]+)", l.restrictToMagicSkill);
-		
-
-		extractValueString(line, "removeEdgeGlow\\s*=([^:]+)", l.removeEdgeGlow);
-		extractValueString(line, "skillUsageMult\\s*=([^:]+)", l.skillUsageMult);
-		
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-
-		extractDataStrings(line, "filterByArchetypes\\s*=([^:]+)", l.filterArchetype);
-		extractDataStrings(line, "restrictToActorValue\\s*=([^:]+)", l.restrictToActorValue);
-		extractValueString(line, "restrictToAreaEffects\\s*=([^:]+)", l.restrictToArea);
-		extractValueString(line, "restrictToDetrimentalEffects\\s*=([^:]+)", l.restrictToDetrimental);
-		extractDataStrings(line, "restrictToResistType\\s*=([^:]+)", l.restrictToResistType);
-		extractValueString(line, "hitShader\\s*=([^:]+)", l.hitShader);
-		extractToArr2D(line, "soundsToChange\\s*=([^:]+)", l.soundsToChange);
-		
+		magicEffectKeyTable().parse(line, &l);
 		return l;
 	}  //endStruct
 

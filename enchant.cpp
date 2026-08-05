@@ -1,64 +1,65 @@
 #include "enchant.h"
 #include "formfilter.h"
+#include "parsetable.h"
 namespace ENCH
 {
+	// ==================================================================
+	// PHASE 2 -- ENCH's key table. One row per upstream extract*() call,
+	// in the same order. See parsetable.h.
+	// ==================================================================
+	namespace
+	{
+#define ENCH_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
+
+		constexpr sp::KeySpec kEnchKeys[] = {
+			{ "filterByEnchs", sp::FieldKind::List, ENCH_F(objects) },
+			{ "filterByEnchsExcluded", sp::FieldKind::List, ENCH_F(objectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, ENCH_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, ENCH_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, ENCH_F(keywordsExcluded) },
+			{ "filterByMgefs", sp::FieldKind::List, ENCH_F(mgefs) },
+			{ "filterByMgefsOr", sp::FieldKind::List, ENCH_F(mgefsOr) },
+			{ "filterByMgefsExcluded", sp::FieldKind::List, ENCH_F(mgefsExcluded) },
+			{ "keywordsToAdd", sp::FieldKind::List, ENCH_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, ENCH_F(keywordsToRemove) },
+			{ "mgefsToAdd", sp::FieldKind::Arr2D, ENCH_F(addedObjects) },
+			{ "mgefsToChange", sp::FieldKind::Arr2D, ENCH_F(changedObjects) },
+			{ "mgefsToChangeAdd", sp::FieldKind::Arr2D, ENCH_F(changedAddObjects) },
+			{ "mgefsToChangeFirst", sp::FieldKind::Arr2D, ENCH_F(changedFirstObjects) },
+			{ "mgefsToChangeDamageHealthEffects", sp::FieldKind::Arr2D, ENCH_F(changedDamageHealthObjects) },
+			{ "mgefsToRemove", sp::FieldKind::List, ENCH_F(removedObjects) },
+			{ "filterByType", sp::FieldKind::Value, ENCH_F(filterType) },
+			{ "baseCost", sp::FieldKind::Value, ENCH_F(baseCost) },
+			{ "enchantmentAmount", sp::FieldKind::Value, ENCH_F(chargeOverride) },
+			{ "chargeTime", sp::FieldKind::Value, ENCH_F(chargeTime) },
+			{ "castType", sp::FieldKind::Value, ENCH_F(castType) },
+			{ "setFlags", sp::FieldKind::ListAssign, ENCH_F(setFlags) },
+			{ "removeFlags", sp::FieldKind::ListAssign, ENCH_F(removeFlags) },
+			{ "clear", sp::FieldKind::Value, ENCH_F(clear) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, ENCH_F(modNames) },
+			{ "fullName", sp::FieldKind::ValueTilde, ENCH_F(fullName) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, ENCH_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, ENCH_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, ENCH_F(filterByEditorIdContainsExcluded) },
+			{ "filterByMinimumSkillLevel", sp::FieldKind::ListAssign, ENCH_F(filterByMinimumSkillLevel) },
+			{ "restrictToCastingType", sp::FieldKind::List, ENCH_F(restrictToCastingType) },
+			{ "restrictToSchool", sp::FieldKind::List, ENCH_F(restrictToSchool) },
+			{ "restrictToSpellType", sp::FieldKind::List, ENCH_F(restrictToSpellType) },
+		};
+
+#undef ENCH_F
+
+		const sp::KeyTable& enchKeyTable()
+		{
+			static const sp::KeyTable table(kEnchKeys, std::size(kEnchKeys));
+			return table;
+		}
+	}
 
 	struct line_content create_patch_instruction(const std::string& line)
 	{
 		line_content l;
-
-		extractData(line, "filterByEnchs\\s*=([^:]+)", l.objects);
-
-		extractData(line, "filterByEnchsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-
-
-		extractData(line, "filterByMgefs\\s*=([^:]+)", l.mgefs);
-
-
-		extractData(line, "filterByMgefsOr\\s*=([^:]+)", l.mgefsOr);
-
-		extractData(line, "filterByMgefsExcluded\\s*=([^:]+)", l.mgefsExcluded);
-
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-
-		extractToArr2D(line, "mgefsToAdd\\s*=([^:]+)", l.addedObjects);
-
-		extractToArr2D(line, "mgefsToChange\\s*=([^:]+)", l.changedObjects);
-		extractToArr2D(line, "mgefsToChangeAdd\\s*=([^:]+)", l.changedAddObjects);
-		extractToArr2D(line, "mgefsToChangeFirst\\s*=([^:]+)", l.changedFirstObjects);
-		extractToArr2D(line, "mgefsToChangeDamageHealthEffects\\s*=([^:]+)", l.changedDamageHealthObjects);
-
-		extractData(line, "mgefsToRemove\\s*=([^:]+)", l.removedObjects);
-
-		extractValueString(line, "filterByType\\s*=([^:]+)", l.filterType);
-
-
-		extractValueString(line, "baseCost\\s*=([^:]+)", l.baseCost);
-		extractValueString(line, "enchantmentAmount\\s*=([^:]+)", l.chargeOverride);
-		extractValueString(line, "chargeTime\\s*=([^:]+)", l.chargeTime);
-		extractValueString(line, "castType\\s*=([^:]+)", l.castType);
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-		extractValueString(line, "clear\\s*=([^:]+)", l.clear);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-
-		extractDataStrings(line, "filterByMinimumSkillLevel\\s*=([^:]+)", l.filterByMinimumSkillLevel);
-		extractData(line, "restrictToCastingType\\s*=([^:]+)", l.restrictToCastingType);
-		extractData(line, "restrictToSchool\\s*=([^:]+)", l.restrictToSchool);
-		extractData(line, "restrictToSpellType\\s*=([^:]+)", l.restrictToSpellType);
-		
+		enchKeyTable().parse(line, &l);
 		return l;
 	}
 

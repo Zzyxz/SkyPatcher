@@ -1,15 +1,46 @@
 #include "formlist.h"
+#include "parsetable.h"
 namespace FORMLIST
 {
+	// ==================================================================
+	// PHASE 2 -- FORMLIST's key table. One row per upstream extract*()
+	// call, in the same order. See parsetable.h.
+	//
+	// "formsToReplace" stays hand-written below: its sub-scan pattern
+	// `([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\s*=\s*([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})`
+	// requires the SECOND capture group to also be `name|editorid`-shaped,
+	// which does not match FieldKind::ObjectsToAdd's second group
+	// (plain `[^,]+`) -- those two kinds diverge on inputs where the
+	// replacement value is not itself `name|editorid` shaped, so it cannot
+	// be represented by an existing FieldKind.
+	// ==================================================================
+	namespace
+	{
+#define FORMLIST_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
+
+		constexpr sp::KeySpec kFormlistKeys[] = {
+			{ "filterByFormLists", sp::FieldKind::List, FORMLIST_F(objects) },
+			{ "formsToAdd", sp::FieldKind::List, FORMLIST_F(objectsAdd) },
+			{ "formsToRemove", sp::FieldKind::List, FORMLIST_F(objectsRemove) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, FORMLIST_F(modNames) },
+			{ "clear", sp::FieldKind::Value, FORMLIST_F(clear) },
+		};
+
+#undef FORMLIST_F
+
+		const sp::KeyTable& formlistKeyTable()
+		{
+			static const sp::KeyTable table(kFormlistKeys, std::size(kFormlistKeys));
+			return table;
+		}
+	}
 
 	struct line_content create_patch_instruction(const std::string& line)
 	{
 		line_content l;
+		formlistKeyTable().parse(line, &l);
 
-		extractData(line, "filterByFormLists\\s*=([^:]+)", l.objects);
-
-		extractData(line, "formsToAdd\\s*=([^:]+)", l.objectsAdd);
-
+		// NOT convertible: see the comment on kFormlistKeys above.
 		std::regex  formListReplace_regex("formsToReplace\\s*=([^:]+)", regex::icase);
 		std::smatch formListReplace_match;
 		std::regex_search(line, formListReplace_match, formListReplace_regex);
@@ -31,9 +62,6 @@ namespace FORMLIST
 				//logger::debug(FMT_STRING("Match: {} {}"), match[1].str(), match[2].str());
 			}
 		}
-		extractData(line, "formsToRemove\\s*=([^:]+)", l.objectsRemove);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractValueString(line, "clear\\s*=([^:]+)", l.clear);
 		return l;
 	}
 

@@ -1,72 +1,62 @@
 #include "alch.h"
 #include "formfilter.h"
+#include "parsetable.h"
 namespace ALCH
 {
+	// ==================================================================
+	// PHASE 2 -- ALCH's key table. One row per upstream extract*() call,
+	// in the same order. See parsetable.h.
+	// ==================================================================
+	namespace
+	{
+#define ALCH_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
+
+		constexpr sp::KeySpec kAlchKeys[] = {
+			{ "filterByAlchs", sp::FieldKind::List, ALCH_F(objects) },
+			{ "filterByAlchsExcluded", sp::FieldKind::List, ALCH_F(objectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, ALCH_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, ALCH_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, ALCH_F(keywordsExcluded) },
+			{ "filterByMgefs", sp::FieldKind::List, ALCH_F(mgefs) },
+			{ "filterByMgefsOr", sp::FieldKind::List, ALCH_F(mgefsOr) },
+			{ "filterByMgefsExcluded", sp::FieldKind::List, ALCH_F(mgefsExcluded) },
+			{ "keywordsToAdd", sp::FieldKind::List, ALCH_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, ALCH_F(keywordsToRemove) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, ALCH_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, ALCH_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, ALCH_F(filterByEditorIdContainsExcluded) },
+			{ "mgefsToAdd", sp::FieldKind::Arr2D, ALCH_F(addedObjects) },
+			{ "mgefsToChange", sp::FieldKind::Arr2D, ALCH_F(changedObjects) },
+			{ "mgefsToChangeAdd", sp::FieldKind::Arr2D, ALCH_F(changedAddObjects) },
+			{ "mgefsToChangeFirst", sp::FieldKind::Arr2D, ALCH_F(changedFirstObjects) },
+			{ "mgefsToChangeDamageHealthEffects", sp::FieldKind::Arr2D, ALCH_F(changedDamageHealthObjects) },
+			{ "mgefsToRemove", sp::FieldKind::List, ALCH_F(removedObjects) },
+			{ "filterByType", sp::FieldKind::Value, ALCH_F(filterType) },
+			{ "weight", sp::FieldKind::Value, ALCH_F(weight) },
+			{ "value", sp::FieldKind::Value, ALCH_F(capsvalue) },
+			{ "clear", sp::FieldKind::Value, ALCH_F(clear) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, ALCH_F(modNames) },
+			{ "fullName", sp::FieldKind::ValueTilde, ALCH_F(fullName) },
+			{ "model", sp::FieldKind::Value, ALCH_F(model) },
+			{ "alternateTexturesToAdd", sp::FieldKind::Arr2D, ALCH_F(alternateTextures) },
+			{ "alternateTexturesToRemove", sp::FieldKind::List, ALCH_F(alternateTexturesRemove) },
+			{ "alternateTexturesClear", sp::FieldKind::Value, ALCH_F(alternateTexturesClear) },
+			{ "filterByAlternateTextures", sp::FieldKind::List, ALCH_F(alternateTexturesFind) },
+		};
+
+#undef ALCH_F
+
+		const sp::KeyTable& alchKeyTable()
+		{
+			static const sp::KeyTable table(kAlchKeys, std::size(kAlchKeys));
+			return table;
+		}
+	}
 
 	struct line_content create_patch_instruction(const std::string& line)
 	{
 		line_content l;
-
-
-
-		extractData(line, "filterByAlchs\\s*=([^:]+)", l.objects);
-
-
-
-		extractData(line, "filterByAlchsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-
-
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-
-
-		extractData(line, "filterByMgefs\\s*=([^:]+)", l.mgefs);
-
-
-		extractData(line, "filterByMgefsOr\\s*=([^:]+)", l.mgefsOr);
-
-	
-		extractData(line, "filterByMgefsExcluded\\s*=([^:]+)", l.mgefsExcluded);
-
-
-
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-
-	
-
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-
-		extractToArr2D(line, "mgefsToAdd\\s*=([^:]+)", l.addedObjects);
-		extractToArr2D(line, "mgefsToChange\\s*=([^:]+)", l.changedObjects);
-		extractToArr2D(line, "mgefsToChangeAdd\\s*=([^:]+)", l.changedAddObjects);
-		extractToArr2D(line, "mgefsToChangeFirst\\s*=([^:]+)", l.changedFirstObjects);
-		extractToArr2D(line, "mgefsToChangeDamageHealthEffects\\s*=([^:]+)", l.changedDamageHealthObjects);
-		extractData(line, "mgefsToRemove\\s*=([^:]+)", l.removedObjects);
-		extractValueString(line, "filterByType\\s*=([^:]+)", l.filterType);
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-		extractValueString(line, "value\\s*=([^:]+)", l.capsvalue);
-		extractValueString(line, "clear\\s*=([^:]+)", l.clear);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-
-		extractValueString(line, "model\\s*=([^:]+)", l.model);
-		extractToArr2D(line, "alternateTexturesToAdd\\s*=([^:]+)", l.alternateTextures);
-		extractData(line, "alternateTexturesToRemove\\s*=([^:]+)", l.alternateTexturesRemove);
-		extractValueString(line, "alternateTexturesClear\\s*=([^:]+)", l.alternateTexturesClear);
-		extractData(line, "filterByAlternateTextures\\s*=([^:]+)", l.alternateTexturesFind);
-
+		alchKeyTable().parse(line, &l);
 		return l;
 	}
 

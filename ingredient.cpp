@@ -1,55 +1,68 @@
 #include "ingredient.h"
 #include "formfilter.h"
+#include "parsetable.h"
 namespace INGR
 {
+	// ==================================================================
+	// PHASE 2 -- INGREDIENT's key table. One row per upstream extract*()
+	// call, in the same order. See parsetable.h.
+	//
+	// "clear" and "alternateTexturesClear" are not a duplicate-key trap:
+	// they are two DIFFERENT keys where the longer one happens to end in
+	// the shorter one's text. Both are FieldKind::Value (case-sensitive,
+	// since extractValueString never passes regex::icase upstream), and
+	// the "clear" pattern is written lowercase while
+	// "alternateTexturesClear" capitalizes the C -- so upstream's
+	// "clear\s*=" never matches inside "...Clear=", and neither does the
+	// case-sensitive memcmp this table relies on.
+	// ==================================================================
+	namespace
+	{
+#define ING_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
+
+		constexpr sp::KeySpec kIngredientKeys[] = {
+			{ "filterByIngs", sp::FieldKind::List, ING_F(objects) },
+			{ "filterByIngsExcluded", sp::FieldKind::List, ING_F(objectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, ING_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, ING_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, ING_F(keywordsExcluded) },
+			{ "filterByMgefs", sp::FieldKind::List, ING_F(mgefs) },
+			{ "filterByMgefsOr", sp::FieldKind::List, ING_F(mgefsOr) },
+			{ "filterByMgefsExcluded", sp::FieldKind::List, ING_F(mgefsExcluded) },
+			{ "keywordsToAdd", sp::FieldKind::List, ING_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, ING_F(keywordsToRemove) },
+			{ "mgefsToAdd", sp::FieldKind::Arr2D, ING_F(addedObjects) },
+			{ "mgefsToChange", sp::FieldKind::Arr2D, ING_F(changedObjects) },
+			{ "mgefsToChangeAdd", sp::FieldKind::Arr2D, ING_F(changedAddObjects) },
+			{ "mgefsToRemove", sp::FieldKind::List, ING_F(removedObjects) },
+			{ "filterByType", sp::FieldKind::Value, ING_F(filterType) },
+			{ "value", sp::FieldKind::Value, ING_F(capsvalue) },
+			{ "valueMult", sp::FieldKind::Value, ING_F(valueMult) },
+			{ "weight", sp::FieldKind::Value, ING_F(weight) },
+			{ "weightMult", sp::FieldKind::Value, ING_F(weightMult) },
+			{ "clear", sp::FieldKind::Value, ING_F(clear) },
+			{ "fullName", sp::FieldKind::ValueTilde, ING_F(fullName) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, ING_F(modNames) },
+			{ "model", sp::FieldKind::Value, ING_F(model) },
+			{ "alternateTexturesToAdd", sp::FieldKind::Arr2D, ING_F(alternateTextures) },
+			{ "alternateTexturesToRemove", sp::FieldKind::List, ING_F(alternateTexturesRemove) },
+			{ "alternateTexturesClear", sp::FieldKind::Value, ING_F(alternateTexturesClear) },
+			{ "filterByAlternateTextures", sp::FieldKind::List, ING_F(alternateTexturesFind) },
+		};
+
+#undef ING_F
+
+		const sp::KeyTable& ingredientKeyTable()
+		{
+			static const sp::KeyTable table(kIngredientKeys, std::size(kIngredientKeys));
+			return table;
+		}
+	}
 
 	struct line_content create_patch_instruction(const std::string& line)
 	{
 		line_content l;
-
-		extractData(line, "filterByIngs\\s*=([^:]+)", l.objects);
-
-		extractData(line, "filterByIngsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-
-		extractData(line, "filterByMgefs\\s*=([^:]+)", l.mgefs);
-
-		extractData(line, "filterByMgefsOr\\s*=([^:]+)", l.mgefsOr);
-
-		extractData(line, "filterByMgefsExcluded\\s*=([^:]+)", l.mgefsExcluded);
-
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-
-		extractToArr2D(line, "mgefsToAdd\\s*=([^:]+)", l.addedObjects);
-
-		extractToArr2D(line, "mgefsToChange\\s*=([^:]+)", l.changedObjects);
-		extractToArr2D(line, "mgefsToChangeAdd\\s*=([^:]+)", l.changedAddObjects);
-
-		extractData(line, "mgefsToRemove\\s*=([^:]+)", l.removedObjects);
-
-		extractValueString(line, "filterByType\\s*=([^:]+)", l.filterType);
-
-		extractValueString(line, "value\\s*=([^:]+)", l.capsvalue);
-		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
-		extractValueString(line, "clear\\s*=([^:]+)", l.clear);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-
-		extractValueString(line, "model\\s*=([^:]+)", l.model);
-		extractToArr2D(line, "alternateTexturesToAdd\\s*=([^:]+)", l.alternateTextures);
-		extractData(line, "alternateTexturesToRemove\\s*=([^:]+)", l.alternateTexturesRemove);
-		extractValueString(line, "alternateTexturesClear\\s*=([^:]+)", l.alternateTexturesClear);
-		extractData(line, "filterByAlternateTextures\\s*=([^:]+)", l.alternateTexturesFind);
-
+		ingredientKeyTable().parse(line, &l);
 		return l;
 	}
 

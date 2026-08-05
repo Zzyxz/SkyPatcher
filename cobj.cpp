@@ -1,52 +1,63 @@
 #include "cobj.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace COBJ
 {
+	// ==================================================================
+	// PHASE 2 -- COBJ's key table. One row per upstream extract*() call,
+	// in the same order. See parsetable.h.
+	// ==================================================================
+	namespace
+	{
+#define COBJ_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kCobjKeys[] = {
+			{ "filterByCobjs", sp::FieldKind::List, COBJ_F(object) },
+			{ "filterByWorkBenchKeywords", sp::FieldKind::List, COBJ_F(filterWorkbenchKeywords) },
+			{ "filterWorkbenchKeywordsExcluded", sp::FieldKind::List, COBJ_F(filterWorkbenchKeywordsExcluded) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, COBJ_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, COBJ_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, COBJ_F(filterByEditorIdContainsExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, COBJ_F(keywordsNew) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, COBJ_F(keywordsNewOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, COBJ_F(keywordsNewExcluded) },
+			{ "filterByCobjsExcluded", sp::FieldKind::List, COBJ_F(objectExcluded) },
+			{ "filterByIngredients", sp::FieldKind::List, COBJ_F(keywords) },
+			{ "filterByIngredientsOr", sp::FieldKind::List, COBJ_F(keywordsOr) },
+			{ "filterByIngredientsExcluded", sp::FieldKind::List, COBJ_F(filterByRecipeIngredientsExcluded) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, COBJ_F(modNames) },
+			{ "addToCobjs", sp::FieldKind::Arr2D, COBJ_F(addedContainerObjects) },
+			{ "addToCobjsAdjusted", sp::FieldKind::Arr2D, COBJ_F(addedContainerObjectsAdjusted) },
+			{ "replaceInCobjs", sp::FieldKind::Arr2D, COBJ_F(replaceObjectInContainer) },
+			{ "changeCobjsCountByMult", sp::FieldKind::Arr2D, COBJ_F(changeCobjsCountByMult) },
+			{ "changeCobjsCount", sp::FieldKind::Arr2D, COBJ_F(changeCobjsCount) },
+			{ "removeFromCobjs", sp::FieldKind::List, COBJ_F(removeInstancesContainerObjects) },
+			{ "removeFromCobjsByCount", sp::FieldKind::Arr2D, COBJ_F(removeContainerObjects) },
+			{ "clear", sp::FieldKind::Value, COBJ_F(clearIngredients) },
+			{ "createdObject", sp::FieldKind::Value, COBJ_F(createdObject) },
+			{ "count", sp::FieldKind::Value, COBJ_F(count) },
+			{ "countMult", sp::FieldKind::Value, COBJ_F(countMult) },
+			{ "workbenchKeyword", sp::FieldKind::Value, COBJ_F(workbenchKeyword) },
+			{ "keywordsToAdd", sp::FieldKind::List, COBJ_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, COBJ_F(keywordsToRemove) },
+			{ "restrictToKeywords", sp::FieldKind::List, COBJ_F(restrictToKeywords) },
+		};
+
+#undef COBJ_F
+
+		const sp::KeyTable& cobjKeyTable()
+		{
+			static const sp::KeyTable table(kCobjKeys, std::size(kCobjKeys));
+			return table;
+		}
+	}
 
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-
-		extractData(line, "filterByCobjs\\s*=([^:]+)", l.object);
-		extractData(line, "filterByWorkBenchKeywords\\s*=([^:]+)", l.filterWorkbenchKeywords);
-		extractData(line, "filterWorkbenchKeywordsExcluded\\s*=([^:]+)", l.filterWorkbenchKeywordsExcluded);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywordsNew);
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsNewOr);
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsNewExcluded);
-		extractData(line, "filterByCobjsExcluded\\s*=([^:]+)", l.objectExcluded);
-		extractData(line, "filterByIngredients\\s*=([^:]+)", l.keywords);
-		extractData(line, "filterByIngredientsOr\\s*=([^:]+)", l.keywordsOr);
-		extractData(line, "filterByIngredientsExcluded\\s*=([^:]+)", l.filterByRecipeIngredientsExcluded);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-
-		extractToArr2D(line, "addToCobjs\\s*=([^:]+)", l.addedContainerObjects);
-		extractToArr2D(line, "addToCobjsAdjusted\\s*=([^:]+)", l.addedContainerObjectsAdjusted);
-		extractToArr2D(line, "replaceInCobjs\\s*=([^:]+)", l.replaceObjectInContainer);
-
-		extractToArr2D(line, "changeCobjsCountByMult\\s*=([^:]+)", l.changeCobjsCountByMult);
-		extractToArr2D(line, "changeCobjsCount\\s*=([^:]+)", l.changeCobjsCount);
-
-		extractData(line, "removeFromCobjs\\s*=([^:]+)", l.removeInstancesContainerObjects);
-		extractToArr2D(line, "removeFromCobjsByCount\\s*=([^:]+)", l.removeContainerObjects);
-		extractValueString(line, "clear\\s*=([^:]+)", l.clearIngredients);
-
-
-		extractValueString(line, "createdObject\\s*=([^:]+)", l.createdObject);
-		extractValueString(line, "count\\s*=([^:]+)", l.count);
-		extractValueString(line, "countMult\\s*=([^:]+)", l.countMult);
-		extractValueString(line, "workbenchKeyword\\s*=([^:]+)", l.workbenchKeyword);
-
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-		extractData(line, "restrictToKeywords\\s*=([^:]+)", l.restrictToKeywords);
-
-
-
+		cobjKeyTable().parse(line, &l);
 		return l;
 	}  //endStruct
 

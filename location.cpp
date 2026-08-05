@@ -1,38 +1,54 @@
 #include "location.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace LOCATION
 {
 
+	// ==================================================================
+	// PHASE 2 -- LOCATION's key table. One row per upstream extract*()
+	// call, in the same order. See parsetable.h and npc.cpp/weapon.cpp
+	// for the pattern this follows.
+	// ==================================================================
+	namespace
+	{
+#define LOC_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kLocationKeys[] = {
+			{ "filterByLocations", sp::FieldKind::List, LOC_F(object) },
+			{ "filterByLocationsExcluded", sp::FieldKind::List, LOC_F(objectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, LOC_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, LOC_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, LOC_F(keywordsExcluded) },
+			{ "fullName", sp::FieldKind::ValueTilde, LOC_F(fullName) },
+			{ "keywordsToAdd", sp::FieldKind::List, LOC_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, LOC_F(keywordsToRemove) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, LOC_F(modNames) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, LOC_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, LOC_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, LOC_F(filterByEditorIdContainsExcluded) },
+			{ "filterByMusicType", sp::FieldKind::ListAssign, LOC_F(filterByMusicType) },
+			{ "filterByParentLocation", sp::FieldKind::ListAssign, LOC_F(filterByParentLoc) },
+			{ "filterByUnreportedCrimeFaction", sp::FieldKind::ListAssign, LOC_F(filterByUnreportedCrimeFaction) },
+			{ "musicType", sp::FieldKind::Value, LOC_F(musicType) },
+			{ "unreportedCrimeFaction", sp::FieldKind::Value, LOC_F(unreportedCrimeFaction) },
+			{ "parentLocation", sp::FieldKind::Value, LOC_F(parentLoc) },
+		};
+
+#undef LOC_F
+
+		const sp::KeyTable& locationKeyTable()
+		{
+			static const sp::KeyTable table(kLocationKeys, std::size(kLocationKeys));
+			return table;
+		}
+	}
+
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-
-
-		extractData(line, "filterByLocations\\s*=([^:]+)", l.object);
-
-		extractData(line, "filterByLocationsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-
-		extractDataStrings(line, "filterByMusicType\\s*=([^:]+)", l.filterByMusicType);
-		extractDataStrings(line, "filterByParentLocation\\s*=([^:]+)", l.filterByParentLoc);
-		extractDataStrings(line, "filterByUnreportedCrimeFaction\\s*=([^:]+)", l.filterByUnreportedCrimeFaction);
-
-		extractValueString(line, "musicType\\s*=([^:]+)", l.musicType);
-		extractValueString(line, "unreportedCrimeFaction\\s*=([^:]+)", l.unreportedCrimeFaction);
-		extractValueString(line, "parentLocation\\s*=([^:]+)", l.parentLoc);
-
+		locationKeyTable().parse(line, &l);
 		return l;
 	}  //endStruct
 

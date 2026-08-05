@@ -1,34 +1,47 @@
 #include "encounterzone.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace ENCOUNTERZONE
 {
+	// ==================================================================
+	// PHASE 2 -- ENCOUNTERZONE's key table. One row per upstream
+	// extract*() call, in the same order. See parsetable.h.
+	// ==================================================================
+	namespace
+	{
+#define EZ_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kEncounterZoneKeys[] = {
+			{ "filterByEncounterZones", sp::FieldKind::List, EZ_F(object) },
+			{ "filterByEncounterZonesExcluded", sp::FieldKind::List, EZ_F(objectExcluded) },
+			{ "minLevel", sp::FieldKind::Value, EZ_F(minLevel) },
+			{ "minLevelAdd", sp::FieldKind::Value, EZ_F(minLevelAdd) },
+			{ "minLevelMult", sp::FieldKind::Value, EZ_F(minLevelMult) },
+			{ "maxLevel", sp::FieldKind::Value, EZ_F(maxLevel) },
+			{ "maxLevelAdd", sp::FieldKind::Value, EZ_F(maxLevelAdd) },
+			{ "maxLevelMult", sp::FieldKind::Value, EZ_F(maxLevelMult) },
+			{ "location", sp::FieldKind::Value, EZ_F(location) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, EZ_F(modNames) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, EZ_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, EZ_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, EZ_F(filterByEditorIdContainsExcluded) },
+		};
+
+#undef EZ_F
+
+		const sp::KeyTable& encounterZoneKeyTable()
+		{
+			static const sp::KeyTable table(kEncounterZoneKeys, std::size(kEncounterZoneKeys));
+			return table;
+		}
+	}
 
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-
-
-		extractData(line, "filterByEncounterZones\\s*=([^:]+)", l.object);
-
-		extractData(line, "filterByEncounterZonesExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractValueString(line, "minLevel\\s*=([^:]+)", l.minLevel);
-		extractValueString(line, "minLevelAdd\\s*=([^:]+)", l.minLevelAdd);
-		extractValueString(line, "minLevelMult\\s*=([^:]+)", l.minLevelMult);
-		extractValueString(line, "maxLevel\\s*=([^:]+)", l.maxLevel);
-		extractValueString(line, "maxLevelAdd\\s*=([^:]+)", l.maxLevelAdd);
-		extractValueString(line, "maxLevelMult\\s*=([^:]+)", l.maxLevelMult);
-
-		extractValueString(line, "location\\s*=([^:]+)", l.location);
-
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-
+		encounterZoneKeyTable().parse(line, &l);
 		return l;
 	}  //endStruct
 

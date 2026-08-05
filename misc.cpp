@@ -1,44 +1,63 @@
 #include "misc.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace MISC
 {
 
+	// ==================================================================
+	// PHASE 2 -- MISC's key table. One row per upstream extract*() call,
+	// in the same order. See parsetable.h and npc.cpp/weapon.cpp for the
+	// pattern this follows.
+	//
+	// The upstream `speed` extractValueString call was already commented
+	// out (and its pattern was malformed: "speed\s *= ([^:] +)" with
+	// stray spaces inside the regex tokens), so it has no row here.
+	// ==================================================================
+	namespace
+	{
+#define MISC_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kMiscKeys[] = {
+			{ "filterByMiscs", sp::FieldKind::List, MISC_F(object) },
+			{ "filterByMiscsExcluded", sp::FieldKind::List, MISC_F(objectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, MISC_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, MISC_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, MISC_F(keywordsExcluded) },
+			{ "fullName", sp::FieldKind::ValueTilde, MISC_F(fullName) },
+			{ "value", sp::FieldKind::Value, MISC_F(value) },
+			{ "valueMult", sp::FieldKind::Value, MISC_F(valueMult) },
+			{ "weight", sp::FieldKind::Value, MISC_F(weight) },
+			{ "weightMult", sp::FieldKind::Value, MISC_F(weightMult) },
+			{ "keywordsToAdd", sp::FieldKind::List, MISC_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, MISC_F(keywordsToRemove) },
+			{ "pickUpSound", sp::FieldKind::Value, MISC_F(pickUpSound) },
+			{ "putDownSound", sp::FieldKind::Value, MISC_F(putDownSound) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, MISC_F(modNames) },
+			{ "model", sp::FieldKind::Value, MISC_F(model) },
+			{ "alternateTexturesToAdd", sp::FieldKind::Arr2D, MISC_F(alternateTextures) },
+			{ "alternateTexturesToRemove", sp::FieldKind::List, MISC_F(alternateTexturesRemove) },
+			{ "alternateTexturesClear", sp::FieldKind::Value, MISC_F(alternateTexturesClear) },
+			{ "filterByAlternateTextures", sp::FieldKind::List, MISC_F(alternateTexturesFind) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, MISC_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, MISC_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, MISC_F(filterByEditorIdContainsExcluded) },
+		};
+
+#undef MISC_F
+
+		const sp::KeyTable& miscKeyTable()
+		{
+			static const sp::KeyTable table(kMiscKeys, std::size(kMiscKeys));
+			return table;
+		}
+	}
+
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-
-
-		extractData(line, "filterByMiscs\\s*=([^:]+)", l.object);
-
-		extractData(line, "filterByMiscsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-		//extractValueString(line, "speed\\s *= ([^:] +)", l.speed);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-		extractValueString(line, "value\\s*=([^:]+)", l.value);
-		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-		extractValueString(line, "pickUpSound\\s*=([^:]+)", l.pickUpSound);
-		extractValueString(line, "putDownSound\\s*=([^:]+)", l.putDownSound);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-
-		extractValueString(line, "model\\s*=([^:]+)", l.model);
-		extractToArr2D(line, "alternateTexturesToAdd\\s*=([^:]+)", l.alternateTextures);
-		extractData(line, "alternateTexturesToRemove\\s*=([^:]+)", l.alternateTexturesRemove);
-		extractValueString(line, "alternateTexturesClear\\s*=([^:]+)", l.alternateTexturesClear);
-		extractData(line, "filterByAlternateTextures\\s*=([^:]+)", l.alternateTexturesFind);
-
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-
+		miscKeyTable().parse(line, &l);
 		return l;
 	}  //endStruct
 

@@ -1,70 +1,74 @@
 #include "scroll.h"
 #include "formfilter.h"
+#include "parsetable.h"
 namespace SCROLL
 {
-	
+
+	// ==================================================================
+	// PHASE 2 -- SCROLL's key table. One row per upstream extract*() call,
+	// in the same order. See parsetable.h.
+	// ==================================================================
+	namespace
+	{
+#define SCROLL_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
+
+		constexpr sp::KeySpec kScrollKeys[] = {
+			{ "filterByScrolls", sp::FieldKind::List, SCROLL_F(objects) },
+			{ "filterByScrollsExcluded", sp::FieldKind::List, SCROLL_F(objectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, SCROLL_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, SCROLL_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, SCROLL_F(keywordsExcluded) },
+			{ "filterByMgefs", sp::FieldKind::List, SCROLL_F(mgefs) },
+			{ "filterByMgefsOr", sp::FieldKind::List, SCROLL_F(mgefsOr) },
+			{ "filterByMgefsExcluded", sp::FieldKind::List, SCROLL_F(mgefsExcluded) },
+			{ "keywordsToAdd", sp::FieldKind::List, SCROLL_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, SCROLL_F(keywordsToRemove) },
+			{ "mgefsToAdd", sp::FieldKind::Arr2D, SCROLL_F(addedObjects) },
+			{ "mgefsToChange", sp::FieldKind::Arr2D, SCROLL_F(changedObjects) },
+			{ "mgefsToChangeAdd", sp::FieldKind::Arr2D, SCROLL_F(changedAddObjects) },
+			{ "mgefsToChangeFirst", sp::FieldKind::Arr2D, SCROLL_F(changedFirstObjects) },
+			{ "mgefsToChangeDamageHealthEffects", sp::FieldKind::Arr2D, SCROLL_F(changedDamageHealthObjects) },
+			{ "mgefsToRemove", sp::FieldKind::List, SCROLL_F(removedObjects) },
+			{ "filterByType", sp::FieldKind::Value, SCROLL_F(filterType) },
+			{ "baseCost", sp::FieldKind::Value, SCROLL_F(baseCost) },
+			{ "halfCostPerk", sp::FieldKind::Value, SCROLL_F(halfCostPerk) },
+			{ "chargeTime", sp::FieldKind::Value, SCROLL_F(chargeTime) },
+			{ "castType", sp::FieldKind::Value, SCROLL_F(castType) },
+			{ "setFlags", sp::FieldKind::ListAssign, SCROLL_F(setFlags) },
+			{ "removeFlags", sp::FieldKind::ListAssign, SCROLL_F(removeFlags) },
+			{ "clear", sp::FieldKind::Value, SCROLL_F(clear) },
+			{ "value", sp::FieldKind::Value, SCROLL_F(value) },
+			{ "valueMult", sp::FieldKind::Value, SCROLL_F(valueMult) },
+			{ "weight", sp::FieldKind::Value, SCROLL_F(weight) },
+			{ "weightMult", sp::FieldKind::Value, SCROLL_F(weightMult) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, SCROLL_F(modNames) },
+			{ "fullName", sp::FieldKind::ValueTilde, SCROLL_F(fullName) },
+			{ "model", sp::FieldKind::Value, SCROLL_F(model) },
+			{ "alternateTexturesToAdd", sp::FieldKind::Arr2D, SCROLL_F(alternateTextures) },
+			{ "alternateTexturesToRemove", sp::FieldKind::List, SCROLL_F(alternateTexturesRemove) },
+			{ "alternateTexturesClear", sp::FieldKind::Value, SCROLL_F(alternateTexturesClear) },
+			{ "filterByAlternateTextures", sp::FieldKind::List, SCROLL_F(alternateTexturesFind) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, SCROLL_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, SCROLL_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, SCROLL_F(filterByEditorIdContainsExcluded) },
+			{ "filterByMinimumSkillLevel", sp::FieldKind::ListAssign, SCROLL_F(filterByMinimumSkillLevel) },
+			{ "restrictToCastingType", sp::FieldKind::List, SCROLL_F(restrictToCastingType) },
+			{ "restrictToSchool", sp::FieldKind::List, SCROLL_F(restrictToSchool) },
+		};
+
+#undef SCROLL_F
+
+		const sp::KeyTable& scrollKeyTable()
+		{
+			static const sp::KeyTable table(kScrollKeys, std::size(kScrollKeys));
+			return table;
+		}
+	}
+
 	struct line_content create_patch_instruction(const std::string& line)
 	{
 		line_content l;
-
-		extractData(line, "filterByScrolls\\s*=([^:]+)", l.objects);
-
-		extractData(line, "filterByScrollsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-
-		extractData(line, "filterByMgefs\\s*=([^:]+)", l.mgefs);
-
-		extractData(line, "filterByMgefsOr\\s*=([^:]+)", l.mgefsOr);
-
-		extractData(line, "filterByMgefsExcluded\\s*=([^:]+)", l.mgefsExcluded);
-
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-
-		extractToArr2D(line, "mgefsToAdd\\s*=([^:]+)", l.addedObjects);
-		extractToArr2D(line, "mgefsToChange\\s*=([^:]+)", l.changedObjects);
-		extractToArr2D(line, "mgefsToChangeAdd\\s*=([^:]+)", l.changedAddObjects);
-		extractToArr2D(line, "mgefsToChangeFirst\\s*=([^:]+)", l.changedFirstObjects);
-		extractToArr2D(line, "mgefsToChangeDamageHealthEffects\\s*=([^:]+)", l.changedDamageHealthObjects);
-
-		extractData(line, "mgefsToRemove\\s*=([^:]+)", l.removedObjects);
-
-		extractValueString(line, "filterByType\\s*=([^:]+)", l.filterType);
-
-		extractValueString(line, "baseCost\\s*=([^:]+)", l.baseCost);
-		extractValueString(line, "halfCostPerk\\s*=([^:]+)", l.halfCostPerk);
-		extractValueString(line, "chargeTime\\s*=([^:]+)", l.chargeTime);
-		extractValueString(line, "castType\\s*=([^:]+)", l.castType);
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-		extractValueString(line, "clear\\s*=([^:]+)", l.clear);
-
-		extractValueString(line, "value\\s*=([^:]+)", l.value);
-		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-
-		extractValueString(line, "model\\s*=([^:]+)", l.model);
-		extractToArr2D(line, "alternateTexturesToAdd\\s*=([^:]+)", l.alternateTextures);
-		extractData(line, "alternateTexturesToRemove\\s*=([^:]+)", l.alternateTexturesRemove);
-		extractValueString(line, "alternateTexturesClear\\s*=([^:]+)", l.alternateTexturesClear);
-		extractData(line, "filterByAlternateTextures\\s*=([^:]+)", l.alternateTexturesFind);
-
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-
-		extractDataStrings(line, "filterByMinimumSkillLevel\\s*=([^:]+)", l.filterByMinimumSkillLevel);
-		extractData(line, "restrictToCastingType\\s*=([^:]+)", l.restrictToCastingType);
-		extractData(line, "restrictToSchool\\s*=([^:]+)", l.restrictToSchool);
+		scrollKeyTable().parse(line, &l);
 		return l;
 	}
 

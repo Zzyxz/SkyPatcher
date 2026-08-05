@@ -1,65 +1,69 @@
  #include "ammo.h"
 #include "formfilter.h"
+#include "parsetable.h"
 namespace AMMO
 {
+	// ==================================================================
+	// PHASE 2 -- AMMO's key table. One row per upstream extract*() call,
+	// in the same order. See parsetable.h.
+	// ==================================================================
+	namespace
+	{
+#define AMMO_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
+
+		constexpr sp::KeySpec kAmmoKeys[] = {
+			{ "filterByAmmos", sp::FieldKind::List, AMMO_F(ammo) },
+			{ "filterByAmmosExcluded", sp::FieldKind::List, AMMO_F(objectExcluded) },
+			{ "filterByWeightLessThan", sp::FieldKind::Value, AMMO_F(weightLessThan) },
+			{ "filterByKeywords", sp::FieldKind::List, AMMO_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, AMMO_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, AMMO_F(keywordsExcluded) },
+			{ "weight", sp::FieldKind::Value, AMMO_F(weight) },
+			{ "attackDamage", sp::FieldKind::Value, AMMO_F(damage) },
+			{ "attackDamageToAdd", sp::FieldKind::Value, AMMO_F(damageToAdd) },
+			{ "attackDamageMult", sp::FieldKind::Value, AMMO_F(damageMult) },
+			{ "setNewProjectile", sp::FieldKind::Value, AMMO_F(projectile) },
+			{ "addToFormList", sp::FieldKind::List, AMMO_F(formList) },
+			{ "keywordsToAdd", sp::FieldKind::List, AMMO_F(keywordsToAdd) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, AMMO_F(modNames) },
+			{ "fullName", sp::FieldKind::ValueTilde, AMMO_F(fullName) },
+			{ "value", sp::FieldKind::Value, AMMO_F(value) },
+			{ "valueMult", sp::FieldKind::Value, AMMO_F(valueMult) },
+			{ "weightMult", sp::FieldKind::Value, AMMO_F(weightMult) },
+			{ "model", sp::FieldKind::Value, AMMO_F(model) },
+			{ "alternateTexturesToAdd", sp::FieldKind::Arr2D, AMMO_F(alternateTextures) },
+			{ "alternateTexturesToRemove", sp::FieldKind::List, AMMO_F(alternateTexturesRemove) },
+			{ "alternateTexturesClear", sp::FieldKind::Value, AMMO_F(alternateTexturesClear) },
+			{ "filterByAlternateTextures", sp::FieldKind::List, AMMO_F(alternateTexturesFind) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, AMMO_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, AMMO_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, AMMO_F(filterByEditorIdContainsExcluded) },
+			{ "range", sp::FieldKind::Value, AMMO_F(range) },
+			{ "rangeMult", sp::FieldKind::Value, AMMO_F(rangeMult) },
+			{ "speed", sp::FieldKind::Value, AMMO_F(speed) },
+			{ "speedMult", sp::FieldKind::Value, AMMO_F(speedMult) },
+			{ "gravity", sp::FieldKind::Value, AMMO_F(gravity) },
+			{ "gravityMult", sp::FieldKind::Value, AMMO_F(gravityMult) },
+			{ "restrictToBolts", sp::FieldKind::Value, AMMO_F(restrictToBolts) },
+			{ "hasPlugins", sp::FieldKind::ListAssign, AMMO_F(hasPlugin) },
+			{ "hasPluginsOr", sp::FieldKind::ListAssign, AMMO_F(hasPluginOr) },
+			{ "setFlags", sp::FieldKind::ListAssign, AMMO_F(setFlags) },
+			{ "removeFlags", sp::FieldKind::ListAssign, AMMO_F(removeFlags) },
+		};
+
+#undef AMMO_F
+
+		const sp::KeyTable& ammoKeyTable()
+		{
+			static const sp::KeyTable table(kAmmoKeys, std::size(kAmmoKeys));
+			return table;
+		}
+	}
 
 	struct line_content create_patch_instruction_ammo(const std::string& line)
 	{
 		line_content l;
-
-		extractData(line, "filterByAmmos\\s*=([^:]+)", l.ammo);
-		extractData(line, "filterByAmmosExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractValueString(line, "filterByWeightLessThan\\s*=([^:]+)", l.weightLessThan);
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-
-		extractValueString(line, "attackDamage\\s*=([^:]+)", l.damage);
-		extractValueString(line, "attackDamageToAdd\\s*=([^:]+)", l.damageToAdd);
-
-		extractValueString(line, "attackDamageMult\\s*=([^:]+)", l.damageMult);
-
-
-		extractValueString(line, "setNewProjectile\\s*=([^:]+)", l.projectile);
-
-		extractData(line, "addToFormList\\s*=([^:]+)", l.formList);
-
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-
-		//extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-		extractValueString(line, "value\\s*=([^:]+)", l.value);
-		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
-		//extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
-
-		extractValueString(line, "model\\s*=([^:]+)", l.model);
-		extractToArr2D(line, "alternateTexturesToAdd\\s*=([^:]+)", l.alternateTextures);
-		extractData(line, "alternateTexturesToRemove\\s*=([^:]+)", l.alternateTexturesRemove);
-		extractValueString(line, "alternateTexturesClear\\s*=([^:]+)", l.alternateTexturesClear);
-		extractData(line, "filterByAlternateTextures\\s*=([^:]+)", l.alternateTexturesFind);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-		extractValueString(line, "range\\s*=([^:]+)", l.range);
-		extractValueString(line, "rangeMult\\s*=([^:]+)", l.rangeMult);
-		extractValueString(line, "speed\\s*=([^:]+)", l.speed);
-		extractValueString(line, "speedMult\\s*=([^:]+)", l.speedMult);
-		extractValueString(line, "gravity\\s*=([^:]+)", l.gravity);
-		extractValueString(line, "gravityMult\\s*=([^:]+)", l.gravityMult);
-		extractValueString(line, "restrictToBolts\\s*=([^:]+)", l.restrictToBolts);
-		extractDataStrings(line, "hasPlugins\\s*=([^:]+)", l.hasPlugin);
-		extractDataStrings(line, "hasPluginsOr\\s*=([^:]+)", l.hasPluginOr);
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-
+		ammoKeyTable().parse(line, &l);
 		return l;
 	}
 

@@ -1,7 +1,59 @@
 #include "leveledlist.h"
 #include "formfilter.h"
+#include "parsetable.h"
 namespace LEVELEDLIST
 {
+	// ==================================================================
+	// PHASE 2 -- leveledlist's key table. One row per upstream extract*()
+	// call, in the same order. See parsetable.h.
+	//
+	// "addTemplateKeywords" (-> templateKeyword) was originally a hand-rolled
+	// block rather than a literal extractToArr2D(...) call, but it performs
+	// the identical trim/split-on-','-then-'~' algorithm (see
+	// detail::applyArr2D) and already used regex::icase, matching Arr2D's
+	// case-insensitive derivation -- so it converts cleanly too.
+	//
+	// "noFilterLL" and "noFilterLLNPC" are NOT in this table: they are also
+	// hand-rolled extractValueString look-alikes, but each explicitly passes
+	// regex::icase, unlike the real extractValueString (which never does).
+	// FieldKind::Value derives case-sensitivity uniformly from the engine
+	// (case-sensitive), so mapping them to Value would silently flip their
+	// case-sensitivity. They stay on the old hand-written path, run after
+	// the table parse, in create_patch_instruction.
+	// ==================================================================
+	namespace
+	{
+#define LL_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
+		constexpr sp::KeySpec kLeveledListKeys[] = {
+			{ "filterByLLs", sp::FieldKind::List, LL_F(objects) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, LL_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, LL_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, LL_F(filterByEditorIdContainsExcluded) },
+			{ "filterByLLNPCs", sp::FieldKind::List, LL_F(containerObjects) },
+			{ "addToLLs", sp::FieldKind::Arr2D, LL_F(addedObjects) },
+			{ "addOnceToLLs", sp::FieldKind::Arr2D, LL_F(addedObjectsOnce) },
+			{ "removeFromLLs", sp::FieldKind::Arr2D, LL_F(removedObjects) },
+			{ "clear", sp::FieldKind::Value, LL_F(clear) },
+			{ "calcForLevel", sp::FieldKind::Value, LL_F(calcForLevel) },
+			{ "calcEachItem", sp::FieldKind::Value, LL_F(calcEachItem) },
+			{ "calcLevelAndEachItem", sp::FieldKind::Value, LL_F(calcForLevelAndEachItem) },
+			{ "calcUseAll", sp::FieldKind::Value, LL_F(calcUseAll) },
+			{ "clearFlags", sp::FieldKind::Value, LL_F(clearFlags) },
+			{ "addTemplateKeywords", sp::FieldKind::Arr2D, LL_F(templateKeyword) },
+			{ "removeObjectsByKeyword", sp::FieldKind::List, LL_F(removeItemsByKeyword) },
+			{ "chanceGlobal", sp::FieldKind::Value, LL_F(llglobal) },
+			{ "chanceNone", sp::FieldKind::Value, LL_F(chanceNone) },
+			{ "formsToReplace", sp::FieldKind::Arr2D, LL_F(replaceObjects) },
+			{ "objectMultCount", sp::FieldKind::Arr2D, LL_F(objectMultCount) },
+		};
+#undef LL_F
+
+		const sp::KeyTable& leveledListKeyTable()
+		{
+			static const sp::KeyTable table(kLeveledListKeys, std::size(kLeveledListKeys));
+			return table;
+		}
+	}
 
 	//void __fastcall TESLeveledList::FreeLeveledList(TESLeveledList* this)
 	//{
@@ -136,17 +188,14 @@ namespace LEVELEDLIST
 	struct line_content create_patch_instruction(const std::string& line)
 	{
 		line_content l;
+		leveledListKeyTable().parse(line, &l);
 
-
-
-
-		extractData(line, "filterByLLs\\s*=([^:]+)", l.objects);
-
-		// extract noFilterLL
+		// --- bespoke blocks the shared engine cannot express, left exactly
+		// as-is and run after the table parse. See the case-sensitivity note
+		// on the key table above for why these two cannot become Value rows.
 		std::regex  noFilterLL_regex("noFilterLL\\s*=([^:]+)", regex::icase);
 		std::smatch noFilterLLmatch;
 		std::regex_search(line, noFilterLLmatch, noFilterLL_regex);
-		// extract the value after the equals sign
 		if (noFilterLLmatch.empty() || noFilterLLmatch[1].str().empty()) {
 			l.noFilterLL = "none";
 		}
@@ -157,11 +206,9 @@ namespace LEVELEDLIST
 			l.noFilterLL = noFilterLLvalue;
 		}
 
-		// extract noFilterLLNPC
 		std::regex  noFilterLLNPC_regex("noFilterLLNPC\\s*=([^:]+)", regex::icase);
 		std::smatch noFilterLLNPCmatch;
 		std::regex_search(line, noFilterLLNPCmatch, noFilterLLNPC_regex);
-		// extract the value after the equals sign
 		if (noFilterLLNPCmatch.empty() || noFilterLLNPCmatch[1].str().empty()) {
 			l.noFilterLLNPC = "none";
 		}
@@ -171,82 +218,6 @@ namespace LEVELEDLIST
 			noFilterLLNPCvalue.erase(std::find_if_not(noFilterLLNPCvalue.rbegin(), noFilterLLNPCvalue.rend(), ::isspace).base(), noFilterLLNPCvalue.end());
 			l.noFilterLLNPC = noFilterLLNPCvalue;
 		}
-
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-
-
-		extractData(line, "filterByLLNPCs\\s*=([^:]+)", l.containerObjects);
-
-		extractToArr2D(line, "addToLLs\\s*=([^:]+)", l.addedObjects);
-		extractToArr2D(line, "addOnceToLLs\\s*=([^:]+)", l.addedObjectsOnce);
-
-		extractToArr2D(line, "removeFromLLs\\s*=([^:]+)", l.removedObjects);
-
-		extractValueString(line, "clear\\s*=([^:]+)", l.clear);
-
-		extractValueString(line, "calcForLevel\\s*=([^:]+)", l.calcForLevel);
-
-		extractValueString(line, "calcEachItem\\s*=([^:]+)", l.calcEachItem);
-
-		extractValueString(line, "calcLevelAndEachItem\\s*=([^:]+)", l.calcForLevelAndEachItem);
-
-		extractValueString(line, "calcUseAll\\s*=([^:]+)", l.calcUseAll);
-
-		extractValueString(line, "clearFlags\\s*=([^:]+)", l.clearFlags);
-
-
-		std::regex  templateKeyword_regex("addTemplateKeywords\\s*=([^:]+)", regex::icase);
-		std::smatch templateKeyword_match;
-		std::regex_search(line, templateKeyword_match, templateKeyword_regex);
-		std::vector<std::string> templateKeyword;
-		if (templateKeyword_match.empty() || templateKeyword_match[1].str().empty()) {
-			//empty
-		}
-		else {
-			std::string              valueLine = templateKeyword_match[1].str();
-			std::vector<std::string> arr;
-
-			// exclude the templateKeywordToLL= part from the first string
-			size_t      startPos = valueLine.find("=") + 1;
-			size_t      pos = 0;
-			std::string token;
-			while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
-				token = valueLine.substr(startPos, pos - startPos);
-				token = trim(token);  // remove leading and trailing white spaces
-				arr.push_back(token);
-				startPos = pos + 1;
-			}
-			token = valueLine.substr(startPos);
-			token = trim(token);  // remove leading and trailing white spaces
-			arr.push_back(token);
-
-			std::vector<std::vector<std::string>> arr2D(arr.size());
-
-			for (int i = 0; i < arr.size(); i++) {
-				std::vector<std::string> splitArr;
-				size_t                   innerPos = 0;
-				std::string              innerToken;
-				while ((innerPos = arr[i].find("~")) != std::string::npos) {
-					innerToken = arr[i].substr(0, innerPos);
-					innerToken = trim(innerToken);  // remove leading and trailing white spaces
-					splitArr.push_back(innerToken);
-					arr[i].erase(0, innerPos + 1);
-				}
-				innerToken = arr[i];
-				innerToken = trim(innerToken);  // remove leading and trailing white spaces
-				splitArr.push_back(innerToken);
-				arr2D[i] = splitArr;
-			}
-			l.templateKeyword = arr2D;
-		}
-
-		extractData(line, "removeObjectsByKeyword\\s*=([^:]+)", l.removeItemsByKeyword);
-		extractValueString(line, "chanceGlobal\\s*=([^:]+)", l.llglobal);
-		extractValueString(line, "chanceNone\\s*=([^:]+)", l.chanceNone);
-		extractToArr2D(line, "formsToReplace\\s*=([^:]+)", l.replaceObjects);
-		extractToArr2D(line, "objectMultCount\\s*=([^:]+)", l.objectMultCount);
 
 		return l;
 	}

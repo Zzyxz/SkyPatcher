@@ -1,5 +1,6 @@
 #include "spell.h"
 #include "formfilter.h"
+#include "parsetable.h"
 namespace SPELL
 {
 
@@ -14,49 +15,67 @@ namespace SPELL
 	{"noabsorb", RE::SpellItem::SpellFlag::kNoAbsorb},
 	{"nodualcastmods", RE::SpellItem::SpellFlag::kNoDualCastMods}
 	};
-	
+
+	// ==================================================================
+	// PHASE 2 -- SPELL's key table. One row per upstream extract*() call,
+	// in the same order. See parsetable.h.
+	// ==================================================================
+	namespace
+	{
+#define SPELL_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
+
+		constexpr sp::KeySpec kSpellKeys[] = {
+			{ "filterBySpells", sp::FieldKind::List, SPELL_F(objects) },
+			{ "filterByFlags", sp::FieldKind::List, SPELL_F(flagFilters) },
+			{ "filterByFlagsOr", sp::FieldKind::List, SPELL_F(flagFiltersOr) },
+			{ "filterByFlagsExcluded", sp::FieldKind::List, SPELL_F(flagFiltersExcluded) },
+			{ "filterByCastingPerk", sp::FieldKind::List, SPELL_F(filterByCastingPerk) },
+			{ "filterBySpellsExcluded", sp::FieldKind::List, SPELL_F(objectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, SPELL_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, SPELL_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, SPELL_F(keywordsExcluded) },
+			{ "filterByMgefs", sp::FieldKind::List, SPELL_F(mgefs) },
+			{ "filterByMgefsOr", sp::FieldKind::List, SPELL_F(mgefsOr) },
+			{ "filterByMgefsExcluded", sp::FieldKind::List, SPELL_F(mgefsExcluded) },
+			{ "keywordsToAdd", sp::FieldKind::List, SPELL_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, SPELL_F(keywordsToRemove) },
+			{ "mgefsToAdd", sp::FieldKind::Arr2D, SPELL_F(addedObjects) },
+			{ "mgefsToChange", sp::FieldKind::Arr2D, SPELL_F(changedObjects) },
+			{ "mgefsToChangeAdd", sp::FieldKind::Arr2D, SPELL_F(changedAddObjects) },
+			{ "mgefsToChangeFirst", sp::FieldKind::Arr2D, SPELL_F(changedFirstObjects) },
+			{ "mgefsToChangeDamageHealthEffects", sp::FieldKind::Arr2D, SPELL_F(changedDamageHealthObjects) },
+			{ "mgefsToRemove", sp::FieldKind::List, SPELL_F(removedObjects) },
+			{ "filterByType", sp::FieldKind::Value, SPELL_F(filterType) },
+			{ "baseCost", sp::FieldKind::Value, SPELL_F(baseCost) },
+			{ "halfCostPerk", sp::FieldKind::Value, SPELL_F(halfCostPerk) },
+			{ "chargeTime", sp::FieldKind::Value, SPELL_F(chargeTime) },
+			{ "castType", sp::FieldKind::Value, SPELL_F(castType) },
+			{ "equipSlot", sp::FieldKind::Value, SPELL_F(equipSlot) },
+			{ "setFlags", sp::FieldKind::ListAssign, SPELL_F(setFlags) },
+			{ "removeFlags", sp::FieldKind::ListAssign, SPELL_F(removeFlags) },
+			{ "clear", sp::FieldKind::Value, SPELL_F(clear) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, SPELL_F(modNames) },
+			{ "fullName", sp::FieldKind::ValueTilde, SPELL_F(fullName) },
+			{ "restrictToCastingType", sp::FieldKind::List, SPELL_F(restrictToCastingType) },
+			{ "restrictToSchool", sp::FieldKind::List, SPELL_F(restrictToSchool) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, SPELL_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, SPELL_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, SPELL_F(filterByEditorIdContainsExcluded) },
+		};
+
+#undef SPELL_F
+
+		const sp::KeyTable& spellKeyTable()
+		{
+			static const sp::KeyTable table(kSpellKeys, std::size(kSpellKeys));
+			return table;
+		}
+	}
+
 	struct line_content create_patch_instruction(const std::string& line)
 	{
 		line_content l;
-
-
-		extractData(line, "filterBySpells\\s*=([^:]+)", l.objects);
-		extractData(line, "filterByFlags\\s*=([^:]+)", l.flagFilters);
-		extractData(line, "filterByFlagsOr\\s*=([^:]+)", l.flagFiltersOr);
-		extractData(line, "filterByFlagsExcluded\\s*=([^:]+)", l.flagFiltersExcluded);
-		extractData(line, "filterByCastingPerk\\s*=([^:]+)", l.filterByCastingPerk);
-		extractData(line, "filterBySpellsExcluded\\s*=([^:]+)", l.objectExcluded);
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-		extractData(line, "filterByMgefs\\s*=([^:]+)", l.mgefs);
-		extractData(line, "filterByMgefsOr\\s*=([^:]+)", l.mgefsOr);
-		extractData(line, "filterByMgefsExcluded\\s*=([^:]+)", l.mgefsExcluded);
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-		extractToArr2D(line, "mgefsToAdd\\s*=([^:]+)", l.addedObjects);
-		extractToArr2D(line, "mgefsToChange\\s*=([^:]+)", l.changedObjects);
-		extractToArr2D(line, "mgefsToChangeAdd\\s*=([^:]+)", l.changedAddObjects);
-		extractToArr2D(line, "mgefsToChangeFirst\\s*=([^:]+)", l.changedFirstObjects);
-		extractToArr2D(line, "mgefsToChangeDamageHealthEffects\\s*=([^:]+)", l.changedDamageHealthObjects);
-		extractData(line, "mgefsToRemove\\s*=([^:]+)", l.removedObjects);
-
-		extractValueString(line, "filterByType\\s*=([^:]+)", l.filterType);
-		extractValueString(line, "baseCost\\s*=([^:]+)", l.baseCost);
-		extractValueString(line, "halfCostPerk\\s*=([^:]+)", l.halfCostPerk);
-		extractValueString(line, "chargeTime\\s*=([^:]+)", l.chargeTime);
-		extractValueString(line, "castType\\s*=([^:]+)", l.castType);
-		extractValueString(line, "equipSlot\\s*=([^:]+)", l.equipSlot);
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-		extractValueString(line, "clear\\s*=([^:]+)", l.clear);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-		extractData(line, "restrictToCastingType\\s*=([^:]+)", l.restrictToCastingType);
-		extractData(line, "restrictToSchool\\s*=([^:]+)", l.restrictToSchool);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
+		spellKeyTable().parse(line, &l);
 
 		//extractData(line, "filterByHalfCostPerk\\s*=([^:]+)", l.filterByHalfCostPerk);
 

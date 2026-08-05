@@ -1,113 +1,106 @@
 #include "cell.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace CELL
 {
 
+	// ======================================================================
+	// PHASE 2 -- CELL's key table. One row per upstream (active) extract*()
+	// call, in the same order. See parsetable.h.
+	//
+	// CAUTION: cell.cpp has NO golden-snapshot coverage (excluded from
+	// golden_dump by a pre-existing RE::ExtraCell* link gap -- see
+	// tools/check_golden.sh), so this conversion has no automated
+	// byte-identical check. It was converted anyway because every key here
+	// fits the plain "KEY\s*=([^:]+)" shape with no bespoke inline regex
+	// block and no anomalous pattern (unlike race.cpp's *Mult trio), so the
+	// table row is a mechanical, structurally exact transcription of each
+	// extractData / extractValueString / extractDataStrings call -- but this
+	// file should get extra manual review before merge, precisely because
+	// nothing here can prove it.
+	// ======================================================================
+	namespace
+	{
+#define CELL_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kCellKeys[] = {
+			{ "filterByCells", sp::FieldKind::List, CELL_F(object) },
+			{ "filterByCellsExcluded", sp::FieldKind::List, CELL_F(objectExcluded) },
+			{ "fogNear", sp::FieldKind::Value, CELL_F(fogNear) },
+			{ "fogFar", sp::FieldKind::Value, CELL_F(fogFar) },
+			{ "fogPower", sp::FieldKind::Value, CELL_F(fogPower) },
+			{ "clipDist", sp::FieldKind::Value, CELL_F(clipDist) },
+			{ "ambientRed", sp::FieldKind::Value, CELL_F(ambientRed) },
+			{ "ambientGreen", sp::FieldKind::Value, CELL_F(ambientGreen) },
+			{ "ambientBlue", sp::FieldKind::Value, CELL_F(ambientBlue) },
+			{ "directionalRed", sp::FieldKind::Value, CELL_F(directionalRed) },
+			{ "directionalGreen", sp::FieldKind::Value, CELL_F(directionalGreen) },
+			{ "directionalBlue", sp::FieldKind::Value, CELL_F(directionalBlue) },
+			{ "fogColorNearRed", sp::FieldKind::Value, CELL_F(fogColorNearRed) },
+			{ "fogColorNearGreen", sp::FieldKind::Value, CELL_F(fogColorNearGreen) },
+			{ "fogColorNearBlue", sp::FieldKind::Value, CELL_F(fogColorNearBlue) },
+			// X
+			{ "directionalAmbientXMinRed", sp::FieldKind::Value, CELL_F(directionalAmbientXMinRed) },
+			{ "directionalAmbientXMinGreen", sp::FieldKind::Value, CELL_F(directionalAmbientXMinGreen) },
+			{ "directionalAmbientXMinBlue", sp::FieldKind::Value, CELL_F(directionalAmbientXMinBlue) },
+			{ "directionalAmbientXMaxRed", sp::FieldKind::Value, CELL_F(directionalAmbientXMaxRed) },
+			{ "directionalAmbientXMaxGreen", sp::FieldKind::Value, CELL_F(directionalAmbientXMaxGreen) },
+			{ "directionalAmbientXMaxBlue", sp::FieldKind::Value, CELL_F(directionalAmbientXMaxBlue) },
+			// Y
+			{ "directionalAmbientYMinRed", sp::FieldKind::Value, CELL_F(directionalAmbientYMinRed) },
+			{ "directionalAmbientYMinGreen", sp::FieldKind::Value, CELL_F(directionalAmbientYMinGreen) },
+			{ "directionalAmbientYMinBlue", sp::FieldKind::Value, CELL_F(directionalAmbientYMinBlue) },
+			{ "directionalAmbientYMaxRed", sp::FieldKind::Value, CELL_F(directionalAmbientYMaxRed) },
+			{ "directionalAmbientYMaxGreen", sp::FieldKind::Value, CELL_F(directionalAmbientYMaxGreen) },
+			{ "directionalAmbientYMaxBlue", sp::FieldKind::Value, CELL_F(directionalAmbientYMaxBlue) },
+			// Z
+			{ "directionalAmbientZMinRed", sp::FieldKind::Value, CELL_F(directionalAmbientZMinRed) },
+			{ "directionalAmbientZMinGreen", sp::FieldKind::Value, CELL_F(directionalAmbientZMinGreen) },
+			{ "directionalAmbientZMinBlue", sp::FieldKind::Value, CELL_F(directionalAmbientZMinBlue) },
+			{ "directionalAmbientZMaxRed", sp::FieldKind::Value, CELL_F(directionalAmbientZMaxRed) },
+			{ "directionalAmbientZMaxGreen", sp::FieldKind::Value, CELL_F(directionalAmbientZMaxGreen) },
+			{ "directionalAmbientZMaxBlue", sp::FieldKind::Value, CELL_F(directionalAmbientZMaxBlue) },
+			{ "directionalAmbientSpecularRed", sp::FieldKind::Value, CELL_F(directionalAmbientSpecularRed) },
+			{ "directionalAmbientSpecularGreen", sp::FieldKind::Value, CELL_F(directionalAmbientSpecularGreen) },
+			{ "directionalAmbientSpecularBlue", sp::FieldKind::Value, CELL_F(directionalAmbientSpecularBlue) },
+			{ "setInheritanceFlags", sp::FieldKind::ListAssign, CELL_F(setInheritanceFlags) },
+			{ "removeInheritanceFlags", sp::FieldKind::ListAssign, CELL_F(removeInheritanceFlags) },
+			{ "setCellFlags", sp::FieldKind::ListAssign, CELL_F(setCellFlags) },
+			{ "removeCellFlags", sp::FieldKind::ListAssign, CELL_F(removeCellFlags) },
+			{ "lightingTemplate", sp::FieldKind::Value, CELL_F(lightingTemplate) },
+			{ "skipRecordByLightingTemplateFromMod", sp::FieldKind::ListAssign, CELL_F(skipLT) },
+			{ "skipRecordByModNameContains", sp::FieldKind::ListAssign, CELL_F(skipByModContains) },
+			{ "acousticSpace", sp::FieldKind::Value, CELL_F(acousticSpace) },
+			{ "musicType", sp::FieldKind::Value, CELL_F(musicType) },
+			{ "skyRegion", sp::FieldKind::Value, CELL_F(skyRegion) },
+			{ "imageSpace", sp::FieldKind::Value, CELL_F(imageSpace) },
+			{ "filterByAcousticSpace", sp::FieldKind::List, CELL_F(filterByAcousticSpace) },
+			{ "filterByMusicType", sp::FieldKind::List, CELL_F(filterByMusicType) },
+			{ "filterBySkyRegion", sp::FieldKind::List, CELL_F(filterBySkyRegion) },
+			{ "filterByImageSpace", sp::FieldKind::List, CELL_F(filterByImageSpace) },
+			{ "encounterZone", sp::FieldKind::Value, CELL_F(encounterZone) },
+			{ "waterHeight", sp::FieldKind::Value, CELL_F(waterHeight) },
+			{ "waterType", sp::FieldKind::Value, CELL_F(waterType) },
+			{ "fullName", sp::FieldKind::ValueTilde, CELL_F(fullName) },
+			{ "directionalXY", sp::FieldKind::Value, CELL_F(directionalXY) },
+			{ "directionalZ", sp::FieldKind::Value, CELL_F(directionalZ) },
+		};
+
+#undef CELL_F
+
+		const sp::KeyTable& cellKeyTable()
+		{
+			static const sp::KeyTable table(kCellKeys, std::size(kCellKeys));
+			return table;
+		}
+	}
+
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-
-		// extract objects
-		//std::regex  objects_regex("filterByCells\\s*=([^:]+)", regex::icase);
-		//std::smatch objects_match;
-		//std::regex_search(line, objects_match, objects_regex);
-		//std::vector<std::string> objects;
-		//if (objects_match.empty() || objects_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objects_str = objects_match[1];
-		//	std::regex           objects_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objects_iterator(objects_str.begin(), objects_str.end(), objects_list_regex);
-		//	std::sregex_iterator objects_end;
-		//	while (objects_iterator != objects_end) {
-		//		std::string tempVar = (*objects_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Weapon String: {}"), tempVar);
-		//		if (tempVar != "none") {
-		//			objects.push_back(tempVar);
-		//		}
-		//		++objects_iterator;
-		//	}
-		//	l.object = objects;
-		//}
-
-		extractData(line, "filterByCells\\s*=([^:]+)", l.object);
-		extractData(line, "filterByCellsExcluded\\s*=([^:]+)", l.objectExcluded);
-		extractValueString(line, "fogNear\\s*=([^:]+)", l.fogNear);
-		extractValueString(line, "fogFar\\s*=([^:]+)", l.fogFar);
-		extractValueString(line, "fogPower\\s*=([^:]+)", l.fogPower);
-		extractValueString(line, "clipDist\\s*=([^:]+)", l.clipDist);
-
-		extractValueString(line, "ambientRed\\s*=([^:]+)", l.ambientRed);
-		extractValueString(line, "ambientGreen\\s*=([^:]+)", l.ambientGreen);
-		extractValueString(line, "ambientBlue\\s*=([^:]+)", l.ambientBlue);
-
-		extractValueString(line, "directionalRed\\s*=([^:]+)", l.directionalRed);
-		extractValueString(line, "directionalGreen\\s*=([^:]+)", l.directionalGreen);
-		extractValueString(line, "directionalBlue\\s*=([^:]+)", l.directionalBlue);
-
-		extractValueString(line, "fogColorNearRed\\s*=([^:]+)", l.fogColorNearRed);
-		extractValueString(line, "fogColorNearGreen\\s*=([^:]+)", l.fogColorNearGreen);
-		extractValueString(line, "fogColorNearBlue\\s*=([^:]+)", l.fogColorNearBlue);
-
-		// X
-		extractValueString(line, "directionalAmbientXMinRed\\s*=([^:]+)", l.directionalAmbientXMinRed);
-		extractValueString(line, "directionalAmbientXMinGreen\\s*=([^:]+)", l.directionalAmbientXMinGreen);
-		extractValueString(line, "directionalAmbientXMinBlue\\s*=([^:]+)", l.directionalAmbientXMinBlue);
-		extractValueString(line, "directionalAmbientXMaxRed\\s*=([^:]+)", l.directionalAmbientXMaxRed);
-		extractValueString(line, "directionalAmbientXMaxGreen\\s*=([^:]+)", l.directionalAmbientXMaxGreen);
-		extractValueString(line, "directionalAmbientXMaxBlue\\s*=([^:]+)", l.directionalAmbientXMaxBlue);
-
-		// Y
-		extractValueString(line, "directionalAmbientYMinRed\\s*=([^:]+)", l.directionalAmbientYMinRed);
-		extractValueString(line, "directionalAmbientYMinGreen\\s*=([^:]+)", l.directionalAmbientYMinGreen);
-		extractValueString(line, "directionalAmbientYMinBlue\\s*=([^:]+)", l.directionalAmbientYMinBlue);
-		extractValueString(line, "directionalAmbientYMaxRed\\s*=([^:]+)", l.directionalAmbientYMaxRed);
-		extractValueString(line, "directionalAmbientYMaxGreen\\s*=([^:]+)", l.directionalAmbientYMaxGreen);
-		extractValueString(line, "directionalAmbientYMaxBlue\\s*=([^:]+)", l.directionalAmbientYMaxBlue);
-
-		// Z
-		extractValueString(line, "directionalAmbientZMinRed\\s*=([^:]+)", l.directionalAmbientZMinRed);
-		extractValueString(line, "directionalAmbientZMinGreen\\s*=([^:]+)", l.directionalAmbientZMinGreen);
-		extractValueString(line, "directionalAmbientZMinBlue\\s*=([^:]+)", l.directionalAmbientZMinBlue);
-		extractValueString(line, "directionalAmbientZMaxRed\\s*=([^:]+)", l.directionalAmbientZMaxRed);
-		extractValueString(line, "directionalAmbientZMaxGreen\\s*=([^:]+)", l.directionalAmbientZMaxGreen);
-		extractValueString(line, "directionalAmbientZMaxBlue\\s*=([^:]+)", l.directionalAmbientZMaxBlue);
-
-		extractValueString(line, "directionalAmbientSpecularRed\\s*=([^:]+)", l.directionalAmbientSpecularRed);
-		extractValueString(line, "directionalAmbientSpecularGreen\\s*=([^:]+)", l.directionalAmbientSpecularGreen);
-		extractValueString(line, "directionalAmbientSpecularBlue\\s*=([^:]+)", l.directionalAmbientSpecularBlue);
-
-		extractDataStrings(line, "setInheritanceFlags\\s*=([^:]+)", l.setInheritanceFlags);
-		extractDataStrings(line, "removeInheritanceFlags\\s*=([^:]+)", l.removeInheritanceFlags);
-
-		extractDataStrings(line, "setCellFlags\\s*=([^:]+)", l.setCellFlags);
-		extractDataStrings(line, "removeCellFlags\\s*=([^:]+)", l.removeCellFlags);
-
-		extractValueString(line, "lightingTemplate\\s*=([^:]+)", l.lightingTemplate);
-
-		extractDataStrings(line, "skipRecordByLightingTemplateFromMod\\s*=([^:]+)", l.skipLT);
-		extractDataStrings(line, "skipRecordByModNameContains\\s*=([^:]+)", l.skipByModContains);
-
-		extractValueString(line, "acousticSpace\\s*=([^:]+)", l.acousticSpace);
-		extractValueString(line, "musicType\\s*=([^:]+)", l.musicType);
-		extractValueString(line, "skyRegion\\s*=([^:]+)", l.skyRegion);
-		extractValueString(line, "imageSpace\\s*=([^:]+)", l.imageSpace);
-
-		extractData(line, "filterByAcousticSpace\\s*=([^:]+)", l.filterByAcousticSpace);
-		extractData(line, "filterByMusicType\\s*=([^:]+)", l.filterByMusicType);
-		extractData(line, "filterBySkyRegion\\s*=([^:]+)", l.filterBySkyRegion);
-		extractData(line, "filterByImageSpace\\s*=([^:]+)", l.filterByImageSpace);
-		extractValueString(line, "encounterZone\\s*=([^:]+)", l.encounterZone);
-		extractValueString(line, "waterHeight\\s*=([^:]+)", l.waterHeight);
-		extractValueString(line, "waterType\\s*=([^:]+)", l.waterType);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-
-		extractValueString(line, "directionalXY\\s*=([^:]+)", l.directionalXY);
-		extractValueString(line, "directionalZ\\s*=([^:]+)", l.directionalZ);
+		cellKeyTable().parse(line, &l);
 
 		//extractValueString(line, "waterEnvMap\\s*=([^:]+)", l.waterEnvMap);
 

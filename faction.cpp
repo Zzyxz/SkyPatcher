@@ -1,77 +1,39 @@
 #include "faction.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace FACTION
 {
+	// ==================================================================
+	// PHASE 2 -- FACTION's key table. One row per upstream extract*()
+	// call, in the same order. See parsetable.h.
+	// ==================================================================
+	namespace
+	{
+#define FACTION_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kFactionKeys[] = {
+			{ "filterByFactions", sp::FieldKind::List, FACTION_F(object) },
+			{ "filterByFactionsExcluded", sp::FieldKind::List, FACTION_F(objectExcluded) },
+			{ "setFlags", sp::FieldKind::ListAssign, FACTION_F(setFlags) },
+			{ "removeFlags", sp::FieldKind::ListAssign, FACTION_F(removeFlags) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, FACTION_F(modNames) },
+		};
+
+#undef FACTION_F
+
+		const sp::KeyTable& factionKeyTable()
+		{
+			static const sp::KeyTable table(kFactionKeys, std::size(kFactionKeys));
+			return table;
+		}
+	}
 
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-
-		
-		//// extract objects
-		//std::regex  objects_regex("filterByFactions\\s*=([^:]+)", regex::icase);
-		//std::smatch objects_match;
-		//std::regex_search(line, objects_match, objects_regex);
-		//std::vector<std::string> objects;
-		//if (objects_match.empty() || objects_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objects_str = objects_match[1];
-		//	std::regex           objects_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objects_iterator(objects_str.begin(), objects_str.end(), objects_list_regex);
-		//	std::sregex_iterator objects_end;
-		//	while (objects_iterator != objects_end) {
-		//		std::string tempVar = (*objects_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Projectile String: {}"), tempVar);
-		//		if (tempVar != "none") {
-		//			objects.push_back(tempVar);
-		//		}
-		//		++objects_iterator;
-		//	}
-		//	l.object = objects;
-		//}
-
-		extractData(line, "filterByFactions\\s*=([^:]+)", l.object);
-
-
-		//// extract objectsExcluded
-		//std::regex  objectsExcluded_regex("filterByFactionsExcluded\\s*=([^:]+)", regex::icase);
-		//std::smatch objectsExcluded_match;
-		//std::regex_search(line, objectsExcluded_match, objectsExcluded_regex);
-		//std::vector<std::string> objectsExcluded;
-		//if (objectsExcluded_match.empty() || objectsExcluded_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objectsExcluded_str = objectsExcluded_match[1];
-		//	std::regex           objectsExcluded_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objectsExcluded_iterator(objectsExcluded_str.begin(), objectsExcluded_str.end(), objectsExcluded_list_regex);
-		//	std::sregex_iterator objectsExcluded_end;
-		//	while (objectsExcluded_iterator != objectsExcluded_end) {
-		//		std::string tempVar = (*objectsExcluded_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Race: {}"), race);
-		//		if (tempVar != "none") {
-		//			objectsExcluded.push_back(tempVar);
-		//		}
-		//		++objectsExcluded_iterator;
-		//	}
-		//	l.objectExcluded = objectsExcluded;
-		//}
-
-		extractData(line, "filterByFactionsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-
-		
-
-
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
+		factionKeyTable().parse(line, &l);
 		return l;
 	}  //endStruct
 

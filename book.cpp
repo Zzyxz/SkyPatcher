@@ -1,61 +1,72 @@
 #include "book.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace BOOK
 {
+	// ==================================================================
+	// PHASE 2 -- BOOK's key table. One row per upstream extract*() call,
+	// in the same order. See parsetable.h.
+	// ==================================================================
+	namespace
+	{
+#define BOOK_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kBookKeys[] = {
+			{ "filterByBooks", sp::FieldKind::List, BOOK_F(object) },
+			{ "filterByBooksExcluded", sp::FieldKind::List, BOOK_F(objectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, BOOK_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, BOOK_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, BOOK_F(keywordsExcluded) },
+			{ "filterBySpellKeywordsOr", sp::FieldKind::List, BOOK_F(filterBySpellKeywordsOr) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, BOOK_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, BOOK_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, BOOK_F(filterByEditorIdContainsExcluded) },
+			{ "filterByFlags", sp::FieldKind::ListAssign, BOOK_F(filterByFlags) },
+			{ "value", sp::FieldKind::Value, BOOK_F(value) },
+			{ "valueMult", sp::FieldKind::Value, BOOK_F(valueMult) },
+			{ "weight", sp::FieldKind::Value, BOOK_F(weight) },
+			{ "weightMult", sp::FieldKind::Value, BOOK_F(weightMult) },
+			{ "teachSpell", sp::FieldKind::Value, BOOK_F(teachSpell) },
+			{ "teachSkill", sp::FieldKind::Value, BOOK_F(teachSkill) },
+			{ "type", sp::FieldKind::Value, BOOK_F(type) },
+			{ "keywordsToAdd", sp::FieldKind::List, BOOK_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, BOOK_F(keywordsToRemove) },
+			{ "setFlags", sp::FieldKind::ListAssign, BOOK_F(setFlags) },
+			{ "removeFlags", sp::FieldKind::ListAssign, BOOK_F(removeFlags) },
+			{ "pickUpSound", sp::FieldKind::Value, BOOK_F(pickUpSound) },
+			{ "putDownSound", sp::FieldKind::Value, BOOK_F(putDownSound) },
+			{ "fullName", sp::FieldKind::ValueTilde, BOOK_F(fullName) },
+			{ "inventoryArt", sp::FieldKind::Value, BOOK_F(inventoryArt) },
+			{ "model", sp::FieldKind::Value, BOOK_F(model) },
+			{ "alternateTexturesToAdd", sp::FieldKind::Arr2D, BOOK_F(alternateTextures) },
+			{ "alternateTexturesToRemove", sp::FieldKind::List, BOOK_F(alternateTexturesRemove) },
+			{ "alternateTexturesClear", sp::FieldKind::Value, BOOK_F(alternateTexturesClear) },
+			{ "filterByAlternateTextures", sp::FieldKind::List, BOOK_F(alternateTexturesFind) },
+			{ "minX", sp::FieldKind::Value, BOOK_F(minX) },
+			{ "minY", sp::FieldKind::Value, BOOK_F(minY) },
+			{ "minZ", sp::FieldKind::Value, BOOK_F(minZ) },
+			{ "maxX", sp::FieldKind::Value, BOOK_F(maxX) },
+			{ "maxY", sp::FieldKind::Value, BOOK_F(maxY) },
+			{ "maxZ", sp::FieldKind::Value, BOOK_F(maxZ) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, BOOK_F(modNames) },
+			{ "filterByCastingPerk", sp::FieldKind::List, BOOK_F(filterByCastingPerk) },
+		};
+
+#undef BOOK_F
+
+		const sp::KeyTable& bookKeyTable()
+		{
+			static const sp::KeyTable table(kBookKeys, std::size(kBookKeys));
+			return table;
+		}
+	}
 
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-
-		extractData(line, "filterByBooks\\s*=([^:]+)", l.object);
-
-		extractData(line, "filterByBooksExcluded\\s*=([^:]+)", l.objectExcluded);
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-		extractData(line, "filterBySpellKeywordsOr\\s*=([^:]+)", l.filterBySpellKeywordsOr);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-		extractDataStrings(line, "filterByFlags\\s*=([^:]+)", l.filterByFlags);
-		extractValueString(line, "value\\s*=([^:]+)", l.value);
-		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
-		extractValueString(line, "teachSpell\\s*=([^:]+)", l.teachSpell);
-		extractValueString(line, "teachSkill\\s*=([^:]+)", l.teachSkill);
-		extractValueString(line, "type\\s*=([^:]+)", l.type);
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-		extractValueString(line, "pickUpSound\\s*=([^:]+)", l.pickUpSound);
-		extractValueString(line, "putDownSound\\s*=([^:]+)", l.putDownSound);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-		
-		extractValueString(line, "inventoryArt\\s*=([^:]+)", l.inventoryArt);
-		extractValueString(line, "model\\s*=([^:]+)", l.model);
-		extractToArr2D(line, "alternateTexturesToAdd\\s*=([^:]+)", l.alternateTextures);
-		extractData(line, "alternateTexturesToRemove\\s*=([^:]+)", l.alternateTexturesRemove);
-		extractValueString(line, "alternateTexturesClear\\s*=([^:]+)", l.alternateTexturesClear);
-		extractData(line, "filterByAlternateTextures\\s*=([^:]+)", l.alternateTexturesFind);
-
-		extractValueString(line, "minX\\s*=([^:]+)", l.minX);
-		extractValueString(line, "minY\\s*=([^:]+)", l.minY);
-		extractValueString(line, "minZ\\s*=([^:]+)", l.minZ);
-		extractValueString(line, "maxX\\s*=([^:]+)", l.maxX);
-		extractValueString(line, "maxY\\s*=([^:]+)", l.maxY);
-		extractValueString(line, "maxZ\\s*=([^:]+)", l.maxZ);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractData(line, "filterByCastingPerk\\s*=([^:]+)", l.filterByCastingPerk);
-
-		//extractValueString(line, "speed\\s *= ([^:] +)", l.speed);
-
-		//extractValueString(line, "speed\\s*=([^:]+)", l.speed);
-		//extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-
+		bookKeyTable().parse(line, &l);
 		return l;
 	}  //endStruct
 

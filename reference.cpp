@@ -1,4 +1,5 @@
 #include "reference.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace REFERENCE
@@ -6,17 +7,34 @@ namespace REFERENCE
 
 	RefrData rData;
 
+	// ==================================================================
+	// PHASE 2 -- REFERENCE's key table. One row per upstream extract*()
+	// call, in the same order. See parsetable.h.
+	// ==================================================================
+	namespace
+	{
+#define REFR_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kReferenceKeys[] = {
+			{ "filterByRefs", sp::FieldKind::List, REFR_F(objects) },
+			{ "filterByRefsExcluded", sp::FieldKind::List, REFR_F(objectExcluded) },
+			{ "replaceBaseObject", sp::FieldKind::Value, REFR_F(baseobject) },
+			{ "disable", sp::FieldKind::Value, REFR_F(disable) },
+		};
+
+#undef REFR_F
+
+		const sp::KeyTable& referenceKeyTable()
+		{
+			static const sp::KeyTable table(kReferenceKeys, std::size(kReferenceKeys));
+			return table;
+		}
+	}
+
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-
-		
-
-		extractData(line, "filterByRefs\\s*=([^:]+)", l.objects);
-		extractData(line, "filterByRefsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractValueString(line, "replaceBaseObject\\s*=([^:]+)", l.baseobject);
-		extractValueString(line, "disable\\s*=([^:]+)", l.disable);
+		referenceKeyTable().parse(line, &l);
 		return l;
 	}  //endStruct
 

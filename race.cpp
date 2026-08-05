@@ -1,148 +1,72 @@
 #include "race.h"
 #include "formfilter.h"
+#include "parsetable.h"
 
 namespace RACE
 {
-	
+
 	std::list<patch_instruction> hooktokens;
+
+	// ======================================================================
+	// PHASE 2 -- RACE's two key tables (create_patch_instruction_hook and
+	// create_patch_instruction both build the same `patch_instruction`, but
+	// with different call lists, so each gets its own table). One row per
+	// upstream (active) extract*() call / bespoke block, in the same order.
+	// See parsetable.h.
+	//
+	// "attackDataToAdd" / "attackDataToChange" in the hook table: the
+	// upstream inline block (comma x '~' x '=' grid, trimmed with
+	// utility::trim -- SPACES only, matching parsetable.h's trimSpaces) is
+	// byte-for-byte parsetable.h's detail::applyAttackData3D, so
+	// FieldKind::AttackData3D is exact, not an approximation.
+	//
+	// "changeStats" in the main table: the upstream inline "avifs" block
+	// uses the pattern
+	//   ([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\s*=\s*([\d.]+)(?:\s*~\s*([\d.]+))?
+	// which is character-for-character detail::factionRankRegex() (the same
+	// regex NPC's factionsToAdd uses), applied to the same
+	// (names, lo, hi) triple shape, including the "none" first-name break.
+	// FieldKind::FactionRanks is therefore exact here too.
+	//
+	// NOT converted: "startingHealthMult" / "startingStaminaMult" /
+	// "startingMagickaMult". Upstream's patterns are
+	// "KEY\s*= ([^:]+)" -- note the LITERAL SPACE between '=' and the
+	// capture group, which every other Value key omits. That requires a
+	// literal space immediately after '=' in the config line itself (e.g.
+	// "startingHealthMult= 5" matches but "startingHealthMult=5" does not,
+	// leaving the field "none"), which is not the "KEY\s*=([^:]+)" shape
+	// parsetable.h's FieldKind::Value assumes (see parsetable.h's exactness
+	// argument, property 1). Left on the original extractValueString calls
+	// below, appended after the table parse.
+	// ======================================================================
+	namespace
+	{
+#define RACEHOOK_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kRaceHookKeys[] = {
+			{ "filterByRaces", sp::FieldKind::List, RACEHOOK_F(object) },
+			{ "filterByRacesExcluded", sp::FieldKind::List, RACEHOOK_F(objectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, RACEHOOK_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, RACEHOOK_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, RACEHOOK_F(keywordsExcluded) },
+			{ "attackDataToAdd", sp::FieldKind::AttackData3D, RACEHOOK_F(addedObjects) },
+			{ "attackDataToChange", sp::FieldKind::AttackData3D, RACEHOOK_F(attackDataToChange) },
+			{ "attackDataToRemove", sp::FieldKind::ListAssign, RACEHOOK_F(removeAttackData) },
+		};
+
+#undef RACEHOOK_F
+
+		const sp::KeyTable& raceHookKeyTable()
+		{
+			static const sp::KeyTable table(kRaceHookKeys, std::size(kRaceHookKeys));
+			return table;
+		}
+	}
 
 	struct patch_instruction create_patch_instruction_hook(const std::string& line)
 	{
 		patch_instruction hookl;
-		extractData(line, "filterByRaces\\s*=([^:]+)", hookl.object);
-
-		extractData(line, "filterByRacesExcluded\\s*=([^:]+)", hookl.objectExcluded);
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", hookl.keywords);
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", hookl.keywordsOr);
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", hookl.keywordsExcluded);
-
-		std::regex  add_regex("attackDataToAdd\\s*=([^:]+)", regex::icase);
-		std::smatch add_match;
-		std::regex_search(line, add_match, add_regex);
-		std::vector<std::string> add;
-		if (add_match.empty() || add_match[1].str().empty()) {
-			// empty
-		} else {
-			std::string                                        valueLine = add_match[1].str();
-			std::vector<std::vector<std::vector<std::string>>> arr3D;
-
-			// Split the input string by commas
-			std::vector<std::string> sections;
-			size_t                   startPos = 0;
-			size_t                   pos = 0;
-			while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
-				sections.push_back(valueLine.substr(startPos, pos - startPos));
-				startPos = pos + 1;
-			}
-			sections.push_back(valueLine.substr(startPos));
-
-			for (const auto& section : sections) {
-				std::vector<std::string> arr;
-
-				// exclude the addToLL= part from the first string
-				startPos = 0;
-				pos = 0;
-				std::string token;
-				while ((pos = section.find("~", startPos)) != std::string::npos) {
-					token = section.substr(startPos, pos - startPos);
-					token = trim(token);  // remove leading and trailing white spaces
-					arr.push_back(token);
-					startPos = pos + 1;
-				}
-				token = section.substr(startPos);
-				token = trim(token);  // remove leading and trailing white spaces
-				arr.push_back(token);
-
-				std::vector<std::vector<std::string>> arr2D(arr.size());
-
-				for (int i = 0; i < arr.size(); i++) {
-					std::vector<std::string> splitArr;
-					size_t                   innerPos = 0;
-					std::string              innerToken;
-					while ((innerPos = arr[i].find("=")) != std::string::npos) {
-						innerToken = arr[i].substr(0, innerPos);
-						innerToken = trim(innerToken);  // remove leading and trailing white spaces
-						splitArr.push_back(innerToken);
-						arr[i].erase(0, innerPos + 1);
-					}
-					innerToken = arr[i];
-					innerToken = trim(innerToken);  // remove leading and trailing white spaces
-					splitArr.push_back(innerToken);
-					arr2D[i] = splitArr;
-				}
-
-				arr3D.push_back(arr2D);
-			}
-
-			hookl.addedObjects = arr3D;
-		}
-
-		std::regex  change_regex("attackDataToChange\\s*=([^:]+)", regex::icase);
-		std::smatch change_match;
-		std::regex_search(line, change_match, change_regex);
-		std::vector<std::string> change;
-		if (change_match.empty() || change_match[1].str().empty()) {
-			// empty
-		} else {
-			std::string                                        valueLine = change_match[1].str();
-			std::vector<std::vector<std::vector<std::string>>> arr3D;
-
-			// Split the input string by commas
-			std::vector<std::string> sections;
-			size_t                   startPos = 0;
-			size_t                   pos = 0;
-			while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
-				sections.push_back(valueLine.substr(startPos, pos - startPos));
-				startPos = pos + 1;
-			}
-			sections.push_back(valueLine.substr(startPos));
-
-			for (const auto& section : sections) {
-				std::vector<std::string> arr;
-
-				// exclude the changeToLL= part from the first string
-				startPos = 0;
-				pos = 0;
-				std::string token;
-				while ((pos = section.find("~", startPos)) != std::string::npos) {
-					token = section.substr(startPos, pos - startPos);
-					token = trim(token);  // remove leading and trailing white spaces
-					arr.push_back(token);
-					startPos = pos + 1;
-				}
-				token = section.substr(startPos);
-				token = trim(token);  // remove leading and trailing white spaces
-				arr.push_back(token);
-
-				std::vector<std::vector<std::string>> arr2D(arr.size());
-
-				for (int i = 0; i < arr.size(); i++) {
-					std::vector<std::string> splitArr;
-					size_t                   innerPos = 0;
-					std::string              innerToken;
-					while ((innerPos = arr[i].find("=")) != std::string::npos) {
-						innerToken = arr[i].substr(0, innerPos);
-						innerToken = trim(innerToken);  // remove leading and trailing white spaces
-						splitArr.push_back(innerToken);
-						arr[i].erase(0, innerPos + 1);
-					}
-					innerToken = arr[i];
-					innerToken = trim(innerToken);  // remove leading and trailing white spaces
-					splitArr.push_back(innerToken);
-					arr2D[i] = splitArr;
-				}
-
-				arr3D.push_back(arr2D);
-			}
-
-			hookl.attackDataToChange = arr3D;
-		}
-
-		extractDataStrings(line, "attackDataToRemove\\s*=([^:]+)", hookl.removeAttackData);
-		//extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
+		raceHookKeyTable().parse(line, &hookl);
 		//logger::debug(FMT_STRING("races: {}  keywords: {}  avifs: {} keywordsToAdd: {} spellsToAdd {}"), l.object.size(), l.keywords.size(), l.avifs.size(), l.keywordsToAdd.size(), l.spellsToAdd.size());
 		//logger::info("returning patch instructions");
 		return hookl;
@@ -151,212 +75,86 @@ namespace RACE
 	//
 	//
 	//
+	namespace
+	{
+#define RACE_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kRaceKeys[] = {
+			{ "filterByRaces", sp::FieldKind::List, RACE_F(object) },
+			{ "filterByRacesExcluded", sp::FieldKind::List, RACE_F(objectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, RACE_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, RACE_F(keywordsOr) },
+			{ "filterByVoiceTypeOr", sp::FieldKind::List, RACE_F(filterByVoiceTypeOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, RACE_F(keywordsExcluded) },
+			{ "changeStats", sp::FieldKind::FactionRanks, RACE_F(avifs), RACE_F(values1), RACE_F(values2) },
+			{ "keywordsToAdd", sp::FieldKind::List, RACE_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, RACE_F(keywordsToRemove) },
+			{ "filterByMaleModelContains", sp::FieldKind::ListAssign, RACE_F(filterByMaleModelContains) },
+			{ "filterByFemaleModelContains", sp::FieldKind::ListAssign, RACE_F(filterByFemaleModelContains) },
+			{ "keywordToAddIfKeywordsEIDDoesNotContain", sp::FieldKind::Arr2D, RACE_F(keywordsToAddIfKeywordsEIDDoNotContain) },
+			{ "spellsToAdd", sp::FieldKind::List, RACE_F(spellsToAdd) },
+			{ "spellsToRemove", sp::FieldKind::List, RACE_F(spellsToRemove) },
+			{ "shoutsToAdd", sp::FieldKind::List, RACE_F(shoutsToAdd) },
+			{ "shoutsToRemove", sp::FieldKind::List, RACE_F(shoutsToRemove) },
+			{ "levSpellsToAdd", sp::FieldKind::List, RACE_F(levSpellsToAdd) },
+			{ "levSpellsToRemove", sp::FieldKind::List, RACE_F(levSpellsToRemove) },
+			{ "baseMass", sp::FieldKind::Value, RACE_F(baseMass) },
+			{ "baseCarryweight", sp::FieldKind::Value, RACE_F(baseCarryweight) },
+			{ "skin", sp::FieldKind::Value, RACE_F(skin) },
+			{ "startingHealth", sp::FieldKind::Value, RACE_F(startingHealth) },
+			{ "startingStamina", sp::FieldKind::Value, RACE_F(startingStamina) },
+			{ "startingMagicka", sp::FieldKind::Value, RACE_F(startingMagicka) },
+			{ "regenHealth", sp::FieldKind::Value, RACE_F(regenHealth) },
+			{ "regenStamina", sp::FieldKind::Value, RACE_F(regenStamina) },
+			{ "regenMagicka", sp::FieldKind::Value, RACE_F(regenMagicka) },
+			{ "damageUnarmed", sp::FieldKind::Value, RACE_F(damageUnarmed) },
+			{ "reachUnarmed", sp::FieldKind::Value, RACE_F(reachUnarmed) },
+			{ "baseMassMult", sp::FieldKind::Value, RACE_F(baseMassMult) },
+			{ "baseCarryweightMult", sp::FieldKind::Value, RACE_F(baseCarryweightMult) },
+			// GAP: startingHealthMult / startingStaminaMult / startingMagickaMult
+			// are NOT here -- see the comment above kRaceHookKeys. Applied via
+			// the original extractValueString calls after the table parse.
+			{ "regenHealthMult", sp::FieldKind::Value, RACE_F(regenHealthMult) },
+			{ "regenStaminaMult", sp::FieldKind::Value, RACE_F(regenStaminaMult) },
+			{ "regenMagickaMult", sp::FieldKind::Value, RACE_F(regenMagickaMult) },
+			{ "damageUnarmedMult", sp::FieldKind::Value, RACE_F(damageUnarmedMult) },
+			{ "reachUnarmedMult", sp::FieldKind::Value, RACE_F(reachUnarmedMult) },
+			{ "weightMale", sp::FieldKind::Value, RACE_F(weightMale) },
+			{ "weightFemale", sp::FieldKind::Value, RACE_F(weightFemale) },
+			{ "heightMale", sp::FieldKind::Value, RACE_F(heightMale) },
+			{ "heightFemale", sp::FieldKind::Value, RACE_F(heightFemale) },
+			// upstream extracts "heightFemale" twice into the same member;
+			// kept as two rows for a literal transliteration (harmless, like
+			// WEAPON's duplicate "soundLevel" rows).
+			{ "heightFemale", sp::FieldKind::Value, RACE_F(heightFemale) },
+			{ "accelerationRate", sp::FieldKind::Value, RACE_F(rateAcceleration) },
+			{ "decelerationRate", sp::FieldKind::Value, RACE_F(rateDeceleration) },
+			{ "accelerationAngularRate", sp::FieldKind::Value, RACE_F(angularAccelerationRate) },
+			{ "aimAngleTolerance", sp::FieldKind::Value, RACE_F(aimAngleTolerance) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, RACE_F(modNames) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, RACE_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, RACE_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, RACE_F(filterByEditorIdContainsExcluded) },
+		};
+
+#undef RACE_F
+
+		const sp::KeyTable& raceKeyTable()
+		{
+			static const sp::KeyTable table(kRaceKeys, std::size(kRaceKeys));
+			return table;
+		}
+	}
+
 	struct patch_instruction create_patch_instruction(const std::string& line)
 	{
 		patch_instruction l;
+		raceKeyTable().parse(line, &l);
 
-		//// extract objects
-		//std::regex  objects_regex("filterByRaces\\s*=([^:]+)", regex::icase);
-		//std::smatch objects_match;
-		//std::regex_search(line, objects_match, objects_regex);
-		//std::vector<std::string> objects;
-		//if (objects_match.empty() || objects_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objects_str = objects_match[1];
-		//	std::regex           objects_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objects_iterator(objects_str.begin(), objects_str.end(), objects_list_regex);
-		//	std::sregex_iterator objects_end;
-		//	while (objects_iterator != objects_end) {
-		//		std::string tempVar = (*objects_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Race: {}"), race);
-		//		if (tempVar != "none") {
-		//			objects.push_back(tempVar);
-		//		}
-		//		++objects_iterator;
-		//	}
-		//	l.object = objects;
-		//}
-
-		extractData(line, "filterByRaces\\s*=([^:]+)", l.object);
-
-		//// extract objectsExcluded
-		//std::regex  objectsExcluded_regex("filterByRacesExcluded\\s*=([^:]+)", regex::icase);
-		//std::smatch objectsExcluded_match;
-		//std::regex_search(line, objectsExcluded_match, objectsExcluded_regex);
-		//std::vector<std::string> objectsExcluded;
-		//if (objectsExcluded_match.empty() || objectsExcluded_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objectsExcluded_str = objectsExcluded_match[1];
-		//	std::regex           objectsExcluded_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objectsExcluded_iterator(objectsExcluded_str.begin(), objectsExcluded_str.end(), objectsExcluded_list_regex);
-		//	std::sregex_iterator objectsExcluded_end;
-		//	while (objectsExcluded_iterator != objectsExcluded_end) {
-		//		std::string tempVar = (*objectsExcluded_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Race: {}"), race);
-		//		if (tempVar != "none") {
-		//			objectsExcluded.push_back(tempVar);
-		//		}
-		//		++objectsExcluded_iterator;
-		//	}
-		//	l.objectExcluded = objectsExcluded;
-		//}
-
-		extractData(line, "filterByRacesExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		//// extract keywords
-		//std::regex  keywords_regex("filterByKeywords\\s*=([^:]+)", regex::icase);
-		//std::smatch keywords_match;
-		//std::regex_search(line, keywords_match, keywords_regex);
-		//std::vector<std::string> keywords;
-		//if (keywords_match.empty() || keywords_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          keywords_str = keywords_match[1];
-		//	std::regex           keywords_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator keywords_iterator(keywords_str.begin(), keywords_str.end(), keywords_list_regex);
-		//	std::sregex_iterator keywords_end;
-		//	while (keywords_iterator != keywords_end) {
-		//		std::string keyword = (*keywords_iterator)[0].str();
-		//		keyword.erase(keyword.begin(), std::find_if_not(keyword.begin(), keyword.end(), ::isspace));
-		//		keyword.erase(std::find_if_not(keyword.rbegin(), keyword.rend(), ::isspace).base(), keyword.end());
-		//		if (keyword != "none") {
-		//			keywords.push_back(keyword);
-		//		}
-		//		++keywords_iterator;
-		//	}
-		//	l.keywords = keywords;
-		//}
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-		//// extract keywords
-		//std::regex  keywordsOr_regex("filterByKeywordsOr\\s*=([^:]+)", regex::icase);
-		//std::smatch keywordsOr_match;
-		//std::regex_search(line, keywordsOr_match, keywordsOr_regex);
-		//std::vector<std::string> keywordsOr;
-		//if (keywordsOr_match.empty() || keywordsOr_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          keywordsOr_str = keywordsOr_match[1];
-		//	std::regex           keywordsOr_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator keywordsOr_iterator(keywordsOr_str.begin(), keywordsOr_str.end(), keywordsOr_list_regex);
-		//	std::sregex_iterator keywordsOr_end;
-		//	while (keywordsOr_iterator != keywordsOr_end) {
-		//		std::string keyword = (*keywordsOr_iterator)[0].str();
-		//		keyword.erase(keyword.begin(), std::find_if_not(keyword.begin(), keyword.end(), ::isspace));
-		//		keyword.erase(std::find_if_not(keyword.rbegin(), keyword.rend(), ::isspace).base(), keyword.end());
-		//		if (keyword != "none") {
-		//			keywordsOr.push_back(keyword);
-		//		}
-		//		++keywordsOr_iterator;
-		//	}
-		//	l.keywordsOr = keywordsOr;
-		//}
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-		extractData(line, "filterByVoiceTypeOr\\s*=([^:]+)", l.filterByVoiceTypeOr);
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-
-		// extract avifs
-		std::regex  avifs_regex("changeStats\\s*=([^:]+)", regex::icase);
-		std::smatch avifs_match;
-		std::regex_search(line, avifs_match, avifs_regex);
-		std::vector<std::string> avifs_before_eq;
-		std::vector<float>       avifs_min_values;
-		std::vector<float>       avifs_max_values;
-		if (avifs_match.empty() || avifs_match[1].str().empty()) {
-			//empty
-		} else {
-			std::string          avifs_str = avifs_match[1];
-			std::regex           avifs_list_regex("([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", regex::icase);
-			std::sregex_iterator avifs_iterator(avifs_str.begin(), avifs_str.end(), avifs_list_regex);
-			std::sregex_iterator avifs_end;
-			while (avifs_iterator != avifs_end) {
-				std::string avif = (*avifs_iterator)[1].str();
-				avif.erase(avif.begin(), std::find_if_not(avif.begin(), avif.end(), ::isspace));
-				avif.erase(std::find_if_not(avif.rbegin(), avif.rend(), ::isspace).base(), avif.end());
-
-				if (avif == "none") {
-					break;
-				}
-
-				avifs_before_eq.push_back(avif);
-				avifs_min_values.push_back(std::stof((*avifs_iterator)[2]));
-				if ((*avifs_iterator)[3] != "") {
-					avifs_max_values.push_back(std::stof((*avifs_iterator)[3]));
-				} else {
-					avifs_max_values.push_back(std::stof((*avifs_iterator)[2]));
-				}
-				std::string val1 = ((*avifs_iterator)[2]);
-				std::string val2 = ((*avifs_iterator)[3] != "") ? ((*avifs_iterator)[3]) : ((*avifs_iterator)[2]);
-				//logger::info(FMT_STRING("avif: {}"), avif);
-				//logger::info(FMT_STRING("value1: {}"), val1);
-				//logger::info(FMT_STRING("value2: {}"), val2);
-				++avifs_iterator;
-			}
-			l.avifs = avifs_before_eq;
-			l.values1 = avifs_min_values;
-			l.values2 = avifs_max_values;
-		}
-
-
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-
-		extractDataStrings(line, "filterByMaleModelContains\\s*=([^:]+)", l.filterByMaleModelContains);
-		extractDataStrings(line, "filterByFemaleModelContains\\s*=([^:]+)", l.filterByFemaleModelContains);
-		extractToArr2D(line, "keywordToAddIfKeywordsEIDDoesNotContain\\s*=([^:]+)", l.keywordsToAddIfKeywordsEIDDoNotContain);
-		
-		extractData(line, "spellsToAdd\\s*=([^:]+)", l.spellsToAdd);
-		extractData(line, "spellsToRemove\\s*=([^:]+)", l.spellsToRemove);
-		extractData(line, "shoutsToAdd\\s*=([^:]+)", l.shoutsToAdd);
-		extractData(line, "shoutsToRemove\\s*=([^:]+)", l.shoutsToRemove);
-		extractData(line, "levSpellsToAdd\\s*=([^:]+)", l.levSpellsToAdd);
-		extractData(line, "levSpellsToRemove\\s*=([^:]+)", l.levSpellsToRemove);
-		extractValueString(line, "baseMass\\s*=([^:]+)", l.baseMass);
-		extractValueString(line, "baseCarryweight\\s*=([^:]+)", l.baseCarryweight);
-		extractValueString(line, "skin\\s*=([^:]+)", l.skin);
-		extractValueString(line, "startingHealth\\s*=([^:]+)", l.startingHealth);
-		extractValueString(line, "startingStamina\\s*=([^:]+)", l.startingStamina);
-		extractValueString(line, "startingMagicka\\s*=([^:]+)", l.startingMagicka);
-		extractValueString(line, "regenHealth\\s*=([^:]+)", l.regenHealth);
-		extractValueString(line, "regenStamina\\s*=([^:]+)", l.regenStamina);
-		extractValueString(line, "regenMagicka\\s*=([^:]+)", l.regenMagicka);
-		extractValueString(line, "damageUnarmed\\s*=([^:]+)", l.damageUnarmed);
-		extractValueString(line, "reachUnarmed\\s*=([^:]+)", l.reachUnarmed);
-
-		extractValueString(line, "baseMassMult\\s*=([^:]+)", l.baseMassMult);
-		extractValueString(line, "baseCarryweightMult\\s*=([^:]+)", l.baseCarryweightMult);
+		// GAP: not on the table -- see the comment above kRaceHookKeys.
 		extractValueString(line, "startingHealthMult\\s*= ([^:]+)", l.startingHealthMult);
 		extractValueString(line, "startingStaminaMult\\s*= ([^:]+)", l.startingStaminaMult);
 		extractValueString(line, "startingMagickaMult\\s*= ([^:]+)", l.startingMagickaMult);
-		extractValueString(line, "regenHealthMult\\s*=([^:]+)", l.regenHealthMult);
-		extractValueString(line, "regenStaminaMult\\s*=([^:]+)", l.regenStaminaMult);
-		extractValueString(line, "regenMagickaMult\\s*=([^:]+)", l.regenMagickaMult);
-		extractValueString(line, "damageUnarmedMult\\s*=([^:]+)", l.damageUnarmedMult);
-		extractValueString(line, "reachUnarmedMult\\s*=([^:]+)", l.reachUnarmedMult);
-
-		extractValueString(line, "weightMale\\s*=([^:]+)", l.weightMale);
-		extractValueString(line, "weightFemale\\s*=([^:]+)", l.weightFemale);
-		extractValueString(line, "heightMale\\s*=([^:]+)", l.heightMale);
-		extractValueString(line, "heightFemale\\s*=([^:]+)", l.heightFemale);
-		extractValueString(line, "heightFemale\\s*=([^:]+)", l.heightFemale);
-		extractValueString(line, "accelerationRate\\s*=([^:]+)", l.rateAcceleration);
-		extractValueString(line, "decelerationRate\\s*=([^:]+)", l.rateDeceleration);
-		extractValueString(line, "accelerationAngularRate\\s*=([^:]+)", l.angularAccelerationRate);
-		extractValueString(line, "aimAngleTolerance\\s*=([^:]+)", l.aimAngleTolerance);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
 
 		logger::debug(FMT_STRING("races: {}  keywords: {}  avifs: {} keywordsToAdd: {} spellsToAdd {}"), l.object.size(), l.keywords.size(), l.avifs.size(), l.keywordsToAdd.size(), l.spellsToAdd.size());
 		//logger::info("returning patch instructions");

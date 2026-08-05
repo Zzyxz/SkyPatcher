@@ -1,94 +1,62 @@
 #include "projectile.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace PROJECTILE
 {
 
+	// ==================================================================
+	// PHASE 2 -- PROJECTILE's key table. One row per upstream (active)
+	// extract*() call, in the same order. See parsetable.h.
+	//
+	// Several members (keywords, keywordsOr, keywordsExcluded, filterAmmos,
+	// damageTypes, ...) are declared in the struct but have no active
+	// extract call upstream (dead fields) -- no row is added for them,
+	// preserving that (dead) behaviour exactly.
+	// ==================================================================
+	namespace
+	{
+#define PROJ_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kProjectileKeys[] = {
+			{ "filterByProjectiles", sp::FieldKind::List, PROJ_F(object) },
+			{ "filterByProjectilesExcluded", sp::FieldKind::List, PROJ_F(objectExcluded) },
+			{ "range", sp::FieldKind::Value, PROJ_F(range) },
+			{ "rangeMult", sp::FieldKind::Value, PROJ_F(rangeMult) },
+			{ "speed", sp::FieldKind::Value, PROJ_F(speed) },
+			{ "speedMult", sp::FieldKind::Value, PROJ_F(speedMult) },
+			{ "gravity", sp::FieldKind::Value, PROJ_F(gravity) },
+			{ "gravityMult", sp::FieldKind::Value, PROJ_F(gravityMult) },
+			{ "sound", sp::FieldKind::Value, PROJ_F(sound) },
+			{ "type", sp::FieldKind::Value, PROJ_F(type) },
+			{ "explosion", sp::FieldKind::Value, PROJ_F(explosion) },
+			{ "setFlags", sp::FieldKind::ListAssign, PROJ_F(setFlags) },
+			{ "removeFlags", sp::FieldKind::ListAssign, PROJ_F(removeFlags) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, PROJ_F(modNames) },
+			{ "model", sp::FieldKind::Value, PROJ_F(model) },
+			{ "alternateTexturesToAdd", sp::FieldKind::Arr2D, PROJ_F(alternateTextures) },
+			{ "alternateTexturesToRemove", sp::FieldKind::List, PROJ_F(alternateTexturesRemove) },
+			{ "alternateTexturesClear", sp::FieldKind::Value, PROJ_F(alternateTexturesClear) },
+			{ "filterByAlternateTextures", sp::FieldKind::List, PROJ_F(alternateTexturesFind) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, PROJ_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, PROJ_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, PROJ_F(filterByEditorIdContainsExcluded) },
+		};
+
+#undef PROJ_F
+
+		const sp::KeyTable& projectileKeyTable()
+		{
+			static const sp::KeyTable table(kProjectileKeys, std::size(kProjectileKeys));
+			return table;
+		}
+	}
+
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-
-		
-		//// extract objects
-		//std::regex  objects_regex("filterByProjectiles\\s*=([^:]+)", regex::icase);
-		//std::smatch objects_match;
-		//std::regex_search(line, objects_match, objects_regex);
-		//std::vector<std::string> objects;
-		//if (objects_match.empty() || objects_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objects_str = objects_match[1];
-		//	std::regex           objects_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objects_iterator(objects_str.begin(), objects_str.end(), objects_list_regex);
-		//	std::sregex_iterator objects_end;
-		//	while (objects_iterator != objects_end) {
-		//		std::string tempVar = (*objects_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Projectile String: {}"), tempVar);
-		//		if (tempVar != "none") {
-		//			objects.push_back(tempVar);
-		//		}
-		//		++objects_iterator;
-		//	}
-		//	l.object = objects;
-		//}
-
-		extractData(line, "filterByProjectiles\\s*=([^:]+)", l.object);
-
-		//// extract objectsExcluded
-		//std::regex  objectsExcluded_regex("filterByProjectilesExcluded\\s*=([^:]+)", regex::icase);
-		//std::smatch objectsExcluded_match;
-		//std::regex_search(line, objectsExcluded_match, objectsExcluded_regex);
-		//std::vector<std::string> objectsExcluded;
-		//if (objectsExcluded_match.empty() || objectsExcluded_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objectsExcluded_str = objectsExcluded_match[1];
-		//	std::regex           objectsExcluded_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objectsExcluded_iterator(objectsExcluded_str.begin(), objectsExcluded_str.end(), objectsExcluded_list_regex);
-		//	std::sregex_iterator objectsExcluded_end;
-		//	while (objectsExcluded_iterator != objectsExcluded_end) {
-		//		std::string tempVar = (*objectsExcluded_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Race: {}"), race);
-		//		if (tempVar != "none") {
-		//			objectsExcluded.push_back(tempVar);
-		//		}
-		//		++objectsExcluded_iterator;
-		//	}
-		//	l.objectExcluded = objectsExcluded;
-		//}
-
-		extractData(line, "filterByProjectilesExcluded\\s*=([^:]+)", l.objectExcluded);
-		
-
-		//extractValueString(line, "speed\\s *= ([^:] +)", l.speed);
-
-		extractValueString(line, "range\\s*=([^:]+)", l.range);
-		extractValueString(line, "rangeMult\\s*=([^:]+)", l.rangeMult);
-		extractValueString(line, "speed\\s*=([^:]+)", l.speed);
-		extractValueString(line, "speedMult\\s*=([^:]+)", l.speedMult);
-		extractValueString(line, "gravity\\s*=([^:]+)", l.gravity);
-		extractValueString(line, "gravityMult\\s*=([^:]+)", l.gravityMult);
-		extractValueString(line, "sound\\s*=([^:]+)", l.sound);
-		extractValueString(line, "type\\s*=([^:]+)", l.type);
-		extractValueString(line, "explosion\\s*=([^:]+)", l.explosion);
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-
-		extractValueString(line, "model\\s*=([^:]+)", l.model);
-		extractToArr2D(line, "alternateTexturesToAdd\\s*=([^:]+)", l.alternateTextures);
-		extractData(line, "alternateTexturesToRemove\\s*=([^:]+)", l.alternateTexturesRemove);
-		extractValueString(line, "alternateTexturesClear\\s*=([^:]+)", l.alternateTexturesClear);
-		extractData(line, "filterByAlternateTextures\\s*=([^:]+)", l.alternateTexturesFind);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-
+		projectileKeyTable().parse(line, &l);
 		return l;
 	}  //endStruct
 
