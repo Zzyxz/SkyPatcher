@@ -82,6 +82,227 @@ namespace SPELL
 		return l;
 	}
 
+	// ==================================================================
+	// PHASE 2 -- SPELL's rule compiler.
+	//
+	// PARTIAL CONVERSION, deliberately. Only the filters the shared opcode
+	// table already covers are compiled into a formfilter::MatchProgram:
+	// the keyword pair, the EditorID pair and the catch-all. SPELL's other
+	// four filter blocks -- filterByCastingPerk, filterByFlags{,Or,Excluded},
+	// filterByMgefs{,Or,Excluded}, restrictToCastingType/restrictToSchool --
+	// have no opcode, and per formfilter.h's rule they stay on their own path
+	// rather than growing an engine three already-verified types depend on.
+	//
+	// They are still hoisted OUT of the (form, rule) loop: every identifier,
+	// flag name, casting-type name and school name is resolved ONCE PER RULE
+	// into SpellRuleExtras, where before every one of them was re-parsed and
+	// re-looked-up on every single (form, rule) pair.
+	//
+	// WHY THE REORDER IS SAFE. Every one of SPELL's positive filters only
+	// ever WRITES `found = true`, and the ones upstream guards with `!found`
+	// are skipped once it is true -- so `found` is a pure OR over them and
+	// the order they are evaluated in cannot change the answer. That is what
+	// lets the program's two disjuncts run first (stable-sorted
+	// cheapest-first, so the integer keyword compares get to reject before
+	// the EditorID substring search) and the remaining blocks run only if
+	// they did not already match.
+	// ==================================================================
+	namespace
+	{
+		formfilter::MatchProgram compileSpellRule(const line_content& line)
+		{
+			using formfilter::Mode;
+			using formfilter::Op;
+
+			formfilter::MatchProgram p;
+			p.modNames = &line.modNames;
+
+			std::size_t first = p.preds.size();
+			if (!line.keywords.empty()) {
+				formfilter::addPred(p, Op::Keyword, Mode::And,
+					formfilter::ptrOperands(line.keywords, RE::FormType::Keyword));
+			}
+			if (!line.keywordsOr.empty()) {
+				formfilter::addPred(p, Op::Keyword, Mode::Or,
+					formfilter::ptrOperands(line.keywordsOr, RE::FormType::Keyword));
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			// DRIFT, PRESERVED. Both EditorID branches carry an
+			// `else if (curobj->formID != 0x000007)` player check copy-pasted
+			// from npc.cpp, where 0x7 really is the player. It is only ever
+			// reached when the corresponding list is EMPTY, so it can only
+			// matter when EXACTLY ONE of the two lists is present -- in which
+			// case it ANDs into that one predicate, which is precisely
+			// Predicate::skipIfPlayer. With both lists present it is dead
+			// code; with neither, the disjunct does not exist at all. Not
+			// removed, and not widened.
+			const bool playerGuard =
+				line.filterByEditorIdContains.empty() != line.filterByEditorIdContainsOr.empty();
+			first = p.preds.size();
+			if (!line.filterByEditorIdContains.empty()) {
+				formfilter::addPred(p, Op::EditorId, Mode::And,
+					formfilter::needleOperands(p, line.filterByEditorIdContains), playerGuard);
+			}
+			if (!line.filterByEditorIdContainsOr.empty()) {
+				formfilter::addPred(p, Op::EditorId, Mode::Or,
+					formfilter::needleOperands(p, line.filterByEditorIdContainsOr), playerGuard);
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			formfilter::sortCheapestFirst(p.positive);
+
+			p.catchAll = line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() &&
+				line.mgefs.empty() && line.mgefsOr.empty() && line.filterByCastingPerk.empty() &&
+				line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty();
+
+			return p;
+		}
+
+		// The filters with no opcode, resolved once per rule.
+		struct SpellRuleExtras
+		{
+			std::vector<RE::FormID>               castingPerks;
+			std::vector<RE::SpellItem::SpellFlag> flagsAnd, flagsOr;
+			// The excluded list keeps the lowered name alongside the flag so
+			// upstream's debug line still names the flag it rejected on.
+			std::vector<std::pair<RE::SpellItem::SpellFlag, std::string>> flagsExcluded;
+			// One slot per RAW entry, 0 marking "did not resolve to a
+			// MagicEffect". The upstream AND loop resets its accumulator at
+			// the top of every iteration and SKIPS a non-resolving entry
+			// without breaking, which makes the hole observable -- same shape
+			// as ARMOR's filterByArmorAddons.
+			std::vector<RE::FormID>                   mgefsAnd;
+			std::vector<RE::FormID>                   mgefsOr, mgefsExcluded;
+			std::vector<RE::MagicSystem::CastingType> castingTypes;
+			std::vector<RE::ActorValue>               schools;
+			bool                                      flagsPresent = false;
+			bool                                      flagsOrAbsent = true;
+			bool                                      mgefsPresent = false;
+			bool                                      mgefsOrAbsent = true;
+			bool                                      playerGuard = false;
+		};
+
+		// Upstream logged one line per (pair, unrecognised name); resolving
+		// once per rule makes that one line per rule. Same call Phase 2 made
+		// for NPC's restrictToFlags. The filter's effect is unchanged: an
+		// unrecognised name was, and is, a no-op.
+		std::vector<RE::SpellItem::SpellFlag> resolveSpellFlags(const std::vector<std::string>& a_in,
+			const char* a_kind)
+		{
+			std::vector<RE::SpellItem::SpellFlag> out;
+			out.reserve(a_in.size());
+			for (const auto& s : a_in) {
+				const std::string key = toLowerCase(s);
+				const auto        it = flagMap.find(key);
+				if (it != flagMap.end()) {
+					out.push_back(it->second);
+				} else {
+					logger::debug("Unknown flag in {} filter: {}", a_kind, key);
+				}
+			}
+			return out;
+		}
+
+		std::vector<std::pair<RE::SpellItem::SpellFlag, std::string>> resolveSpellFlagsNamed(
+			const std::vector<std::string>& a_in, const char* a_kind)
+		{
+			std::vector<std::pair<RE::SpellItem::SpellFlag, std::string>> out;
+			out.reserve(a_in.size());
+			for (const auto& s : a_in) {
+				std::string key = toLowerCase(s);
+				const auto  it = flagMap.find(key);
+				if (it != flagMap.end()) {
+					out.emplace_back(it->second, std::move(key));
+				} else {
+					logger::debug("Unknown flag in {} filter: {}", a_kind, key);
+				}
+			}
+			return out;
+		}
+
+		// Upstream's chains are `if (name == "x" && value == kX) hit = true;`
+		// repeated, so an unrecognised name contributes nothing and the whole
+		// chain reduces to "the form's value is one of the named ones".
+		std::vector<RE::MagicSystem::CastingType> resolveCastingTypes(const std::vector<std::string>& a_in)
+		{
+			std::vector<RE::MagicSystem::CastingType> out;
+			for (const auto& raw : a_in) {
+				const std::string s = toLowerCase(raw);
+				if (s == "concentration") {
+					out.push_back(RE::MagicSystem::CastingType::kConcentration);
+				} else if (s == "constanteffect") {
+					out.push_back(RE::MagicSystem::CastingType::kConstantEffect);
+				} else if (s == "fireandforget") {
+					out.push_back(RE::MagicSystem::CastingType::kFireAndForget);
+				} else if (s == "scroll") {
+					out.push_back(RE::MagicSystem::CastingType::kScroll);
+				}
+			}
+			return out;
+		}
+
+		std::vector<RE::ActorValue> resolveSchools(const std::vector<std::string>& a_in)
+		{
+			std::vector<RE::ActorValue> out;
+			for (const auto& raw : a_in) {
+				const std::string s = toLowerCase(raw);
+				if (s == "destruction") {
+					out.push_back(RE::ActorValue::kDestruction);
+				} else if (s == "restoration") {
+					out.push_back(RE::ActorValue::kRestoration);
+				} else if (s == "alteration") {
+					out.push_back(RE::ActorValue::kAlteration);
+				} else if (s == "conjuration") {
+					out.push_back(RE::ActorValue::kConjuration);
+				} else if (s == "illusion") {
+					out.push_back(RE::ActorValue::kIllusion);
+				} else if (s == "none") {
+					out.push_back(RE::ActorValue::kNone);
+				}
+			}
+			return out;
+		}
+
+		SpellRuleExtras compileSpellExtras(const line_content& line)
+		{
+			SpellRuleExtras x;
+			x.castingPerks = formfilter::resolveFormIDs(line.filterByCastingPerk, RE::FormType::Perk);
+
+			x.flagsAnd = resolveSpellFlags(line.flagFilters, "AND");
+			x.flagsOr = resolveSpellFlags(line.flagFiltersOr, "OR");
+			x.flagsExcluded = resolveSpellFlagsNamed(line.flagFiltersExcluded, "excluded");
+			x.flagsPresent = !line.flagFilters.empty() || !line.flagFiltersOr.empty();
+			x.flagsOrAbsent = line.flagFiltersOr.empty();
+
+			x.mgefsAnd = formfilter::resolveFormIDsKeepingHoles(line.mgefs, RE::FormType::MagicEffect);
+			x.mgefsOr = formfilter::resolveFormIDs(line.mgefsOr, RE::FormType::MagicEffect);
+			x.mgefsExcluded = formfilter::resolveFormIDs(line.mgefsExcluded, RE::FormType::MagicEffect);
+			x.mgefsPresent = !line.mgefs.empty() || !line.mgefsOr.empty();
+			x.mgefsOrAbsent = line.mgefsOr.empty();
+
+			x.castingTypes = resolveCastingTypes(line.restrictToCastingType);
+			x.schools = resolveSchools(line.restrictToSchool);
+
+			x.playerGuard =
+				line.filterByEditorIdContains.empty() != line.filterByEditorIdContainsOr.empty();
+			return x;
+		}
+
+		// The lowered EditorID for this pair, reusing the memo the program's
+		// EditorID opcodes already filled. Identical to
+		// formfilter::hasExcludedEditorId's own one-lowercase-per-call shape,
+		// minus the second lowercase when the positive stage already did it.
+		const std::string& loweredEditorId(const RE::TESForm* a_form, formfilter::MatchScratch& a_s)
+		{
+			if (!a_s.haveEditorId) {
+				a_s.editorId = toLowerCase(clib_util::editorID::get_editorID(a_form));
+				a_s.haveEditorId = true;
+			}
+			return a_s.editorId;
+		}
+	}
+
 	void process_patch_instructions(const std::list<line_content>& tokens)
 	{
 		logger::debug("processing patch instructions");
@@ -117,261 +338,178 @@ namespace SPELL
 				line.filterByEditorIdContainsExcluded, line.objectExcluded
 			};
 
-			for (const auto& curobj : objectSpellArray) {
-				bool found = false;
-				bool keywordAnd = false;
-				bool keywordOr = false;
-				bool mgefAnd = false;
-				bool mgefOr = false;
-				bool flagAnd = true;
-				bool flagOr = false;
-				bool contains = false;
-				bool containsOr = false;
+			// PHASE 1 + 2: the rule is resolved and compiled ONCE; the form
+			// loop below is a walk over the result. `resolved` supplies the
+			// three excluded lists (keyword / EditorID / object), which stay
+			// on the Phase-1 matchers because the program's negative stage
+			// cannot be reached when one of the no-opcode blocks below is
+			// what set `found`.
+			const formfilter::MatchProgram          program = compileSpellRule(line);
+			const SpellRuleExtras                   extra = compileSpellExtras(line);
+			const formfilter::ResolvedCommonFilters resolved =
+				formfilter::resolve(view, RE::FormType::Spell);
 
+			// Reused across the whole form loop, so the lowered EditorID
+			// allocates once rather than once per pair.
+			formfilter::MatchScratch scratch;
+			formfilter::MatchTarget  target;
+
+			for (const auto& curobj : objectSpellArray) {
 				if (!curobj || curobj->IsDeleted()) {
 					continue;
 				}
 
-				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+				if (!line.modNames.empty() && !formfilter::matchesModName(program, curobj)) {
 					continue;
 				}
 
-				if (!line.filterByCastingPerk.empty()) {
-					for (const auto& npcstring : line.filterByCastingPerk) {
-						RE::TESForm*   currentform = nullptr;
-						std::string    string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Perk && curobj->data.castingPerk && curobj->data.castingPerk->formID == currentform->formID) {
-							//logger::debug("Form {:08X} ", currentform->formID);
+				target.form = curobj;
+				target.kf = curobj;
+				target.isPlayer = extra.playerGuard && curobj->formID == 0x000007;
+
+				// keyword pair + EditorID pair + the catch-all.
+				bool found = formfilter::runProgram(program, target, scratch);
+
+				// --- filters the opcode table does not cover ----------------
+				// All three only ever write `found = true`, so running them
+				// only when the program did not already match is the same OR
+				// upstream computed, with strictly fewer evaluations.
+				if (!found && !extra.castingPerks.empty() && curobj->data.castingPerk) {
+					for (const RE::FormID id : extra.castingPerks) {
+						if (curobj->data.castingPerk->formID == id) {
 							found = true;
 							break;
 						}
 					}
 				}
 
-				if (!line.keywords.empty()) {
-					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
-				} else {
-					keywordAnd = true;
-				}
-				if (!line.keywordsOr.empty()) {
-					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
-				} else {
-					keywordOr = true;
-				}
-
-				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				if (!found && !line.filterByEditorIdContains.empty()) {
-					contains = formfilter::matchesEditorIdAnd(view, curobj);
-				} else if (curobj->formID != 0x000007) {
-					contains = true;
-				}
-
-				if (!found && !line.filterByEditorIdContainsOr.empty()) {
-					containsOr = formfilter::matchesEditorIdOr(view, curobj);
-				} else if (curobj->formID != 0x000007) {
-					containsOr = true;
-				}
-
-				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				if (!line.flagFilters.empty()) {
-					for (const auto& flagString : line.flagFilters) {
-						std::string key = toLowerCase(flagString);
-						auto it = flagMap.find(key);
-						if (it != flagMap.end()) {
-							if (curobj->data.flags.all(it->second)) {
-								flagAnd = true;
-							}
-							else {
-								flagAnd = false;
-								//logger::debug("FlagAnd Spell does not have all required flags: {}", key);
-								break;
-							}
-						}
-						else {
-							logger::debug("Unknown flag in AND filter: {}", key);
+				if (!found && extra.flagsPresent) {
+					// flagAnd's accumulator starts TRUE upstream (unlike every
+					// keyword AND in this codebase), so a list of nothing but
+					// unrecognised names passes.
+					bool flagAnd = true;
+					for (const auto f : extra.flagsAnd) {
+						if (!curobj->data.flags.all(f)) {
+							flagAnd = false;
+							break;
 						}
 					}
-				}
-				else {
-					flagAnd = true;  // No flags to check means we pass
-				}
-
-				// OR filter: at least one flag must be present
-				if (!line.flagFiltersOr.empty()) {
-					for (const auto& flagString : line.flagFiltersOr) {
-						std::string key = toLowerCase(flagString);
-						auto it = flagMap.find(key);
-						if (it != flagMap.end()) {
-							if (curobj->data.flags.all(it->second)) {
+					bool flagOr = extra.flagsOrAbsent;
+					if (!flagOr) {
+						for (const auto f : extra.flagsOr) {
+							if (curobj->data.flags.all(f)) {
 								flagOr = true;
 								break;
 							}
 						}
-						else {
-							logger::debug("Unknown flag in OR filter: {}", key);
-						}
+					}
+					if (flagAnd && flagOr) {
+						found = true;
 					}
 				}
-				else {
-					flagOr = true;  // Pass if no OR filters defined
-				}
 
-				// Final match check
-				if ((!line.flagFilters.empty() || !line.flagFiltersOr.empty()) && flagAnd && flagOr) {
-					//logger::debug(FMT_STRING("Spell {:08X} {} passed flag filter"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				if (!line.mgefs.empty()) {
-					bool foundInList = false;
-					for (const auto& mgefstring : line.mgefs) {
-						foundInList = false;
-						//logger::debug(FMT_STRING("mgefAnd set foundInList False."));
-						RE::TESForm*       currentform = nullptr;
-						RE::EffectSetting* keyword = nullptr;
-
-						std::string string_form = mgefstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
-							keyword = (RE::EffectSetting*)currentform;
-							for (const auto& effect : curobj->effects) {
-								
-								if (effect && effect->baseEffect && effect->baseEffect->formID == keyword->formID) {
-									foundInList = true;
-									//logger::debug(FMT_STRING("mgefAnd found in list."));
+				if (!found && extra.mgefsPresent) {
+					bool mgefAnd = true;
+					if (!extra.mgefsAnd.empty()) {
+						// The hole-preserving AND: on the `break` path
+						// foundInList is false, so upstream's trailing
+						// `if (foundInList) mgefAnd = true;` collapses to
+						// "mgefAnd is foundInList after the loop".
+						bool foundInList = false;
+						for (const RE::FormID id : extra.mgefsAnd) {
+							foundInList = false;
+							if (id) {
+								for (const auto& effect : curobj->effects) {
+									if (effect && effect->baseEffect && effect->baseEffect->formID == id) {
+										foundInList = true;
+										break;
+									}
+								}
+								if (!foundInList) {
 									break;
 								}
 							}
-							if (!foundInList) {
-								mgefAnd = false;
-								//logger::debug(FMT_STRING("mgefAnd not found in list, break."));
+						}
+						mgefAnd = foundInList;
+					}
+					bool mgefOr = extra.mgefsOrAbsent;
+					if (!mgefOr) {
+						for (const RE::FormID id : extra.mgefsOr) {
+							for (const auto& effect : curobj->effects) {
+								if (effect && effect->baseEffect && effect->baseEffect->formID == id) {
+									mgefOr = true;
+									break;
+								}
+							}
+							if (mgefOr) {
 								break;
 							}
 						}
 					}
-					if (foundInList) {
-						mgefAnd = true;
+					if (mgefAnd && mgefOr) {
+						found = true;
 					}
-				} else {
-					//logger::debug(FMT_STRING("mgefAnd is empty, we pass true."));
-					mgefAnd = true;
 				}
-				if (!line.mgefsOr.empty()) {
-					for (const auto& mgefstring : line.mgefsOr) {
-						RE::TESForm*       currentform = nullptr;
-						RE::EffectSetting* keyword = nullptr;
 
-						std::string string_form = mgefstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
-							keyword = (RE::EffectSetting*)currentform;
+				// --- negative stage, in upstream source order ---------------
+				if (!line.keywordsExcluded.empty() && found) {
+					if (formfilter::hasExcludedKeyword(resolved, curobj, nullptr)) {
+						found = false;
+					}
+				}
 
-							for (const auto& effect : curobj->effects) {
-								if (effect && effect->baseEffect && effect->baseEffect->formID == keyword->formID) {
-									mgefOr = true;
-									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-									//logger::info("Keyword found.");
-									break;
-								}
-							}
-						}
-						if (mgefOr) {
+				if (!resolved.editorIdContainsExcluded.empty() && found) {
+					const std::string& editorId = loweredEditorId(curobj, scratch);
+					for (const auto& needle : resolved.editorIdContainsExcluded) {
+						if (editorId.find(needle) != std::string::npos) {
+							found = false;
 							break;
 						}
-					}
-				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
-					mgefOr = true;
-				}
-
-				if ((!line.mgefs.empty() || !line.mgefsOr.empty()) && mgefAnd && mgefOr) {
-					//logger::debug(FMT_STRING("mgef found. {} {}"), mgefAnd, mgefOr);
-					found = true;
-				}
-
-				if (!found && line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.mgefs.empty() && line.mgefsOr.empty() && line.filterByCastingPerk.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
-					found = true;
-				}
-
-				if (!line.keywordsExcluded.empty() && found) {
-					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
-						found = false;
-					}
-				}
-
-				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-					if (formfilter::hasExcludedEditorId(view, curobj)) {
-						found = false;
 					}
 				}
 
 				if (!line.flagFiltersExcluded.empty() && found) {
-					for (const auto& flagString : line.flagFiltersExcluded) {
-						std::string key = toLowerCase(flagString);
-						auto it = flagMap.find(key);
-						if (it != flagMap.end()) {
-							if (curobj->data.flags.all(it->second)) {
-								found = false;
-								logger::debug(FMT_STRING("Spell {:08X} {} has excluded flag '{}', skipping"), curobj->formID, curobj->fullName, key);
-								break;
-							}
-						}
-						else {
-							logger::debug("Unknown flag in excluded filter: {}", key);
+					for (const auto& fe : extra.flagsExcluded) {
+						if (curobj->data.flags.all(fe.first)) {
+							found = false;
+							logger::debug(FMT_STRING("Spell {:08X} {} has excluded flag '{}', skipping"), curobj->formID, curobj->fullName, fe.second);
+							break;
 						}
 					}
 				}
 
-
 				if (!line.mgefsExcluded.empty() && found) {
-					//logger::info("mgefs not empty");
-					for (const auto& mgefstring : line.mgefsExcluded) {
-						RE::TESForm*       currentform = nullptr;
-						RE::EffectSetting* keyword = nullptr;
-
-						std::string string_form = mgefstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
-							keyword = (RE::EffectSetting*)currentform;
-							for (const auto& effect : curobj->effects) {
-								if (effect && effect->baseEffect->formID == keyword->formID) {
-									found = false;
-									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-									//logger::info("Keyword found.");
-									break;
-								}
+					// NOTE the missing `effect->baseEffect` null check: this
+					// loop has it where the AND/OR loops above do. Drift,
+					// transcribed rather than tidied.
+					for (const RE::FormID id : extra.mgefsExcluded) {
+						for (const auto& effect : curobj->effects) {
+							if (effect && effect->baseEffect->formID == id) {
+								found = false;
+								break;
 							}
 						}
 					}
 				}
 
 				if (!line.objectExcluded.empty() && found) {
-					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Spell)) {
+					if (formfilter::isObjectExcluded(resolved, curobj)) {
 						found = false;
 					}
 				}
 
 				if (found && !line.restrictToCastingType.empty()) {
 					bool foundCastingType = false;
-					for (auto string : line.restrictToCastingType) {
-						string = toLowerCase(string);
-						if (string == "concentration" && curobj->GetCastingType() == RE::MagicSystem::CastingType::kConcentration) {
-							foundCastingType = true;
-						} else if (string == "constanteffect" && curobj->GetCastingType() == RE::MagicSystem::CastingType::kConstantEffect) {
-							foundCastingType = true;
-						} else if (string == "fireandforget" && curobj->GetCastingType() == RE::MagicSystem::CastingType::kFireAndForget) {
-							foundCastingType = true;
-						} else if (string == "scroll" && curobj->GetCastingType() == RE::MagicSystem::CastingType::kScroll) {
-							foundCastingType = true;
+					// GetCastingType() is a virtual; upstream short-circuited
+					// past it for every unrecognised name, so it is only
+					// called when some name actually resolved.
+					if (!extra.castingTypes.empty()) {
+						const auto castingType = curobj->GetCastingType();
+						for (const auto t : extra.castingTypes) {
+							if (castingType == t) {
+								foundCastingType = true;
+								break;
+							}
 						}
 					}
 					if (!foundCastingType)
@@ -381,33 +519,13 @@ namespace SPELL
 				if (found && !line.restrictToSchool.empty()) {
 					bool foundSchool = false;
 
+					// The null guard is upstream's; when it fails, `found` is
+					// left alone -- the filter passes vacuously.
 					if (curobj && !curobj->effects.empty() && curobj->effects.front() && curobj->effects.front()->baseEffect) {
 						const auto skill = curobj->effects.front()->baseEffect->data.associatedSkill;
 
-						for (auto s : line.restrictToSchool) {
-							s = toLowerCase(s);
-
-							if (s == "destruction" && skill == RE::ActorValue::kDestruction) {
-								foundSchool = true;
-								break;
-							}
-							if (s == "restoration" && skill == RE::ActorValue::kRestoration) {
-								foundSchool = true;
-								break;
-							}
-							if (s == "alteration" && skill == RE::ActorValue::kAlteration) {
-								foundSchool = true;
-								break;
-							}
-							if (s == "conjuration" && skill == RE::ActorValue::kConjuration) {
-								foundSchool = true;
-								break;
-							}
-							if (s == "illusion" && skill == RE::ActorValue::kIllusion) {
-								foundSchool = true;
-								break;
-							}
-							if (s == "none" && skill == RE::ActorValue::kNone) {
+						for (const auto s : extra.schools) {
+							if (skill == s) {
 								foundSchool = true;
 								break;
 							}
@@ -426,7 +544,7 @@ namespace SPELL
 				if (found) {
 					patch(line, curobj);
 				}
-				
+
 			}
 		}
 	}

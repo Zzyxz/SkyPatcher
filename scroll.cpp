@@ -72,6 +72,172 @@ namespace SCROLL
 		return l;
 	}
 
+	// ==================================================================
+	// PHASE 2 -- SCROLL's rule compiler.
+	//
+	// PARTIAL CONVERSION, deliberately, on the same terms as SPELL's: the
+	// keyword pair, the EditorID pair and the catch-all are compiled into a
+	// formfilter::MatchProgram; filterByAlternateTextures,
+	// filterByMinimumSkillLevel, filterByMgefs{,Or,Excluded},
+	// restrictToSchool and restrictToCastingType have no opcode and stay on
+	// their own path. All of them are still resolved ONCE PER RULE.
+	//
+	// SCROLL is a copy of SPELL that has DRIFTED, and the drift is preserved
+	// rather than unified:
+	//   * the mgef OR and EXCLUDED loops dereference `effect->baseEffect`
+	//     with no null check; the AND loop checks it. SPELL checks it in two
+	//     of the three.
+	//   * restrictToSchool's null guard omits SPELL's `effects.front() &&`.
+	// ==================================================================
+	namespace
+	{
+		formfilter::MatchProgram compileScrollRule(const line_content& line)
+		{
+			using formfilter::Mode;
+			using formfilter::Op;
+
+			formfilter::MatchProgram p;
+			p.modNames = &line.modNames;
+
+			std::size_t first = p.preds.size();
+			if (!line.keywords.empty()) {
+				formfilter::addPred(p, Op::Keyword, Mode::And,
+					formfilter::ptrOperands(line.keywords, RE::FormType::Keyword));
+			}
+			if (!line.keywordsOr.empty()) {
+				formfilter::addPred(p, Op::Keyword, Mode::Or,
+					formfilter::ptrOperands(line.keywordsOr, RE::FormType::Keyword));
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			// DRIFT, PRESERVED: the inert `formID != 0x000007` player guard.
+			// See spell.cpp's copy for why this is exactly skipIfPlayer.
+			const bool playerGuard =
+				line.filterByEditorIdContains.empty() != line.filterByEditorIdContainsOr.empty();
+			first = p.preds.size();
+			if (!line.filterByEditorIdContains.empty()) {
+				formfilter::addPred(p, Op::EditorId, Mode::And,
+					formfilter::needleOperands(p, line.filterByEditorIdContains), playerGuard);
+			}
+			if (!line.filterByEditorIdContainsOr.empty()) {
+				formfilter::addPred(p, Op::EditorId, Mode::Or,
+					formfilter::needleOperands(p, line.filterByEditorIdContainsOr), playerGuard);
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			formfilter::sortCheapestFirst(p.positive);
+
+			p.catchAll = line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() &&
+				line.mgefs.empty() && line.mgefsOr.empty() && line.alternateTexturesFind.empty() &&
+				line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() &&
+				line.filterByMinimumSkillLevel.empty();
+
+			return p;
+		}
+
+		struct ScrollRuleExtras
+		{
+			// May contain nullptr, exactly as `currentform->As<BGSTextureSet>()`
+			// could: findTextureSet compares pointers and handles it.
+			std::vector<RE::BGSTextureSet*> textureSets;
+			// Only the entries std::stoi accepted. Upstream caught the
+			// invalid_argument per (pair, entry) and logged a warning; the
+			// parse now happens once per rule, so the warning fires once per
+			// rule instead of 4,000 times. Same call Phase 2 made for NPC's
+			// restrictToFlags.
+			std::vector<int>                          minimumSkillLevels;
+			std::vector<RE::FormID>                   mgefsAnd;  // holes kept
+			std::vector<RE::FormID>                   mgefsOr, mgefsExcluded;
+			std::vector<RE::ActorValue>               schools;
+			std::vector<RE::MagicSystem::CastingType> castingTypes;
+			bool                                      mgefsPresent = false;
+			bool                                      mgefsOrAbsent = true;
+			bool                                      playerGuard = false;
+		};
+
+		std::vector<RE::ActorValue> resolveSchools(const std::vector<std::string>& a_in)
+		{
+			std::vector<RE::ActorValue> out;
+			for (const auto& raw : a_in) {
+				const std::string s = toLowerCase(raw);
+				if (s == "destruction") {
+					out.push_back(RE::ActorValue::kDestruction);
+				} else if (s == "restoration") {
+					out.push_back(RE::ActorValue::kRestoration);
+				} else if (s == "alteration") {
+					out.push_back(RE::ActorValue::kAlteration);
+				} else if (s == "conjuration") {
+					out.push_back(RE::ActorValue::kConjuration);
+				} else if (s == "illusion") {
+					out.push_back(RE::ActorValue::kIllusion);
+				} else if (s == "none") {
+					out.push_back(RE::ActorValue::kNone);
+				}
+			}
+			return out;
+		}
+
+		std::vector<RE::MagicSystem::CastingType> resolveCastingTypes(const std::vector<std::string>& a_in)
+		{
+			std::vector<RE::MagicSystem::CastingType> out;
+			for (const auto& raw : a_in) {
+				const std::string s = toLowerCase(raw);
+				if (s == "concentration") {
+					out.push_back(RE::MagicSystem::CastingType::kConcentration);
+				} else if (s == "constanteffect") {
+					out.push_back(RE::MagicSystem::CastingType::kConstantEffect);
+				} else if (s == "fireandforget") {
+					out.push_back(RE::MagicSystem::CastingType::kFireAndForget);
+				} else if (s == "scroll") {
+					out.push_back(RE::MagicSystem::CastingType::kScroll);
+				}
+			}
+			return out;
+		}
+
+		ScrollRuleExtras compileScrollExtras(const line_content& line)
+		{
+			ScrollRuleExtras x;
+
+			for (const auto& textureString : line.alternateTexturesFind) {
+				RE::TESForm* currentform = GetFormFromIdentifier(textureString);
+				if (currentform) {
+					x.textureSets.push_back(currentform->As<RE::BGSTextureSet>());
+				}
+			}
+
+			for (const auto& skillLevel : line.filterByMinimumSkillLevel) {
+				try {
+					x.minimumSkillLevels.push_back(std::stoi(skillLevel));
+				} catch (...) {
+					logger::warn("ERROR - scroll patcher - filterByMinimumSkillLevel - {}", skillLevel);
+				}
+			}
+
+			x.mgefsAnd = formfilter::resolveFormIDsKeepingHoles(line.mgefs, RE::FormType::MagicEffect);
+			x.mgefsOr = formfilter::resolveFormIDs(line.mgefsOr, RE::FormType::MagicEffect);
+			x.mgefsExcluded = formfilter::resolveFormIDs(line.mgefsExcluded, RE::FormType::MagicEffect);
+			x.mgefsPresent = !line.mgefs.empty() || !line.mgefsOr.empty();
+			x.mgefsOrAbsent = line.mgefsOr.empty();
+
+			x.schools = resolveSchools(line.restrictToSchool);
+			x.castingTypes = resolveCastingTypes(line.restrictToCastingType);
+
+			x.playerGuard =
+				line.filterByEditorIdContains.empty() != line.filterByEditorIdContainsOr.empty();
+			return x;
+		}
+
+		const std::string& loweredEditorId(const RE::TESForm* a_form, formfilter::MatchScratch& a_s)
+		{
+			if (!a_s.haveEditorId) {
+				a_s.editorId = toLowerCase(clib_util::editorID::get_editorID(a_form));
+				a_s.haveEditorId = true;
+			}
+			return a_s.editorId;
+		}
+	}
+
 	void process_patch_instructions(const std::list<line_content>& tokens)
 	{
 		logger::debug("processing patch instructions");
@@ -110,244 +276,144 @@ namespace SCROLL
 				line.filterByEditorIdContainsExcluded, line.objectExcluded
 			};
 
-			for (const auto& curobj : objectSpellArray) {
-				bool found = false;
-				bool keywordAnd = false;
-				bool keywordOr = false;
-				bool mgefAnd = false;
-				bool mgefOr = false;
-				bool contains = false;
-				bool containsOr = false;
+			// PHASE 1 + 2: the rule is resolved and compiled ONCE.
+			const formfilter::MatchProgram          program = compileScrollRule(line);
+			const ScrollRuleExtras                  extra = compileScrollExtras(line);
+			const formfilter::ResolvedCommonFilters resolved =
+				formfilter::resolve(view, RE::FormType::Scroll);
 
+			formfilter::MatchScratch scratch;
+			formfilter::MatchTarget  target;
+
+			for (const auto& curobj : objectSpellArray) {
 				if (!curobj || curobj->IsDeleted()) {
 					continue;
 				}
 
-				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+				if (!line.modNames.empty() && !formfilter::matchesModName(program, curobj)) {
 					continue;
 				}
 
+				target.form = curobj;
+				target.kf = curobj;
+				target.isPlayer = extra.playerGuard && curobj->formID == 0x000007;
 
+				// keyword pair + EditorID pair + the catch-all.
+				bool found = formfilter::runProgram(program, target, scratch);
 
-				
-				if (!line.alternateTexturesFind.empty()) {
-					for (const auto& textureString : line.alternateTexturesFind) {
-						RE::TESForm* currentform = nullptr;
-						currentform = GetFormFromIdentifier(textureString);
-						if (currentform) {
-							//logger::debug("start search");
-							if (findTextureSet(curobj, currentform->As<RE::BGSTextureSet>())) {
-								//logger::debug("Texture found");
-								found = true;
-								break;
-							}
-						}
-					}
-				}
-
-				if (!line.filterByMinimumSkillLevel.empty()) {
-					for (const auto& skillLevel : line.filterByMinimumSkillLevel) {
-						try {
-							const int levelAsInt = std::stoi(skillLevel);
-
-							if (!curobj->effects.empty() &&
-								curobj->effects.front() &&
-								curobj->effects.front()->baseEffect &&
-								static_cast<int>(curobj->effects.front()->baseEffect->data.minimumSkill) == levelAsInt) {
-								found = true;
-								break;
-							}
-
-						} catch (...) {
-							logger::warn("ERROR - scroll patcher - {:08X} - filterByMinimumSkillLevel", curobj->formID);
-						}
-					}
-				}
-
-
-
-				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
-					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
-				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
-					keywordAnd = true;
-				}
-				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
-					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
-				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
-					keywordOr = true;
-				}
-
-				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				if (!found && !line.filterByEditorIdContains.empty()) {
-					contains = formfilter::matchesEditorIdAnd(view, curobj);
-				} else if (curobj->formID != 0x000007) {
-					contains = true;
-				}
-
-				if (!found && !line.filterByEditorIdContainsOr.empty()) {
-					//logger::info("keywords not empty");
-					containsOr = formfilter::matchesEditorIdOr(view, curobj);
-				} else if (curobj->formID != 0x000007) {
-					containsOr = true;
-				}
-
-				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				if (!line.mgefs.empty()) {
-					bool foundInList = false;
-					for (const auto& mgefstring : line.mgefs) {
-						foundInList = false;
-						//logger::debug(FMT_STRING("mgefAnd set foundInList False."));
-						RE::TESForm*       currentform = nullptr;
-						RE::EffectSetting* keyword = nullptr;
-
-						std::string string_form = mgefstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
-							keyword = (RE::EffectSetting*)currentform;
-							for (const auto& effect : curobj->effects) {
-								
-								if (effect && effect->baseEffect && effect->baseEffect->formID == keyword->formID) {
-									foundInList = true;
-									//logger::debug(FMT_STRING("mgefAnd found in list."));
-									break;
-								}
-							}
-							if (!foundInList) {
-								mgefAnd = false;
-								//logger::debug(FMT_STRING("mgefAnd not found in list, break."));
-								break;
-							}
-						}
-					}
-					if (foundInList) {
-						mgefAnd = true;
-					}
-				} else {
-					//logger::debug(FMT_STRING("mgefAnd is empty, we pass true."));
-					mgefAnd = true;
-				}
-				if (!line.mgefsOr.empty()) {
-					for (const auto& mgefstring : line.mgefsOr) {
-						RE::TESForm*       currentform = nullptr;
-						RE::EffectSetting* keyword = nullptr;
-
-						std::string string_form = mgefstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
-							keyword = (RE::EffectSetting*)currentform;
-
-							for (const auto& effect : curobj->effects) {
-								if (effect && effect->baseEffect->formID == keyword->formID) {
-									mgefOr = true;
-									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-									//logger::info("Keyword found.");
-									break;
-								}
-							}
-						}
-						if (mgefOr) {
+				// --- filters the opcode table does not cover ----------------
+				// Each only ever writes `found = true`, so evaluating them
+				// after the program (and only when it did not match) is the
+				// same OR upstream computed.
+				if (!found && !extra.textureSets.empty()) {
+					for (RE::BGSTextureSet* const ts : extra.textureSets) {
+						if (findTextureSet(curobj, ts)) {
+							found = true;
 							break;
 						}
 					}
-				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
-					mgefOr = true;
 				}
 
-				if ((!line.mgefs.empty() || !line.mgefsOr.empty()) && mgefAnd && mgefOr) {
-					//logger::debug(FMT_STRING("mgef found. {} {}"), mgefAnd, mgefOr);
-					found = true;
+				if (!found && !extra.minimumSkillLevels.empty()) {
+					for (const int levelAsInt : extra.minimumSkillLevels) {
+						if (!curobj->effects.empty() &&
+							curobj->effects.front() &&
+							curobj->effects.front()->baseEffect &&
+							static_cast<int>(curobj->effects.front()->baseEffect->data.minimumSkill) == levelAsInt) {
+							found = true;
+							break;
+						}
+					}
 				}
 
-				if (!found && line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.mgefs.empty() && line.mgefsOr.empty() && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByMinimumSkillLevel.empty()) {
-					found = true;
+				if (!found && extra.mgefsPresent) {
+					bool mgefAnd = true;
+					if (!extra.mgefsAnd.empty()) {
+						// Hole-preserving AND; see spell.cpp's copy.
+						bool foundInList = false;
+						for (const RE::FormID id : extra.mgefsAnd) {
+							foundInList = false;
+							if (id) {
+								for (const auto& effect : curobj->effects) {
+									if (effect && effect->baseEffect && effect->baseEffect->formID == id) {
+										foundInList = true;
+										break;
+									}
+								}
+								if (!foundInList) {
+									break;
+								}
+							}
+						}
+						mgefAnd = foundInList;
+					}
+					bool mgefOr = extra.mgefsOrAbsent;
+					if (!mgefOr) {
+						for (const RE::FormID id : extra.mgefsOr) {
+							for (const auto& effect : curobj->effects) {
+								// NOTE: no `effect->baseEffect` null check.
+								// Drift from the AND loop above, preserved.
+								if (effect && effect->baseEffect->formID == id) {
+									mgefOr = true;
+									break;
+								}
+							}
+							if (mgefOr) {
+								break;
+							}
+						}
+					}
+					if (mgefAnd && mgefOr) {
+						found = true;
+					}
 				}
 
+				// --- negative stage, in upstream source order ---------------
 				if (!line.keywordsExcluded.empty() && found) {
-					//logger::info("keywords not empty");
-					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
+					if (formfilter::hasExcludedKeyword(resolved, curobj, nullptr)) {
 						found = false;
 					}
 				}
 
 				if (!line.mgefsExcluded.empty() && found) {
-					//logger::info("mgefs not empty");
-					for (const auto& mgefstring : line.mgefsExcluded) {
-						RE::TESForm*       currentform = nullptr;
-						RE::EffectSetting* keyword = nullptr;
-
-						std::string string_form = mgefstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
-							keyword = (RE::EffectSetting*)currentform;
-							for (const auto& effect : curobj->effects) {
-								if (effect && effect->baseEffect->formID == keyword->formID) {
-									found = false;
-									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-									//logger::info("Keyword found.");
-									break;
-								}
+					for (const RE::FormID id : extra.mgefsExcluded) {
+						for (const auto& effect : curobj->effects) {
+							// NOTE: no `effect->baseEffect` null check here
+							// either. Preserved.
+							if (effect && effect->baseEffect->formID == id) {
+								found = false;
+								break;
 							}
 						}
 					}
 				}
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
-					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Scroll)) {
+					if (formfilter::isObjectExcluded(resolved, curobj)) {
 						found = false;
 					}
 				}
 
-				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-					//logger::info("factions not empty");
-					if (formfilter::hasExcludedEditorId(view, curobj)) {
-						found = false;
+				if (!resolved.editorIdContainsExcluded.empty() && found) {
+					const std::string& editorId = loweredEditorId(curobj, scratch);
+					for (const auto& needle : resolved.editorIdContainsExcluded) {
+						if (editorId.find(needle) != std::string::npos) {
+							found = false;
+							break;
+						}
 					}
 				}
 
 				if (found && !line.restrictToSchool.empty()) {
 					bool foundSchool = false;
 
+					// DRIFT, PRESERVED: SPELL's copy of this guard also tests
+					// `effects.front() &&`. This one does not.
 					if (curobj && !curobj->effects.empty() && curobj->effects.front()->baseEffect) {
 						const auto skill = curobj->effects.front()->baseEffect->data.associatedSkill;
 
-						for (auto s : line.restrictToSchool) {
-							s = toLowerCase(s);
-
-							if (s == "destruction" && skill == RE::ActorValue::kDestruction) {
-								foundSchool = true;
-								break;
-							}
-							if (s == "restoration" && skill == RE::ActorValue::kRestoration) {
-								foundSchool = true;
-								break;
-							}
-							if (s == "alteration" && skill == RE::ActorValue::kAlteration) {
-								foundSchool = true;
-								break;
-							}
-							if (s == "conjuration" && skill == RE::ActorValue::kConjuration) {
-								foundSchool = true;
-								break;
-							}
-							if (s == "illusion" && skill == RE::ActorValue::kIllusion) {
-								foundSchool = true;
-								break;
-							}
-							if (s == "none" && skill == RE::ActorValue::kNone) {
+						for (const auto s : extra.schools) {
+							if (skill == s) {
 								foundSchool = true;
 								break;
 							}
@@ -361,16 +427,15 @@ namespace SCROLL
 
 				if (found && !line.restrictToCastingType.empty()) {
 					bool foundCastingType = false;
-					for (auto string : line.restrictToCastingType) {
-						string = toLowerCase(string);
-						if (string == "concentration" && curobj->GetCastingType() == RE::MagicSystem::CastingType::kConcentration) {
-							foundCastingType = true;
-						} else if (string == "constanteffect" && curobj->GetCastingType() == RE::MagicSystem::CastingType::kConstantEffect) {
-							foundCastingType = true;
-						} else if (string == "fireandforget" && curobj->GetCastingType() == RE::MagicSystem::CastingType::kFireAndForget) {
-							foundCastingType = true;
-						} else if (string == "scroll" && curobj->GetCastingType() == RE::MagicSystem::CastingType::kScroll) {
-							foundCastingType = true;
+					// GetCastingType() is a virtual; upstream short-circuited
+					// past it for every unrecognised name.
+					if (!extra.castingTypes.empty()) {
+						const auto castingType = curobj->GetCastingType();
+						for (const auto t : extra.castingTypes) {
+							if (castingType == t) {
+								foundCastingType = true;
+								break;
+							}
 						}
 					}
 					if (!foundCastingType)

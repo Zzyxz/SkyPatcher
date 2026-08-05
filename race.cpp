@@ -161,6 +161,124 @@ namespace RACE
 		return l;
 	}
 
+	// ==================================================================
+	// PHASE 2 -- RACE's rule compiler, for the MAIN (scan) path only.
+	//
+	// PARTIAL CONVERSION, deliberately. Compiled into a
+	// formfilter::MatchProgram: filterByRaces (an own-formID compare, i.e.
+	// Op::ObjectId), the EditorID pair, the keyword pair and the catch-all.
+	//
+	// LEFT INLINE, because the opcode table has no equivalent:
+	//   * filterByMaleModelContains / filterByFemaleModelContains --
+	//     Op::ModelContains exists but reads `npc->race->skeletonModels[kMale]`
+	//     and passes VACUOUSLY for a raceless NPC. Here the subject IS the
+	//     race, both sexes are filtered, and there is no vacuous case. Using
+	//     it would mean widening an opcode three verified types share.
+	//   * filterByVoiceTypeOr -- Op::VoiceType reads `npc->voiceType`; a race
+	//     has TWO (defaultVoiceTypes[kMale] and [kFemale]) and either may
+	//     match.
+	// Both are still hoisted: the needles are normalised once per rule
+	// (upstream re-ran normalizePath(trim(toLowerCase(needle))) on every
+	// (pair, needle)), the race's own model path is computed once per pair
+	// (upstream re-ran it on every needle), and the voice types are resolved
+	// once per rule.
+	//
+	// The HOOK path (LoadRaceDataHook::Hook_InitItemImpl, below) is NOT
+	// converted -- see the note there.
+	// ==================================================================
+	namespace
+	{
+		formfilter::MatchProgram compileRaceRule(const patch_instruction& line)
+		{
+			using formfilter::Mode;
+			using formfilter::Op;
+
+			formfilter::MatchProgram p;
+			p.modNames = &line.modNames;
+
+			// filterByRaces, re-tested inside the scan: `curobj->formID ==
+			// namedRace->formID` for any identifier that resolves to a Race.
+			if (!line.object.empty()) {
+				const std::size_t first = p.preds.size();
+				formfilter::addPred(p, Op::ObjectId, Mode::Or,
+					formfilter::idOperands(line.object, RE::FormType::Race));
+				formfilter::pushDisjunct(p, p.positive, first);
+			}
+
+			// DRIFT, PRESERVED: the inert `formID != 0x000007` player guard.
+			// It is only reached when the corresponding list is EMPTY, so it
+			// can only matter when exactly one of the two is present -- which
+			// is exactly Predicate::skipIfPlayer. A TESRace can never carry
+			// the player NPC's formID.
+			const bool playerGuard =
+				line.filterByEditorIdContains.empty() != line.filterByEditorIdContainsOr.empty();
+			std::size_t first = p.preds.size();
+			if (!line.filterByEditorIdContains.empty()) {
+				formfilter::addPred(p, Op::EditorId, Mode::And,
+					formfilter::needleOperands(p, line.filterByEditorIdContains), playerGuard);
+			}
+			if (!line.filterByEditorIdContainsOr.empty()) {
+				formfilter::addPred(p, Op::EditorId, Mode::Or,
+					formfilter::needleOperands(p, line.filterByEditorIdContainsOr), playerGuard);
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			first = p.preds.size();
+			if (!line.keywords.empty()) {
+				formfilter::addPred(p, Op::Keyword, Mode::And,
+					formfilter::ptrOperands(line.keywords, RE::FormType::Keyword));
+			}
+			if (!line.keywordsOr.empty()) {
+				formfilter::addPred(p, Op::Keyword, Mode::Or,
+					formfilter::ptrOperands(line.keywordsOr, RE::FormType::Keyword));
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			formfilter::sortCheapestFirst(p.positive);
+
+			p.catchAll = line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() &&
+				line.filterByVoiceTypeOr.empty() && line.filterByMaleModelContains.empty() &&
+				line.filterByFemaleModelContains.empty() &&
+				line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty();
+
+			return p;
+		}
+
+		struct RaceRuleExtras
+		{
+			std::vector<std::string> maleNeedles;    // normalizePath(trim(toLowerCase(...)))
+			std::vector<std::string> femaleNeedles;
+			std::vector<RE::FormID>  voiceTypes;
+			bool                     playerGuard = false;
+		};
+
+		RaceRuleExtras compileRaceExtras(const patch_instruction& line)
+		{
+			RaceRuleExtras x;
+			x.maleNeedles.reserve(line.filterByMaleModelContains.size());
+			for (const auto& s : line.filterByMaleModelContains) {
+				x.maleNeedles.push_back(normalizePath(trim(toLowerCase(s))));
+			}
+			x.femaleNeedles.reserve(line.filterByFemaleModelContains.size());
+			for (const auto& s : line.filterByFemaleModelContains) {
+				x.femaleNeedles.push_back(normalizePath(trim(toLowerCase(s))));
+			}
+			x.voiceTypes = formfilter::resolveFormIDs(line.filterByVoiceTypeOr, RE::FormType::VoiceType);
+			x.playerGuard =
+				line.filterByEditorIdContains.empty() != line.filterByEditorIdContainsOr.empty();
+			return x;
+		}
+
+		const std::string& loweredEditorId(const RE::TESForm* a_form, formfilter::MatchScratch& a_s)
+		{
+			if (!a_s.haveEditorId) {
+				a_s.editorId = toLowerCase(clib_util::editorID::get_editorID(a_form));
+				a_s.haveEditorId = true;
+			}
+			return a_s.editorId;
+		}
+	}
+
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
 		logger::debug("processing patch instructions");
@@ -197,63 +315,42 @@ namespace RACE
 				line.filterByEditorIdContainsExcluded, line.objectExcluded
 			};
 
+			// PHASE 1 + 2: the rule is resolved and compiled ONCE.
+			const formfilter::MatchProgram          program = compileRaceRule(line);
+			const RaceRuleExtras                    extra = compileRaceExtras(line);
+			const formfilter::ResolvedCommonFilters resolved =
+				formfilter::resolve(view, RE::FormType::Race);
+
+			formfilter::MatchScratch scratch;
+			formfilter::MatchTarget  target;
+
+			// The two skeleton paths are memoised per PAIR: upstream rebuilt
+			// normalizePath(trim(toLowerCase(...))) inside the needle loop.
+			std::string maleModel, femaleModel;
+
 			for (const auto& curobj : RaceArray) {
 				//logger::info("processing npc");
-				bool found = false;
-				bool keywordAnd = false;
-				bool keywordOr = false;
-				bool contains = false;
-				bool containsOr = false;
-
 				if (!curobj || curobj->IsDeleted()) {
 					continue;
 				}
 
-				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+				if (!line.modNames.empty() && !formfilter::matchesModName(program, curobj)) {
 					continue;
 				}
 
-				if (!line.object.empty()) {
-					//logger::info("npc not empty");
-					for (const auto& npcstring : line.object) {
-						RE::TESForm* currentform = nullptr;
-						RE::TESRace* npc = nullptr;
+				target.form = curobj;
+				target.kf = curobj;
+				target.isPlayer = extra.playerGuard && curobj->formID == 0x000007;
 
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Race) {
-							npc = (RE::TESRace*)currentform;
+				// filterByRaces + EditorID pair + keyword pair + catch-all.
+				bool found = formfilter::runProgram(program, target, scratch);
 
-							if (curobj->formID == npc->formID) {
-								found = true;
-								//logger::info("NPC found.");
-								break;
-							}
-						}
-					}
-				}
-
-				if (!found && !line.filterByMaleModelContains.empty()) {
-					//logger::info("npc not empty");
-					for (const auto& modelString : line.filterByMaleModelContains) {
-						//(toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(modelString)) != std::string::npos)
-						//std::string femaleModel = normalizePath(trim(toLowerCase(curobj->skeletonModels[RE::SEXES::kFemale].model.c_str())));
-						std::string maleModel = normalizePath(trim(toLowerCase(curobj->skeletonModels[RE::SEXES::kMale].model.c_str())));
-						std::string searchModel = normalizePath(trim(toLowerCase(modelString)));
-
-						//logger::info("ModelFemale: {}", femaleModel);
-						//logger::info("ModelMale: {}", maleModel);
-						//logger::info("Searchedfor: {} {:08X}", searchModel, curobj->formID);
-
-						        // Additional logging to debug
-						//logger::info("Lengths - FemaleModel: {}, MaleModel: {}, SearchModel: {}",
-						//	femaleModel.length(), maleModel.length(), searchModel.length());
-
-						//// Hexadecimal representation for debugging
-						//logger::info("Hex - FemaleModel: {}", toHex(femaleModel));
-						//logger::info("Hex - MaleModel: {}", toHex(maleModel));
-						//logger::info("Hex - SearchModel: {}", toHex(searchModel));
-
+				// --- filters the opcode table does not cover ----------------
+				// All three only ever write `found = true`, so evaluating them
+				// after the program computes the same OR upstream did.
+				if (!found && !extra.maleNeedles.empty()) {
+					maleModel = normalizePath(trim(toLowerCase(curobj->skeletonModels[RE::SEXES::kMale].model.c_str())));
+					for (const auto& searchModel : extra.maleNeedles) {
 						if (maleModel.find(searchModel) != std::string::npos) {
 							found = true;
 							//logger::info("found model");
@@ -262,28 +359,10 @@ namespace RACE
 					}
 				}
 
-				if (!found && !line.filterByFemaleModelContains.empty()) {
-					//logger::info("npc not empty");
-					for (const auto& modelString : line.filterByFemaleModelContains) {
-						//(toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(modelString)) != std::string::npos)
-						std::string femaleModel = normalizePath(trim(toLowerCase(curobj->skeletonModels[RE::SEXES::kFemale].model.c_str())));
-						//std::string maleModel = normalizePath(trim(toLowerCase(curobj->skeletonModels[RE::SEXES::kMale].model.c_str())));
-						std::string searchModel = normalizePath(trim(toLowerCase(modelString)));
-
-						//logger::info("ModelFemale: {}", femaleModel);
-						//logger::info("ModelMale: {}", maleModel);
-						//logger::info("Searchedfor: {} {:08X}", searchModel, curobj->formID);
-
-						// Additional logging to debug
-						//logger::info("Lengths - FemaleModel: {}, MaleModel: {}, SearchModel: {}",
-						//	femaleModel.length(), maleModel.length(), searchModel.length());
-
-						//// Hexadecimal representation for debugging
-						//logger::info("Hex - FemaleModel: {}", toHex(femaleModel));
-						//logger::info("Hex - MaleModel: {}", toHex(maleModel));
-						//logger::info("Hex - SearchModel: {}", toHex(searchModel));
-
-						if (femaleModel.find(searchModel) != std::string::npos ) {
+				if (!found && !extra.femaleNeedles.empty()) {
+					femaleModel = normalizePath(trim(toLowerCase(curobj->skeletonModels[RE::SEXES::kFemale].model.c_str())));
+					for (const auto& searchModel : extra.femaleNeedles) {
+						if (femaleModel.find(searchModel) != std::string::npos) {
 							found = true;
 							//logger::info("found model");
 							break;
@@ -291,82 +370,19 @@ namespace RACE
 					}
 				}
 
-				if (!found && !line.filterByEditorIdContains.empty()) {
-					for (const auto& editorString : line.filterByEditorIdContains) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							contains = true;
-						} else {
-							contains = false;
+				if (!found && !extra.voiceTypes.empty()) {
+					for (const RE::FormID id : extra.voiceTypes) {
+						if (curobj->defaultVoiceTypes[RE::SEXES::kMale] && curobj->defaultVoiceTypes[RE::SEXES::kMale]->formID == id || curobj->defaultVoiceTypes[RE::SEXES::kFemale] && curobj->defaultVoiceTypes[RE::SEXES::kFemale]->formID == id) {
+							found = true;
 							break;
 						}
 					}
-				} else if (curobj->formID != 0x000007) {
-					contains = true;
 				}
 
-				if (!found && !line.filterByEditorIdContainsOr.empty()) {
-					//logger::info("keywords not empty");
-					for (const auto& editorString : line.filterByEditorIdContainsOr) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							containsOr = true;
-							break;
-						}
-					}
-				} else if (curobj->formID != 0x000007) {
-					containsOr = true;
-				}
-
-				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
-					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
-				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
-					keywordAnd = true;
-				}
-				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
-					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
-				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
-					keywordOr = true;
-				}
-
-				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching race by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				if (!line.filterByVoiceTypeOr.empty()) {
-					for (const auto& keywordstring : line.filterByVoiceTypeOr) {
-						//logger::info("filterByVoiceTypeOr {}", keywordstring);
-						RE::TESForm*      currentform = nullptr;
-						RE::BGSVoiceType* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::VoiceType) {
-							keyword = (RE::BGSVoiceType*)currentform;
-
-							if (curobj->defaultVoiceTypes[RE::SEXES::kMale] && curobj->defaultVoiceTypes[RE::SEXES::kMale]->formID == keyword->formID || curobj->defaultVoiceTypes[RE::SEXES::kFemale] && curobj->defaultVoiceTypes[RE::SEXES::kFemale]->formID == keyword->formID) {
-								found = true;
-								break;
-							}
-						}
-					}
-				}
-
-				if (!found && line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterByVoiceTypeOr.empty() && line.filterByMaleModelContains.empty() && line.filterByFemaleModelContains.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
-					found = true;
-				}
-
+				// --- negative stage, in upstream source order ---------------
 				if (!line.keywordsExcluded.empty() && found) {
 					//logger::info("keywords not empty");
-					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
+					if (formfilter::hasExcludedKeyword(resolved, curobj, nullptr)) {
 						found = false;
 					}
 				}
@@ -374,20 +390,23 @@ namespace RACE
 
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
+					//logger::info("npc not empty")
 					// Migration fix: was previously RE::FormType::Keyword (copy-paste
 					// bug), which made this exclusion never match any race. The hook
 					// path's copy of this same filter (below) always used the correct
 					// RE::FormType::Race.
-					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Race)) {
+					if (formfilter::isObjectExcluded(resolved, curobj)) {
 						found = false;
 					}
 				}
 
-				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-					//logger::info("factions not empty");
-					if (formfilter::hasExcludedEditorId(view, curobj)) {
-						found = false;
+				if (!resolved.editorIdContainsExcluded.empty() && found) {
+					const std::string& editorId = loweredEditorId(curobj, scratch);
+					for (const auto& needle : resolved.editorIdContainsExcluded) {
+						if (editorId.find(needle) != std::string::npos) {
+							found = false;
+							break;
+						}
 					}
 				}
 
@@ -1365,6 +1384,30 @@ namespace RACE
 		logger::debug("{} Done!", __FUNCTION__);
 	}
 
+	// ==================================================================
+	// PHASE 2 -- the HOOK path is DELIBERATELY NOT CONVERTED.
+	//
+	// Every filter it carries (filterByRaces as a bare formID compare, the
+	// keyword pair, the catch-all, filterByKeywordsExcluded and
+	// filterByRacesExcluded) IS covered by the opcode table, so unlike the
+	// scan path above this one could be converted in full. It is not, for two
+	// reasons:
+	//
+	//  1. A MatchProgram amortises rule compilation over a FORM LOOP. There is
+	//     no form loop here -- Hook_InitItemImpl is called once per TESRace
+	//     and matches that ONE race against every hooktoken. Compiling per
+	//     invocation would add an allocation per (race, rule) and buy nothing.
+	//
+	//  2. Compiling once and caching would be a real behaviour change.
+	//     GetFormFromIdentifier runs here DURING form loading, and upstream
+	//     re-resolves on every invocation; a cache would freeze the answers
+	//     the first hooked race saw. Whether a later-loading form resolves is
+	//     exactly what this path can observe.
+	//
+	// It is also the one filter path in this file that `match_rate` does NOT
+	// cover: the apply harness drives process_patch_instructions, not the
+	// vtable hook. An unmeasured rewrite of it is what this project avoids.
+	// ==================================================================
 	bool LoadRaceDataHook::Hook_InitItemImpl(RE::TESRace* curobj)
 	{
 

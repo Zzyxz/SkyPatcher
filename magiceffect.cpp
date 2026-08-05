@@ -83,6 +83,239 @@ namespace MGEF
 		return l;
 	}  //endStruct
 
+	// ==================================================================
+	// PHASE 2 -- MGEF's rule compiler.
+	//
+	// PARTIAL CONVERSION, deliberately. Only the filters the shared opcode
+	// table already covers are compiled into a formfilter::MatchProgram: the
+	// keyword pair, the EditorID pair and the catch-all. MGEF's other filter
+	// blocks -- filterByArchetypes, filterByDamageHealthMgefs, filterBySounds,
+	// effectShadersExcluded and the seven restrictTo* gates -- have no opcode,
+	// and per formfilter.h's rule they stay on their own path rather than
+	// growing an engine three already-verified types depend on.
+	//
+	// They are all still hoisted out of the (form, rule) loop. This is the
+	// type where that matters most: filterByArchetypes was a 47-rung
+	// `toLowerCase(name) == "..."` ladder run per (pair, entry), and
+	// restrictToMagicSkill/restrictToActorValue called StringToActorValue per
+	// (pair, entry). Every one of those is now one lookup per rule.
+	//
+	// NOT converted, and staying verbatim: modNamesExcluded and
+	// filterByModNamesLastOverriddenExcluded. They compare raw config text to
+	// GetFile(0)->fileName / GetFile()->fileName, which is the same
+	// case-sensitive per-pair string compare formfilter.h deliberately keeps
+	// for filterByModNames (see ResolvedCommonFilters::modNames).
+	// ==================================================================
+	namespace
+	{
+		formfilter::MatchProgram compileMgefRule(const patch_instruction& line)
+		{
+			using formfilter::Mode;
+			using formfilter::Op;
+
+			formfilter::MatchProgram p;
+			p.modNames = &line.modNames;
+
+			// DRIFT, PRESERVED: the `else if (formID != 0x000007)` guard is a
+			// copy-pasted actor check, inert here because EffectSetting forms
+			// never carry the player's formID. It is only reached when the
+			// corresponding list is EMPTY, so it can only matter when exactly
+			// one of the two is present -- which is exactly skipIfPlayer.
+			const bool playerGuard =
+				line.filterByEditorIdContains.empty() != line.filterByEditorIdContainsOr.empty();
+			std::size_t first = p.preds.size();
+			if (!line.filterByEditorIdContains.empty()) {
+				formfilter::addPred(p, Op::EditorId, Mode::And,
+					formfilter::needleOperands(p, line.filterByEditorIdContains), playerGuard);
+			}
+			if (!line.filterByEditorIdContainsOr.empty()) {
+				formfilter::addPred(p, Op::EditorId, Mode::Or,
+					formfilter::needleOperands(p, line.filterByEditorIdContainsOr), playerGuard);
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			first = p.preds.size();
+			if (!line.keywords.empty()) {
+				formfilter::addPred(p, Op::Keyword, Mode::And,
+					formfilter::ptrOperands(line.keywords, RE::FormType::Keyword));
+			}
+			if (!line.keywordsOr.empty()) {
+				formfilter::addPred(p, Op::Keyword, Mode::Or,
+					formfilter::ptrOperands(line.keywordsOr, RE::FormType::Keyword));
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			formfilter::sortCheapestFirst(p.positive);
+
+			p.catchAll = line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() &&
+				line.filterBySounds.empty() && line.filterArchetype.empty() &&
+				line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() &&
+				line.filterByDamageHealthMgefs == "none";
+
+			return p;
+		}
+
+		// Every one of MGEF's `if (name == "x" && value == kX) hit = true;`
+		// ladders reduces to "the form's value is one of the named ones": an
+		// unrecognised name can never make the conjunction true, so it
+		// contributes nothing, and no rung writes false.
+		const RE::EffectArchetypes::ArchetypeID* lookupArchetype(const std::string& a_lower)
+		{
+			using A = RE::EffectArchetypes::ArchetypeID;
+			static const std::unordered_map<std::string, A> map{
+				{ "absorb", A::kAbsorb }, { "accumulatemagnitude", A::kAccumulateMagnitude },
+				{ "valuemodifier", A::kValueModifier }, { "script", A::kScript },
+				{ "dispel", A::kDispel }, { "curedisease", A::kCureDisease },
+				{ "dualvaluemodifier", A::kDualValueModifier }, { "calm", A::kCalm },
+				{ "demoralize", A::kDemoralize }, { "frenzy", A::kFrenzy },
+				{ "disarm", A::kDisarm }, { "commandsummoned", A::kCommandSummoned },
+				{ "invisibility", A::kInvisibility }, { "light", A::kLight },
+				{ "darkness", A::kDarkness }, { "nighteye", A::kNightEye },
+				{ "lock", A::kLock }, { "open", A::kOpen },
+				{ "boundweapon", A::kBoundWeapon }, { "summoncreature", A::kSummonCreature },
+				{ "detectlife", A::kDetectLife }, { "telekinesis", A::kTelekinesis },
+				{ "paralysis", A::kParalysis }, { "reanimate", A::kReanimate },
+				{ "soultrap", A::kSoulTrap }, { "turnundead", A::kTurnUndead },
+				{ "guide", A::kGuide }, { "werewolffeed", A::kWerewolfFeed },
+				{ "cureparalysis", A::kCureParalysis }, { "cureaddiction", A::kCureAddiction },
+				{ "curepoison", A::kCurePoison }, { "concussion", A::kConcussion },
+				{ "valueandparts", A::kValueAndParts }, { "stagger", A::kStagger },
+				{ "peakvaluemodifier", A::kPeakValueModifier }, { "cloak", A::kCloak },
+				{ "werewolf", A::kWerewolf }, { "slowtime", A::kSlowTime },
+				{ "rally", A::kRally }, { "enhanceweapon", A::kEnhanceWeapon },
+				{ "spawnhazard", A::kSpawnHazard }, { "etherealize", A::kEtherealize },
+				{ "banish", A::kBanish }, { "spawnscriptedref", A::kSpawnScriptedRef },
+				{ "disguise", A::kDisguise }, { "grabactor", A::kGrabActor },
+				{ "vampirelord", A::kVampireLord },
+			};
+			const auto it = map.find(a_lower);
+			return it == map.end() ? nullptr : &it->second;
+		}
+
+		struct MgefRuleExtras
+		{
+			std::vector<RE::EffectArchetypes::ArchetypeID> archetypes;
+			std::vector<RE::BGSSoundDescriptorForm*>       sounds;
+			std::vector<RE::FormID>                        effectShadersExcluded;
+			std::vector<RE::MagicSystem::CastingType>      castingTypes;
+			std::vector<RE::MagicSystem::Delivery>         deliveryTypes;
+			std::vector<RE::ActorValue>                    resistTypes;
+			// StringToActorValue's answer for an unrecognised name is part of
+			// the comparison upstream, so every entry survives (same call
+			// weapon.cpp made for restrictToSkills).
+			std::vector<RE::ActorValue> magicSkills;
+			std::vector<RE::ActorValue> actorValues;
+			std::string                 area;          // toLowerCase'd once
+			std::string                 detrimental;   // toLowerCase'd once
+			bool                        damageHealthActive = false;
+			bool                        damageHealthHostile = false;
+			bool                        playerGuard = false;
+		};
+
+		MgefRuleExtras compileMgefExtras(const patch_instruction& line)
+		{
+			MgefRuleExtras x;
+
+			for (const auto& raw : line.filterArchetype) {
+				if (const auto* a = lookupArchetype(toLowerCase(raw))) {
+					x.archetypes.push_back(*a);
+				}
+			}
+
+			// Upstream warned once per (pair, invalid identifier); resolving
+			// once per rule makes that one warning per rule.
+			for (const auto& soundFormStr : line.filterBySounds) {
+				RE::TESForm* form = GetFormFromIdentifier(soundFormStr);
+				if (!form || form->formType != RE::FormType::SoundRecord) {
+					logger::warn(FMT_STRING("mgef - Invalid sound filter: {}"), soundFormStr);
+					continue;
+				}
+				x.sounds.push_back(static_cast<RE::BGSSoundDescriptorForm*>(form));
+			}
+
+			// NOTE: no formType check upstream -- any identifier that resolves
+			// is C-cast to TESEffectShader and only its formID is read.
+			for (const auto& npcstring : line.effectExcluded) {
+				std::string  string_form = npcstring;
+				RE::TESForm* currentform = GetFormFromIdentifier(string_form);
+				if (currentform) {
+					x.effectShadersExcluded.push_back(currentform->formID);
+				}
+			}
+
+			for (const auto& raw : line.restrictToCastingType) {
+				const std::string s = toLowerCase(raw);
+				if (s == "concentration") {
+					x.castingTypes.push_back(RE::MagicSystem::CastingType::kConcentration);
+				} else if (s == "constanteffect") {
+					x.castingTypes.push_back(RE::MagicSystem::CastingType::kConstantEffect);
+				} else if (s == "fireandforget") {
+					x.castingTypes.push_back(RE::MagicSystem::CastingType::kFireAndForget);
+				} else if (s == "scroll") {
+					x.castingTypes.push_back(RE::MagicSystem::CastingType::kScroll);
+				}
+			}
+
+			for (const auto& raw : line.restrictToDeliveryType) {
+				const std::string s = toLowerCase(raw);
+				if (s == "self") {
+					x.deliveryTypes.push_back(RE::MagicSystem::Delivery::kSelf);
+				} else if (s == "touch") {
+					x.deliveryTypes.push_back(RE::MagicSystem::Delivery::kTouch);
+				} else if (s == "aimed") {
+					x.deliveryTypes.push_back(RE::MagicSystem::Delivery::kAimed);
+				} else if (s == "targetactor") {
+					x.deliveryTypes.push_back(RE::MagicSystem::Delivery::kTargetActor);
+				} else if (s == "targetlocation") {
+					x.deliveryTypes.push_back(RE::MagicSystem::Delivery::kTargetLocation);
+				}
+			}
+
+			for (const auto& raw : line.restrictToResistType) {
+				const std::string s = toLowerCase(raw);
+				if (s == "resistdisease") {
+					x.resistTypes.push_back(RE::ActorValue::kResistDisease);
+				} else if (s == "resistfire") {
+					x.resistTypes.push_back(RE::ActorValue::kResistFire);
+				} else if (s == "resistfrost") {
+					x.resistTypes.push_back(RE::ActorValue::kResistFrost);
+				} else if (s == "resistmagic") {
+					x.resistTypes.push_back(RE::ActorValue::kResistMagic);
+				} else if (s == "resistshock") {
+					x.resistTypes.push_back(RE::ActorValue::kResistShock);
+				} else if (s == "resistpoison") {
+					x.resistTypes.push_back(RE::ActorValue::kPoisonResist);
+				}
+			}
+
+			for (const auto& raw : line.restrictToMagicSkill) {
+				x.magicSkills.push_back(StringToActorValue(toLowerCase(raw)));
+			}
+			for (const auto& raw : line.restrictToActorValue) {
+				x.actorValues.push_back(StringToActorValue(toLowerCase(raw)));
+			}
+
+			x.area = toLowerCase(line.restrictToArea);
+			x.detrimental = toLowerCase(line.restrictToDetrimental);
+
+			x.damageHealthActive = line.filterByDamageHealthMgefs != "none";
+			x.damageHealthHostile = toLowerCase(line.filterByDamageHealthMgefs) == "hostile";
+
+			x.playerGuard =
+				line.filterByEditorIdContains.empty() != line.filterByEditorIdContainsOr.empty();
+			return x;
+		}
+
+		const std::string& loweredEditorId(const RE::TESForm* a_form, formfilter::MatchScratch& a_s)
+		{
+			if (!a_s.haveEditorId) {
+				a_s.editorId = toLowerCase(clib_util::editorID::get_editorID(a_form));
+				a_s.haveEditorId = true;
+			}
+			return a_s.editorId;
+		}
+	}
+
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
 		logger::debug("processing patch instructions");
@@ -118,19 +351,22 @@ namespace MGEF
 				line.filterByEditorIdContainsExcluded, line.objectExcluded
 			};
 
+			// PHASE 1 + 2: the rule is resolved and compiled ONCE.
+			const formfilter::MatchProgram          program = compileMgefRule(line);
+			const MgefRuleExtras                    extra = compileMgefExtras(line);
+			const formfilter::ResolvedCommonFilters resolved =
+				formfilter::resolve(view, RE::FormType::MagicEffect);
+
+			formfilter::MatchScratch scratch;
+			formfilter::MatchTarget  target;
+
 			for (const auto& curobj : ObjectArray) {
 				//logger::info("processing npc");
-				bool found = false;
-				bool keywordAnd = false;
-				bool keywordOr = false;
-				bool contains = false;
-				bool containsOr = false;
-
 				if (!curobj || curobj->IsDeleted()) {
 					continue;
 				}
 
-				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+				if (!line.modNames.empty() && !formfilter::matchesModName(program, curobj)) {
 					continue;
 				}
 
@@ -161,309 +397,97 @@ namespace MGEF
 					}
 				}
 
-				//
+				target.form = curobj;
+				target.kf = curobj;
+				target.isPlayer = extra.playerGuard && curobj->formID == 0x000007;
 
-				//
-				if (!line.filterArchetype.empty()) {
-					bool foundArchtype = false;
-					for (auto string : line.filterArchetype) {
-						string = toLowerCase(string);
-						if (string == "absorb" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kAbsorb) {
-							foundArchtype = true;
-						}
-						else if (string == "accumulatemagnitude" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kAccumulateMagnitude) {
-							foundArchtype = true;
-						}
-						else if (string == "valuemodifier" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kValueModifier) {
-							foundArchtype = true;
-						}
-						else if (string == "script" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kScript) {
-							foundArchtype = true;
-						}
-						else if (string == "dispel" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kDispel) {
-							foundArchtype = true;
-						}
-						else if (string == "curedisease" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kCureDisease) {
-							foundArchtype = true;
-						}
-						else if (string == "dualvaluemodifier" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kDualValueModifier) {
-							foundArchtype = true;
-						}
-						else if (string == "calm" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kCalm) {
-							foundArchtype = true;
-						}
-						else if (string == "demoralize" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kDemoralize) {
-							foundArchtype = true;
-						}
-						else if (string == "frenzy" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kFrenzy) {
-							foundArchtype = true;
-						}
-						else if (string == "disarm" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kDisarm) {
-							foundArchtype = true;
-						}
-						else if (string == "commandsummoned" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kCommandSummoned) {
-							foundArchtype = true;
-						}
-						else if (string == "invisibility" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kInvisibility) {
-							foundArchtype = true;
-						}
-						else if (string == "light" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kLight) {
-							foundArchtype = true;
-						}
-						else if (string == "darkness" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kDarkness) {
-							foundArchtype = true;
-						}
-						else if (string == "nighteye" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kNightEye) {
-							foundArchtype = true;
-						}
-						else if (string == "lock" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kLock) {
-							foundArchtype = true;
-						}
-						else if (string == "open" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kOpen) {
-							foundArchtype = true;
-						}
-						else if (string == "boundweapon" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kBoundWeapon) {
-							foundArchtype = true;
-						}
-						else if (string == "summoncreature" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kSummonCreature) {
-							foundArchtype = true;
-						}
-						else if (string == "detectlife" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kDetectLife) {
-							foundArchtype = true;
-						}
-						else if (string == "telekinesis" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kTelekinesis) {
-							foundArchtype = true;
-						}
-						else if (string == "paralysis" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kParalysis) {
-							foundArchtype = true;
-						}
-						else if (string == "reanimate" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kReanimate) {
-							foundArchtype = true;
-						}
-						else if (string == "soultrap" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kSoulTrap) {
-							foundArchtype = true;
-						}
-						else if (string == "turnundead" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kTurnUndead) {
-							foundArchtype = true;
-						}
-						else if (string == "guide" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kGuide) {
-							foundArchtype = true;
-						}
-						else if (string == "werewolffeed" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kWerewolfFeed) {
-							foundArchtype = true;
-						}
-						else if (string == "cureparalysis" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kCureParalysis) {
-							foundArchtype = true;
-						}
-						else if (string == "cureaddiction" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kCureAddiction) {
-							foundArchtype = true;
-						}
-						else if (string == "curepoison" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kCurePoison) {
-							foundArchtype = true;
-						}
-						else if (string == "concussion" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kConcussion) {
-							foundArchtype = true;
-						}
-						else if (string == "valueandparts" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kValueAndParts) {
-							foundArchtype = true;
-						}
-						else if (string == "stagger" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kStagger) {
-							foundArchtype = true;
-						}
-						else if (string == "peakvaluemodifier" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kPeakValueModifier) {
-							foundArchtype = true;
-						}
-						else if (string == "cloak" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kCloak) {
-							foundArchtype = true;
-						}
-						else if (string == "werewolf" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kWerewolf) {
-							foundArchtype = true;
-						}
-						else if (string == "slowtime" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kSlowTime) {
-							foundArchtype = true;
-						}
-						else if (string == "rally" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kRally) {
-							foundArchtype = true;
-						}
-						else if (string == "enhanceweapon" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kEnhanceWeapon) {
-							foundArchtype = true;
-						}
-						else if (string == "spawnhazard" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kSpawnHazard) {
-							foundArchtype = true;
-						}
-						else if (string == "etherealize" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kEtherealize) {
-							foundArchtype = true;
-						}
-						else if (string == "banish" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kBanish) {
-							foundArchtype = true;
-						}
-						else if (string == "spawnscriptedref" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kSpawnScriptedRef) {
-							foundArchtype = true;
-						}
-						else if (string == "disguise" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kDisguise) {
-							foundArchtype = true;
-						}
-						else if (string == "grabactor" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kGrabActor) {
-							foundArchtype = true;
-						}
-						else if (string == "vampirelord" && curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kVampireLord) {
-							foundArchtype = true;
-						}
-					}
-					if (foundArchtype)
-						found = true;
-				}
+				// EditorID pair + keyword pair + the catch-all.
+				bool found = formfilter::runProgram(program, target, scratch);
 
-				// DRIFT (preserved, not fixed): the `else if (formID != player)`
-				// guard is a copy-pasted actor check that is inert here --
-				// EffectSetting forms never carry the player's formID. See
-				// task report.
-				if (!found && !line.filterByEditorIdContains.empty() ) {
-					contains = formfilter::matchesEditorIdAnd(view, curobj);
-				} else if (curobj->formID != 0x000007) {
-					contains = true;
-				}
-
-				if (!found && !line.filterByEditorIdContainsOr.empty() ) {
-					//logger::info("keywords not empty");
-					containsOr = formfilter::matchesEditorIdOr(view, curobj);
-				} else if (curobj->formID != 0x000007) {
-					containsOr = true;
-				}
-
-				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
-					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
-				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
-					keywordAnd = true;
-				}
-				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
-					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
-				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
-					keywordOr = true;
-				}
-
-				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				if (line.filterByDamageHealthMgefs != "none") {
-					if (curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kValueModifier || curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kDualValueModifier) {
-						if (toLowerCase(line.filterByDamageHealthMgefs) == "hostile") {
-							if ((curobj->data.primaryAV == RE::ActorValue::kHealth || curobj->data.secondaryAV == RE::ActorValue::kHealth) && curobj->IsHostile() && curobj->IsDetrimental()) {
-								found = true;
-							}
-						} else {
-							if ((curobj->data.primaryAV == RE::ActorValue::kHealth || curobj->data.secondaryAV == RE::ActorValue::kHealth) && curobj->IsDetrimental()) {
-								found = true;
-							}
-						}
-
-					}
-						
-				}
-
-				if (!found && !line.filterBySounds.empty()) {
-					for (const auto& soundFormStr : line.filterBySounds) {
-						RE::TESForm* form = GetFormFromIdentifier(soundFormStr);
-						if (!form || form->formType != RE::FormType::SoundRecord) {
-							logger::warn(FMT_STRING("mgef - Invalid sound filter: {}"), soundFormStr);
-							continue;
-						}
-
-						auto* targetSound = static_cast<RE::BGSSoundDescriptorForm*>(form);
-
-						// Check if the sound is present in curobj's effectSounds
-						bool match = std::any_of(
-							curobj->effectSounds.begin(),
-							curobj->effectSounds.end(),
-							[targetSound](const RE::EffectSetting::SoundPair& pair) {
-								return pair.sound == targetSound;
-							}
-						);
-
-						if (match) {
+				// --- filters the opcode table does not cover ----------------
+				// Every one of these only ever writes `found = true`, so
+				// running them after the program -- and only when it did not
+				// already match -- computes the same OR upstream did.
+				if (!found && !extra.archetypes.empty()) {
+					for (const auto a : extra.archetypes) {
+						if (curobj->data.archetype == a) {
 							found = true;
-							//logger::debug(FMT_STRING("npc {:08X} matched sound filter: {}"), curobj->formID, soundFormStr);
 							break;
 						}
 					}
 				}
 
-
-				if (line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterBySounds.empty() && line.filterArchetype.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByDamageHealthMgefs == "none") {
-					found = true;
+				if (!found && extra.damageHealthActive) {
+					if (curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kValueModifier ||
+						curobj->data.archetype == RE::EffectArchetypes::ArchetypeID::kDualValueModifier) {
+						if ((curobj->data.primaryAV == RE::ActorValue::kHealth ||
+								curobj->data.secondaryAV == RE::ActorValue::kHealth) &&
+							curobj->IsDetrimental() &&
+							(!extra.damageHealthHostile || curobj->IsHostile())) {
+							found = true;
+						}
+					}
 				}
 
+				if (!found && !extra.sounds.empty()) {
+					for (RE::BGSSoundDescriptorForm* const targetSound : extra.sounds) {
+						// Check if the sound is present in curobj's effectSounds
+						const bool match = std::any_of(
+							curobj->effectSounds.begin(),
+							curobj->effectSounds.end(),
+							[targetSound](const RE::EffectSetting::SoundPair& pair) {
+								return pair.sound == targetSound;
+							});
 
+						if (match) {
+							found = true;
+							break;
+						}
+					}
+				}
 
+				// --- negative stage, in upstream source order ---------------
 				if (!line.objectExcluded.empty() && found) {
 					//logger::info("npc not empty");
-					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::MagicEffect)) {
+					if (formfilter::isObjectExcluded(resolved, curobj)) {
 						found = false;
 						//logger::info("Mgef Excluded.");
 					}
 				}
 
 				if (!line.effectExcluded.empty() && found) {
-					//logger::info("npc not empty");
-					for (const auto& npcstring : line.effectExcluded) {
-						RE::TESForm*       currentform = nullptr;
-						//RE::EffectSetting* npc = nullptr;
-						RE::TESEffectShader* effs = nullptr;
-
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform) {
-							effs = (RE::TESEffectShader*)currentform;
-							
-							if (effs && curobj->data.effectShader) {
-
-								if (curobj->data.effectShader->formID == effs->formID) {
-									found = false;
-									//logger::info("effs Excluded.");
-									break;
-								}
-							}
+					for (const RE::FormID id : extra.effectShadersExcluded) {
+						if (curobj->data.effectShader && curobj->data.effectShader->formID == id) {
+							found = false;
+							//logger::info("effs Excluded.");
+							break;
 						}
 					}
 				}
 
 				if (!line.keywordsExcluded.empty() && found) {
 					//logger::info("keywords not empty");
-					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
+					if (formfilter::hasExcludedKeyword(resolved, curobj, nullptr)) {
 						found = false;
 					}
 				}
 
-				if (!line.filterByEditorIdContainsExcluded.empty() && found ) {
-					//logger::info("factions not empty");
-					if (formfilter::hasExcludedEditorId(view, curobj)) {
-						found = false;
+				if (!resolved.editorIdContainsExcluded.empty() && found) {
+					const std::string& editorId = loweredEditorId(curobj, scratch);
+					for (const auto& needle : resolved.editorIdContainsExcluded) {
+						if (editorId.find(needle) != std::string::npos) {
+							found = false;
+							break;
+						}
 					}
 				}
 
 				if (found && !line.restrictToCastingType.empty()) {
 					bool foundCastingType = false;
-					for (auto string : line.restrictToCastingType) {
-						string = toLowerCase(string);
-						if (string == "concentration" && curobj->data.castingType == RE::MagicSystem::CastingType::kConcentration) {
+					for (const auto t : extra.castingTypes) {
+						if (curobj->data.castingType == t) {
 							foundCastingType = true;
-						} else if (string == "constanteffect" && curobj->data.castingType == RE::MagicSystem::CastingType::kConstantEffect) {
-							foundCastingType = true;
-						} else if (string == "fireandforget" && curobj->data.castingType == RE::MagicSystem::CastingType::kFireAndForget) {
-							foundCastingType = true;
-						} else if (string == "scroll" && curobj->data.castingType == RE::MagicSystem::CastingType::kScroll) {
-							foundCastingType = true;
+							break;
 						}
 					}
 					if (!foundCastingType)
@@ -472,56 +496,22 @@ namespace MGEF
 
 				if (found && !line.restrictToDeliveryType.empty()) {
 					bool foundDeliveryType = false;
-					for (auto string : line.restrictToDeliveryType) {
-						string = toLowerCase(string);
-						if (string == "self" && curobj->data.delivery == RE::MagicSystem::Delivery::kSelf) {
+					for (const auto d : extra.deliveryTypes) {
+						if (curobj->data.delivery == d) {
 							foundDeliveryType = true;
+							break;
 						}
-						else if (string == "touch" && curobj->data.delivery == RE::MagicSystem::Delivery::kTouch) {
-							foundDeliveryType = true;
-						}
-						else if (string == "aimed" && curobj->data.delivery == RE::MagicSystem::Delivery::kAimed) {
-							foundDeliveryType = true;
-						}
-						else if (string == "targetactor" && curobj->data.delivery == RE::MagicSystem::Delivery::kTargetActor) {
-							foundDeliveryType = true;
-						}
-						else if (string == "targetlocation" && curobj->data.delivery == RE::MagicSystem::Delivery::kTargetLocation) {
-							foundDeliveryType = true;
-						}
-
 					}
 					if (!foundDeliveryType)
 						found = false;
 				}
 
-
-				
-
-				//
-
-
 				if (found && !line.restrictToResistType.empty()) {
 					bool foundType = false;
-					for (auto string : line.restrictToResistType) {
-						string = toLowerCase(string);
-						if (string == "resistdisease" && curobj->data.resistVariable == RE::ActorValue::kResistDisease) {
+					for (const auto r : extra.resistTypes) {
+						if (curobj->data.resistVariable == r) {
 							foundType = true;
-						}
-						else if (string == "resistfire" && curobj->data.resistVariable == RE::ActorValue::kResistFire) {
-							foundType = true;
-						}
-						else if (string == "resistfrost" && curobj->data.resistVariable == RE::ActorValue::kResistFrost) {
-							foundType = true;
-						}
-						else if (string == "resistmagic" && curobj->data.resistVariable == RE::ActorValue::kResistMagic) {
-							foundType = true;
-						}
-						else if (string == "resistshock" && curobj->data.resistVariable == RE::ActorValue::kResistShock) {
-							foundType = true;
-						}
-						else if (string == "resistpoison" && curobj->data.resistVariable == RE::ActorValue::kPoisonResist) {
-							foundType = true;
+							break;
 						}
 					}
 					if (!foundType)
@@ -530,10 +520,10 @@ namespace MGEF
 
 				if (found && !line.restrictToMagicSkill.empty()) {
 					bool foundType = false;
-					for (auto string : line.restrictToMagicSkill) {
-						string = toLowerCase(string);
-						if (curobj->data.associatedSkill == StringToActorValue(string)) {
+					for (const auto av : extra.magicSkills) {
+						if (curobj->data.associatedSkill == av) {
 							foundType = true;
+							break;
 						}
 					}
 					if (!foundType)
@@ -541,31 +531,29 @@ namespace MGEF
 				}
 
 				if (found && !line.restrictToArea.empty()) {
-						auto string = toLowerCase(line.restrictToArea);
-						if (string == "true" && curobj->data.spellmakingArea <= 0) {
-							found = false;
-						}
-						if (string == "false" && curobj->data.spellmakingArea > 0) {
-							found = false;
-						}
+					if (extra.area == "true" && curobj->data.spellmakingArea <= 0) {
+						found = false;
+					}
+					if (extra.area == "false" && curobj->data.spellmakingArea > 0) {
+						found = false;
+					}
 				}
 
 				if (found && !line.restrictToDetrimental.empty()) {
-					auto string = toLowerCase(line.restrictToDetrimental);
-					if (string == "true" && !curobj->IsDetrimental()) {
+					if (extra.detrimental == "true" && !curobj->IsDetrimental()) {
 						found = false;
 					}
-					if (string == "false" && curobj->IsDetrimental()) {
+					if (extra.detrimental == "false" && curobj->IsDetrimental()) {
 						found = false;
 					}
 				}
 
 				if (found && !line.restrictToActorValue.empty()) {
 					bool foundType = false;
-					for (auto string : line.restrictToActorValue) {
-						string = toLowerCase(string); // Ensure the string is lowercase
-							if(curobj->data.primaryAV == StringToActorValue(string) || curobj->data.secondaryAV == StringToActorValue(string)) {
+					for (const auto av : extra.actorValues) {
+						if (curobj->data.primaryAV == av || curobj->data.secondaryAV == av) {
 							foundType = true;
+							break;
 						}
 					}
 					if (!foundType) {
