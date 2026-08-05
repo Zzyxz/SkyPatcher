@@ -447,4 +447,480 @@ namespace formfilter
 			}
 		}
 	}
+
+	// =====================================================================
+	// PHASE 2 -- the predicate interpreter. See formfilter.h.
+	// =====================================================================
+	namespace
+	{
+		// Static cost, in arbitrary units, of testing ONE operand of an opcode.
+		// Only the ORDER matters. The two substring opcodes are two orders of
+		// magnitude dearer than an integer compare because each one runs
+		// get_editorID (a cross-DLL call), a toLowerCase allocation and a
+		// std::string::find; everything else is a load and a compare, or a
+		// short linear scan over an array the form already owns.
+		std::uint32_t opCost(Op a_op)
+		{
+			switch (a_op) {
+			case Op::EditorId:
+			case Op::ModelContains:
+				return 64;
+			case Op::NameContains:
+				return 40;
+			case Op::ArmorAddon:
+				return 12;
+			case Op::Keyword:
+				return 8;
+			case Op::Faction:
+				return 4;
+			default:
+				return 1;
+			}
+		}
+
+		const std::string& lowerEditorId(const MatchTarget& a_t, MatchScratch& a_s)
+		{
+			if (!a_s.haveEditorId) {
+				a_s.editorId = toLowerCase(clib_util::editorID::get_editorID(a_t.form));
+				a_s.haveEditorId = true;
+			}
+			return a_s.editorId;
+		}
+
+		const std::string& lowerFullName(const MatchTarget& a_t, MatchScratch& a_s)
+		{
+			if (!a_s.haveFullName) {
+				a_s.fullName = toLowerCase(a_t.armor->fullName.c_str());
+				a_s.haveFullName = true;
+			}
+			return a_s.fullName;
+		}
+
+		const std::string& maleModelPath(const MatchTarget& a_t, MatchScratch& a_s)
+		{
+			if (!a_s.haveMaleModel) {
+				a_s.maleModel = a_t.npc->race
+					? normalizePath(trim(toLowerCase(a_t.npc->race->skeletonModels[RE::SEXES::kMale].model.c_str())))
+					: std::string{};
+				a_s.haveMaleModel = true;
+			}
+			return a_s.maleModel;
+		}
+
+		inline bool holdsKeywordPtr(const MatchTarget& a_t, RE::BGSKeyword* a_kw)
+		{
+			return holdsKeyword(a_t.kf, a_t.alt, a_kw);
+		}
+
+		// Does operand i of a_p hold for a_t? The single switch the whole
+		// filter chain reduces to.
+		bool operandHolds(const MatchProgram& a_prog, const Predicate& a_p, std::uint16_t a_i,
+			const MatchTarget& a_t, MatchScratch& a_s)
+		{
+			const std::uint64_t* const ops = a_prog.pool.data() + a_p.operands;
+
+			switch (static_cast<Op>(a_p.op)) {
+			case Op::Keyword:
+				return holdsKeywordPtr(a_t, reinterpret_cast<RE::BGSKeyword*>(static_cast<std::uintptr_t>(ops[a_i])));
+
+			case Op::EditorId:
+				return lowerEditorId(a_t, a_s).find(a_prog.strings[static_cast<std::size_t>(ops[a_i])]) != std::string::npos;
+
+			case Op::NameContains:
+				return lowerFullName(a_t, a_s).find(a_prog.strings[static_cast<std::size_t>(ops[a_i])]) != std::string::npos;
+
+			case Op::ModelContains:
+				// Upstream leaves `found` alone for a raceless NPC, i.e. the
+				// test passes vacuously.
+				return !a_t.npc->race ||
+				       maleModelPath(a_t, a_s).find(a_prog.strings[static_cast<std::size_t>(ops[a_i])]) != std::string::npos;
+
+			case Op::Race:
+				return a_t.npc->race && a_t.npc->race->formID == static_cast<RE::FormID>(ops[a_i]);
+
+			case Op::NpcClass:
+				// NOTE: upstream's filterByClassExclude dereferences npcClass
+				// with NO null check and would crash on a classless NPC. The
+				// null check here can only change the outcome for a form that
+				// would have crashed.
+				return a_t.npc->npcClass && a_t.npc->npcClass->formID == static_cast<RE::FormID>(ops[a_i]);
+
+			case Op::Outfit:
+				return a_t.npc->defaultOutfit && a_t.npc->defaultOutfit->formID == static_cast<RE::FormID>(ops[a_i]);
+
+			case Op::CombatStyle:
+				return a_t.npc->combatStyle && a_t.npc->combatStyle->formID == static_cast<RE::FormID>(ops[a_i]);
+
+			case Op::VoiceType:
+				return a_t.npc->voiceType && a_t.npc->voiceType->formID == static_cast<RE::FormID>(ops[a_i]);
+
+			case Op::Faction:
+				return const_cast<RE::TESNPC*>(a_t.npc)->HasFaction(
+					reinterpret_cast<RE::TESFaction*>(static_cast<std::uintptr_t>(ops[a_i])));
+
+			case Op::ObjectId:
+				return a_t.form->formID == static_cast<RE::FormID>(ops[a_i]);
+
+			case Op::NpcFlag:
+				return a_t.npc->actorData.actorBaseFlags.any(
+					static_cast<RE::ACTOR_BASE_DATA::Flag>(static_cast<std::uint32_t>(ops[a_i])));
+
+			case Op::NpcTemplateFlag:
+				return a_t.npc->actorData.templateUseFlags.any(
+					static_cast<RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG>(static_cast<std::uint32_t>(ops[a_i])));
+
+			case Op::NpcSkillRange: {
+				const std::uint64_t* const e = ops + std::size_t{ 3 } * a_i;
+				const int value = a_t.npc->playerSkills.values[static_cast<std::size_t>(e[0])];
+				return value >= static_cast<int>(e[1]) && value <= static_cast<int>(e[2]);
+			}
+
+			case Op::WeapAnimType:
+				return a_t.weapon->weaponData.animationType ==
+				       static_cast<RE::WEAPON_TYPE>(static_cast<std::uint32_t>(ops[a_i]));
+
+			case Op::WeapSkill:
+				return a_t.weapon->weaponData.skill ==
+				       static_cast<RE::ActorValue>(static_cast<std::uint32_t>(ops[a_i]));
+
+			case Op::WeapModel1st:
+				return a_t.weapon->firstPersonModelObject &&
+				       a_t.weapon->firstPersonModelObject->formID == static_cast<RE::FormID>(ops[a_i]);
+
+			case Op::WeapBound:
+				// restrictToFlags' upstream loop can only leave `found` true if
+				// its FIRST entry is "boundweapon" and the flag is set; every
+				// other entry writes found = false before the break can fire.
+				return ops[0] != 0 &&
+				       a_t.weapon->weaponData.flags2.any(RE::TESObjectWEAP::Data::Flag2::kBoundWeapon);
+
+			case Op::ArmorType:
+				return (static_cast<std::uint32_t>(a_t.armor->bipedModelData.armorType.underlying()) &
+				           static_cast<std::uint32_t>(ops[a_i])) != 0;
+
+			case Op::BipedSlot:
+				return (static_cast<std::uint32_t>(a_t.armor->bipedModelData.bipedObjectSlots.underlying()) &
+				           static_cast<std::uint32_t>(ops[a_i])) != 0;
+
+			case Op::ArmorAddon: {
+				const RE::FormID id = static_cast<RE::FormID>(ops[a_i]);
+				for (const auto& addon : a_t.armor->armorAddons) {
+					if (addon && addon->formID == id) {
+						return true;
+					}
+				}
+				return false;
+			}
+			}
+			return false;
+		}
+
+		bool predicateHolds(const MatchProgram& a_prog, const Predicate& a_p,
+			const MatchTarget& a_t, MatchScratch& a_s)
+		{
+			switch (static_cast<Mode>(a_p.mode)) {
+			case Mode::And:
+				// Empty is FALSE: every upstream AND accumulator starts false.
+				if (a_p.count == 0) {
+					return false;
+				}
+				if (static_cast<Op>(a_p.op) == Op::ArmorAddon) {
+					// The one AND loop in this codebase that resets its
+					// accumulator at the TOP of each iteration, which makes a
+					// hole (an identifier that did not resolve to an Armature)
+					// observable. Transcribed rather than reduced.
+					bool foundInList = false;
+					for (std::uint16_t i = 0; i < a_p.count; ++i) {
+						foundInList = false;
+						if (a_prog.pool[a_p.operands + i]) {
+							foundInList = operandHolds(a_prog, a_p, i, a_t, a_s);
+							if (!foundInList) {
+								return false;
+							}
+						}
+					}
+					return foundInList;
+				}
+				for (std::uint16_t i = 0; i < a_p.count; ++i) {
+					if (!operandHolds(a_prog, a_p, i, a_t, a_s)) {
+						return false;
+					}
+				}
+				return true;
+
+			case Mode::Or:
+				for (std::uint16_t i = 0; i < a_p.count; ++i) {
+					if (operandHolds(a_prog, a_p, i, a_t, a_s)) {
+						return true;
+					}
+				}
+				return false;
+
+			case Mode::Exclude:
+				for (std::uint16_t i = 0; i < a_p.count; ++i) {
+					if (operandHolds(a_prog, a_p, i, a_t, a_s)) {
+						return false;
+					}
+				}
+				return true;
+			}
+			return false;
+		}
+
+		bool disjunctHolds(const MatchProgram& a_prog, const Disjunct& a_d,
+			const MatchTarget& a_t, MatchScratch& a_s)
+		{
+			for (std::uint16_t i = 0; i < a_d.count; ++i) {
+				const Predicate& p = a_prog.preds[a_d.first + i];
+				if (p.skipIfPlayer && a_t.isPlayer) {
+					return false;
+				}
+				if (!predicateHolds(a_prog, p, a_t, a_s)) {
+					return false;
+				}
+			}
+			return a_d.count != 0;
+		}
+	}
+
+	bool matchesModName(const MatchProgram& a_p, const RE::TESForm* a_form)
+	{
+		const char* const fileName = a_form->GetFile(0)->fileName;
+		for (const auto& modName : *a_p.modNames) {
+			if (modName == fileName) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool runProgram(const MatchProgram& a_prog, const MatchTarget& a_t, MatchScratch& a_scratch)
+	{
+		a_scratch.reset();
+
+		bool found = false;
+		for (const Disjunct& d : a_prog.positive) {
+			if (disjunctHolds(a_prog, d, a_t, a_scratch)) {
+				found = true;
+				break;
+			}
+		}
+
+		// NPC's filterByPCLevelMult / AutoCalc / Essential / Protected: each
+		// ASSIGNS found, with no !found guard, so they run in source order and
+		// after the first positive stage.
+		for (const Predicate& p : a_prog.assigns) {
+			found = predicateHolds(a_prog, p, a_t, a_scratch);
+		}
+
+		if (!found) {
+			for (const Disjunct& d : a_prog.positive2) {
+				if (disjunctHolds(a_prog, d, a_t, a_scratch)) {
+					found = true;
+					break;
+				}
+			}
+		}
+
+		if (!found && a_prog.catchAll && !a_t.isPlayer) {
+			found = true;
+		}
+
+		for (const Predicate& p : a_prog.negative) {
+			if (!found) {
+				break;
+			}
+			if (p.skipIfPlayer && a_t.isPlayer) {
+				continue;
+			}
+			found = predicateHolds(a_prog, p, a_t, a_scratch);
+		}
+
+		return found;
+	}
+
+	Predicate makePredicate(MatchProgram& a_prog, Op a_op, Mode a_mode,
+		const std::vector<std::uint64_t>& a_values, bool a_skipIfPlayer)
+	{
+		Predicate p{};
+		p.op = static_cast<std::uint8_t>(a_op);
+		p.mode = static_cast<std::uint8_t>(a_mode);
+		p.skipIfPlayer = a_skipIfPlayer ? 1u : 0u;
+		p.operands = a_prog.mark();
+		p.count = static_cast<std::uint16_t>(
+			a_op == Op::NpcSkillRange ? a_values.size() / 3 : a_values.size());
+		a_prog.pool.insert(a_prog.pool.end(), a_values.begin(), a_values.end());
+		return p;
+	}
+
+	void pushDisjunct(MatchProgram& a_prog, std::vector<Disjunct>& a_stage, std::size_t a_firstPred)
+	{
+		const std::size_t n = a_prog.preds.size() - a_firstPred;
+		if (n == 0) {
+			return;
+		}
+		Disjunct d{};
+		d.first = static_cast<std::uint16_t>(a_firstPred);
+		d.count = static_cast<std::uint16_t>(n);
+		d.cost = 0;
+		for (std::size_t i = 0; i < n; ++i) {
+			const Predicate& p = a_prog.preds[a_firstPred + i];
+			d.cost += opCost(static_cast<Op>(p.op)) * (p.count ? p.count : 1u);
+		}
+		a_stage.push_back(d);
+	}
+
+	std::vector<std::uint64_t> idOperands(const std::vector<std::string>& a_ids, RE::FormType a_type)
+	{
+		std::vector<std::uint64_t> out;
+		for (const RE::FormID id : resolveFormIDs(a_ids, a_type)) {
+			out.push_back(id);
+		}
+		return out;
+	}
+
+	std::vector<std::uint64_t> ptrOperands(const std::vector<std::string>& a_ids, RE::FormType a_type)
+	{
+		std::vector<std::uint64_t> out;
+		for (RE::TESForm* form : resolveForms(a_ids, a_type)) {
+			out.push_back(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(form)));
+		}
+		return out;
+	}
+
+	std::vector<std::uint64_t> needleOperands(MatchProgram& a_prog, const std::vector<std::string>& a_raw,
+		bool a_normalizePath)
+	{
+		std::vector<std::uint64_t> out;
+		for (const auto& s : a_raw) {
+			out.push_back(a_prog.strings.size());
+			a_prog.strings.push_back(a_normalizePath ? normalizePath(trim(toLowerCase(s))) : toLowerCase(s));
+		}
+		return out;
+	}
+
+	void addPred(MatchProgram& a_prog, Op a_op, Mode a_mode, const std::vector<std::uint64_t>& a_vals,
+		bool a_skipIfPlayer)
+	{
+		const Predicate pred = makePredicate(a_prog, a_op, a_mode, a_vals, a_skipIfPlayer);
+		a_prog.preds.push_back(pred);
+	}
+
+	void addNegative(MatchProgram& a_prog, Op a_op, Mode a_mode, const std::vector<std::uint64_t>& a_vals,
+		bool a_skipIfPlayer)
+	{
+		const Predicate pred = makePredicate(a_prog, a_op, a_mode, a_vals, a_skipIfPlayer);
+		a_prog.negative.push_back(pred);
+	}
+
+	void sortCheapestFirst(std::vector<Disjunct>& a_stage)
+	{
+		std::stable_sort(a_stage.begin(), a_stage.end(),
+			[](const Disjunct& a, const Disjunct& b) { return a.cost < b.cost; });
+	}
+
+	bool programSignals(const MatchProgram& a_prog, std::vector<std::uint64_t>& a_keys)
+	{
+		a_keys.clear();
+		if (a_prog.catchAll || a_prog.unkeyable || !a_prog.assigns.empty()) {
+			return false;
+		}
+
+		const auto emit = [&a_prog, &a_keys](const Predicate& p, std::uint16_t i) {
+			const std::uint64_t v = a_prog.pool[p.operands + i];
+			switch (static_cast<Op>(p.op)) {
+			case Op::Keyword:
+				a_keys.push_back(sigForm(reinterpret_cast<RE::BGSKeyword*>(static_cast<std::uintptr_t>(v))->formID));
+				return true;
+			case Op::Faction:
+				a_keys.push_back(sigForm(reinterpret_cast<RE::TESFaction*>(static_cast<std::uintptr_t>(v))->formID));
+				return true;
+			case Op::Race:
+			case Op::NpcClass:
+			case Op::Outfit:
+			case Op::CombatStyle:
+			case Op::WeapModel1st:
+			case Op::ArmorAddon:
+				a_keys.push_back(sigForm(static_cast<RE::FormID>(v)));
+				return true;
+			case Op::WeapAnimType:
+				a_keys.push_back(sigTagged(kTagWeapAnimType, static_cast<std::uint32_t>(v)));
+				return true;
+			case Op::WeapSkill:
+				a_keys.push_back(sigTagged(kTagWeapSkill, static_cast<std::uint32_t>(v)));
+				return true;
+			case Op::ArmorType:
+				appendMaskBits(a_keys, kTagArmorType, static_cast<std::uint32_t>(v));
+				return true;
+			case Op::BipedSlot:
+				appendMaskBits(a_keys, kTagBipedSlot, static_cast<std::uint32_t>(v));
+				return true;
+			default:
+				// Substring tests and everything else have no finite key set.
+				return false;
+			}
+		};
+
+		// BOTH positive stages: `found` is the OR over all of them, so every
+		// one of them needs a necessary signal. (Missing `positive2` here made
+		// a faction-filtered NPC rule visit only the candidates its OTHER
+		// filters named -- caught by the harness's matched-pair census.)
+		std::vector<const Disjunct*> stages;
+		stages.reserve(a_prog.positive.size() + a_prog.positive2.size());
+		for (const Disjunct& d : a_prog.positive) {
+			stages.push_back(&d);
+		}
+		for (const Disjunct& d : a_prog.positive2) {
+			stages.push_back(&d);
+		}
+
+		for (const Disjunct* dp : stages) {
+			const Disjunct& d = *dp;
+			// A conjunction needs ALL of its predicates, so ANY ONE of them
+			// supplies a necessary signal. Prefer an And predicate (one key)
+			// over an Or (one key per operand); that is exactly what Phase 3's
+			// appendAndOrSignals did.
+			const Predicate* chosen = nullptr;
+			for (std::uint16_t i = 0; i < d.count; ++i) {
+				const Predicate& p = a_prog.preds[d.first + i];
+				if (static_cast<Mode>(p.mode) == Mode::And) {
+					chosen = &p;
+					break;
+				}
+				if (!chosen) {
+					chosen = &p;
+				}
+			}
+			if (!chosen) {
+				continue;
+			}
+			if (static_cast<Mode>(chosen->mode) == Mode::And) {
+				if (chosen->count == 0) {
+					continue;  // can never hold, so the disjunct contributes nothing
+				}
+				if (static_cast<Op>(chosen->op) == Op::ArmorAddon) {
+					// A 0 hole is skipped by the AND loop, so the first NON-ZERO
+					// entry is the necessary signal. An all-holes list can never
+					// pass, so contributing nothing is correct.
+					for (std::uint16_t i = 0; i < chosen->count; ++i) {
+						if (a_prog.pool[chosen->operands + i]) {
+							emit(*chosen, i);
+							break;
+						}
+					}
+					continue;
+				}
+				if (!emit(*chosen, 0)) {
+					return false;
+				}
+				continue;
+			}
+			for (std::uint16_t i = 0; i < chosen->count; ++i) {
+				if (!emit(*chosen, i)) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
 }

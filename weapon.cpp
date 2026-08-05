@@ -1,5 +1,6 @@
 #include "weapon.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <utility.h>
 
 namespace WEAPON
@@ -19,26 +20,6 @@ namespace WEAPON
 	// =====================================================================
 	namespace
 	{
-		struct ResolvedWeaponFilters
-		{
-			// filterAnimationTypeOr, reduced to the animation types it names.
-			// Unrecognised names are dropped: upstream they fall through every
-			// if/else-if arm to an empty `else`, i.e. they are a pure no-op.
-			std::vector<RE::WEAPON_TYPE> animationTypeOr;
-			// filterBySkills ("embeddedAVs"), same argument.
-			std::vector<RE::ActorValue> embeddedAVs;
-			// filterByFirstPersonModelOr, resolved to FormType::Static formIDs.
-			std::vector<RE::FormID> firstPersonModelOr;
-			// restrictToFlags, lowercased once. NOT reduced to an enum: the
-			// upstream loop's `else { found = false; }` arm makes an
-			// unrecognised entry observable, so every entry must survive.
-			std::vector<std::string> wFlags;
-			// restrictToSkills, mapped through StringToActorValue once. Every
-			// entry survives for the same reason -- StringToActorValue's answer
-			// for an unrecognised name is part of the comparison upstream.
-			std::vector<RE::ActorValue> restrictToSkill;
-		};
-
 		RE::WEAPON_TYPE* lookupAnimationType(const std::string& a_lower)
 		{
 			static RE::WEAPON_TYPE types[] = {
@@ -80,84 +61,127 @@ namespace WEAPON
 			return nullptr;
 		}
 
-		ResolvedWeaponFilters resolveWeaponFilters(const patch_instruction& line)
+		// ==================================================================
+		// PHASE 2 -- WEAPON's rule compiler.
+		//
+		// The filter chain that used to be ~150 lines inlined in
+		// process_patch_instructions is compiled once per rule into a
+		// formfilter::MatchProgram. See formfilter.h.
+		//
+		// WEAPON's positive disjuncts -- filterByAnimationTypeOr,
+		// filterByFirstPersonModelOr, filterBySkills, the EditorID pair and
+		// the keyword pair -- all only ever WRITE true, so ordering them
+		// cheapest-first cannot change the answer; it just gives the three
+		// integer compares the chance to reject before the EditorID substring
+		// search runs.
+		// ==================================================================
+		formfilter::MatchProgram compileRule(const patch_instruction& line)
 		{
-			ResolvedWeaponFilters w;
+			using formfilter::Mode;
+			using formfilter::Op;
 
-			w.animationTypeOr.reserve(line.filterAnimationTypeOr.size());
+			formfilter::MatchProgram p;
+			p.modNames = &line.modNames;
+
+			// hasPlugins / hasPluginsOr consult no form at all, so they are a
+			// per-RULE skip, not a per-form one.
+			p.skipRule = (!line.hasPlugin.empty() && !formfilter::hasAllPlugins(line.hasPlugin)) ||
+				(!line.hasPluginOr.empty() && !formfilter::hasAnyPlugin(line.hasPluginOr));
+
+			// filterByAnimationTypeOr. The ten toLowerCase(setFlag) calls this
+			// used to make per (pair, entry) are one lookup per entry, once.
+			std::vector<std::uint64_t> vals;
 			for (const auto& s : line.filterAnimationTypeOr) {
 				if (auto* t = lookupAnimationType(toLowerCase(s))) {
-					w.animationTypeOr.push_back(*t);
+					vals.push_back(static_cast<std::uint32_t>(*t));
 				}
 			}
+			if (!line.filterAnimationTypeOr.empty()) {
+				std::size_t first = p.preds.size();
+				formfilter::addPred(p, Op::WeapAnimType, Mode::Or, vals);
+				formfilter::pushDisjunct(p, p.positive, first);
+			}
 
-			w.embeddedAVs.reserve(line.embeddedAVs.size());
+			if (!line.filterByFirstPersonModelOr.empty()) {
+				std::size_t first = p.preds.size();
+				formfilter::addPred(p, Op::WeapModel1st, Mode::Or,
+					formfilter::idOperands(line.filterByFirstPersonModelOr, RE::FormType::Static));
+				formfilter::pushDisjunct(p, p.positive, first);
+			}
+
+			// filterBySkills ("embeddedAVs").
+			vals.clear();
 			for (const auto& s : line.embeddedAVs) {
 				if (auto* av = lookupEmbeddedAV(toLowerCase(s))) {
-					w.embeddedAVs.push_back(*av);
+					vals.push_back(static_cast<std::uint32_t>(*av));
 				}
 			}
-
-			w.firstPersonModelOr =
-				formfilter::resolveFormIDs(line.filterByFirstPersonModelOr, RE::FormType::Static);
-
-			w.wFlags = formfilter::toLowerAll(line.filterByWFlags);
-
-			w.restrictToSkill.reserve(line.restrictToSkill.size());
-			for (const auto& s : line.restrictToSkill) {
-				w.restrictToSkill.push_back(StringToActorValue(toLowerCase(s)));
+			if (!line.embeddedAVs.empty()) {
+				std::size_t first = p.preds.size();
+				formfilter::addPred(p, Op::WeapSkill, Mode::Or, vals);
+				formfilter::pushDisjunct(p, p.positive, first);
 			}
 
-			return w;
-		}
-
-		// ==================================================================
-		// PHASE 3 -- the rule index for WEAPON. See formfilter.h for the
-		// general argument.
-		//
-		// process_patch_instructions sets `found = true` at exactly these
-		// places: filterByAnimationTypeOr, filterByFirstPersonModelOr,
-		// filterBySkills (embeddedAVs), the EditorID-substring pair, the
-		// keyword pair, and the "no filter at all" catch-all. Everything else
-		// (keywordsExcluded, objectExcluded, filterByEditorIdContainsExcluded,
-		// restrictToFlags, restrictToSkills) is guarded by `found` or only
-		// writes `found = false`.
-		// ==================================================================
-		constexpr std::uint32_t kTagAnimationType = 1;
-		constexpr std::uint32_t kTagSkill = 2;
-
-		bool weaponRuleSignals(const patch_instruction& line, const formfilter::ResolvedCommonFilters& common,
-			const ResolvedWeaponFilters& wf, std::vector<std::uint64_t>& a_keys)
-		{
-			a_keys.clear();
-
-			if (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) {
-				return false;
+			std::size_t first = p.preds.size();
+			if (!line.filterByEditorIdContains.empty()) {
+				formfilter::addPred(p, Op::EditorId, Mode::And,
+					formfilter::needleOperands(p, line.filterByEditorIdContains));
 			}
-			// weapon.cpp's catch-all: with all of these empty every weapon matches.
-			if (line.object.empty() && line.keywords.empty() && line.filterByFirstPersonModelOr.empty() &&
-				line.keywordsOr.empty() && line.embeddedAVs.empty() && line.filterAnimationTypeOr.empty()) {
-				return false;
+			if (!line.filterByEditorIdContainsOr.empty()) {
+				formfilter::addPred(p, Op::EditorId, Mode::Or,
+					formfilter::needleOperands(p, line.filterByEditorIdContainsOr));
 			}
+			formfilter::pushDisjunct(p, p.positive, first);
 
-			const auto keyKeyword = [](std::vector<std::uint64_t>& out, RE::BGSKeyword* const& kw) {
-				if (kw) {
-					out.push_back(formfilter::sigForm(kw->formID));
+			first = p.preds.size();
+			if (!line.keywords.empty()) {
+				formfilter::addPred(p, Op::Keyword, Mode::And,
+					formfilter::ptrOperands(line.keywords, RE::FormType::Keyword));
+			}
+			if (!line.keywordsOr.empty()) {
+				formfilter::addPred(p, Op::Keyword, Mode::Or,
+					formfilter::ptrOperands(line.keywordsOr, RE::FormType::Keyword));
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+			formfilter::sortCheapestFirst(p.positive);
+
+			p.catchAll = line.object.empty() && line.keywords.empty() &&
+				line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() &&
+				line.embeddedAVs.empty() && line.filterAnimationTypeOr.empty() &&
+				line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty();
+
+			// --- negative stage, in source order ---------------------------
+			if (!line.keywordsExcluded.empty()) {
+				formfilter::addNegative(p, Op::Keyword, Mode::Exclude,
+					formfilter::ptrOperands(line.keywordsExcluded, RE::FormType::Keyword));
+			}
+			if (!line.objectExcluded.empty()) {
+				formfilter::addNegative(p, Op::ObjectId, Mode::Exclude,
+					formfilter::idOperands(line.objectExcluded, RE::FormType::Weapon));
+			}
+			if (!line.filterByEditorIdContainsExcluded.empty()) {
+				formfilter::addNegative(p, Op::EditorId, Mode::Exclude,
+					formfilter::needleOperands(p, line.filterByEditorIdContainsExcluded));
+			}
+			if (!line.filterByWFlags.empty()) {
+				// restrictToFlags' upstream loop writes `found = false` for
+				// every entry that is not the break case, so `found` can only
+				// survive if the FIRST entry is "boundweapon" and the weapon
+				// carries the flag. One operand, not a list.
+				formfilter::addNegative(p, Op::WeapBound, Mode::And,
+					{ toLowerCase(line.filterByWFlags.front()) == "boundweapon" ? 1ull : 0ull });
+			}
+			if (!line.restrictToSkill.empty()) {
+				// Every entry survives: StringToActorValue's answer for an
+				// unrecognised name is part of the comparison upstream.
+				vals.clear();
+				for (const auto& s : line.restrictToSkill) {
+					vals.push_back(static_cast<std::uint32_t>(StringToActorValue(toLowerCase(s))));
 				}
-			};
-			formfilter::appendAndOrSignals(a_keys, !line.keywords.empty(), common.keywords,
-				!line.keywordsOr.empty(), common.keywordsOr, keyKeyword);
+				formfilter::addNegative(p, Op::WeapSkill, Mode::Or, vals);
+			}
 
-			for (const RE::WEAPON_TYPE t : wf.animationTypeOr) {
-				a_keys.push_back(formfilter::sigTagged(kTagAnimationType, static_cast<std::uint32_t>(t)));
-			}
-			for (const RE::FormID id : wf.firstPersonModelOr) {
-				a_keys.push_back(formfilter::sigForm(id));
-			}
-			for (const RE::ActorValue av : wf.embeddedAVs) {
-				a_keys.push_back(formfilter::sigTagged(kTagSkill, static_cast<std::uint32_t>(av)));
-			}
-			return true;
+			return p;
 		}
 
 		// patch() writes indexed attributes, so a rule applied earlier can
@@ -192,9 +216,9 @@ namespace WEAPON
 					continue;
 				}
 				formfilter::addKeywordSignals(a_index, static_cast<const RE::BGSKeywordForm*>(w), i);
-				a_index.add(formfilter::sigTagged(kTagAnimationType,
+				a_index.add(formfilter::sigTagged(formfilter::kTagWeapAnimType,
 					static_cast<std::uint32_t>(w->weaponData.animationType.underlying())), i);
-				a_index.add(formfilter::sigTagged(kTagSkill,
+				a_index.add(formfilter::sigTagged(formfilter::kTagWeapSkill,
 					static_cast<std::uint32_t>(w->weaponData.skill.underlying())), i);
 				if (w->firstPersonModelObject) {
 					a_index.add(formfilter::sigForm(w->firstPersonModelObject->formID), i);
@@ -203,104 +227,103 @@ namespace WEAPON
 		}
 	}
 
+	// ==================================================================
+	// PHASE 2 -- WEAPON's key table. One row per upstream extract*() call,
+	// in the same order. See parsetable.h.
+	//
+	// "soundLevel" appears twice because upstream extracts it twice into the
+	// same member; both rows are harmless and keeping them keeps the table a
+	// literal transliteration of the call list.
+	// ==================================================================
+	namespace
+	{
+#define WEAP_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kWeaponKeys[] = {
+			{ "filterByWeapons", sp::FieldKind::List, WEAP_F(object) },
+			{ "filterBySkills", sp::FieldKind::ListAssign, WEAP_F(embeddedAVs) },
+			{ "restrictToFlags", sp::FieldKind::ListAssign, WEAP_F(filterByWFlags) },
+			{ "restrictToSkills", sp::FieldKind::ListAssign, WEAP_F(restrictToSkill) },
+			{ "filterByWeaponsExcluded", sp::FieldKind::List, WEAP_F(objectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, WEAP_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, WEAP_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, WEAP_F(keywordsExcluded) },
+			{ "attackDamage", sp::FieldKind::Value, WEAP_F(attackDamage) },
+			{ "attackDamageToAdd", sp::FieldKind::Value, WEAP_F(attackDamageToAdd) },
+			{ "critDamageToAdd", sp::FieldKind::Value, WEAP_F(critDamageToAdd) },
+			{ "critDamageSetToBase", sp::FieldKind::Value, WEAP_F(critDamageSetToBase) },
+			{ "critDamageMult", sp::FieldKind::Value, WEAP_F(critDamageMult) },
+			{ "critPercentMult", sp::FieldKind::Value, WEAP_F(critPercentMult) },
+			{ "critDamage", sp::FieldKind::Value, WEAP_F(critDamage) },
+			{ "model", sp::FieldKind::Value, WEAP_F(model) },
+			{ "mirrorWeapon", sp::FieldKind::Value, WEAP_F(mirrorWeapon) },
+			{ "speed", sp::FieldKind::Value, WEAP_F(speed) },
+			{ "speedMult", sp::FieldKind::Value, WEAP_F(speedMult) },
+			{ "reach", sp::FieldKind::Value, WEAP_F(reach) },
+			{ "rangeMin", sp::FieldKind::Value, WEAP_F(rangeMin) },
+			{ "rangeMax", sp::FieldKind::Value, WEAP_F(rangeMax) },
+			{ "stagger", sp::FieldKind::Value, WEAP_F(stagger) },
+			{ "impactDataSet", sp::FieldKind::Value, WEAP_F(impactDataSet) },
+			{ "equipSound", sp::FieldKind::Value, WEAP_F(equipSound) },
+			{ "unequipSound", sp::FieldKind::Value, WEAP_F(unequipSound) },
+			{ "attackFailSound", sp::FieldKind::Value, WEAP_F(failSound) },
+			{ "soundLevel", sp::FieldKind::Value, WEAP_F(soundlevel) },
+			{ "attackDamageMult", sp::FieldKind::Value, WEAP_F(attackDamageMult) },
+			{ "attackDamageMatch", sp::FieldKind::Value, WEAP_F(attackDamageMatch) },
+			{ "modelFirstPerson", sp::FieldKind::Value, WEAP_F(modelFirstPerson) },
+			{ "value", sp::FieldKind::Value, WEAP_F(value) },
+			{ "valueMult", sp::FieldKind::Value, WEAP_F(valueMult) },
+			{ "weight", sp::FieldKind::Value, WEAP_F(weight) },
+			{ "weightMult", sp::FieldKind::Value, WEAP_F(weightMult) },
+			{ "objectEffect", sp::FieldKind::Value, WEAP_F(objectEffect) },
+			{ "templateWeapon", sp::FieldKind::Value, WEAP_F(templateWeapon) },
+			{ "altBlockMaterialType", sp::FieldKind::Value, WEAP_F(altBlockMaterialType) },
+			{ "blockBashImpactDataSet", sp::FieldKind::Value, WEAP_F(blockBashImpactDataSet) },
+			{ "equipSlot", sp::FieldKind::Value, WEAP_F(equipSlot) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, WEAP_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, WEAP_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, WEAP_F(filterByEditorIdContainsExcluded) },
+			{ "keywordsToAdd", sp::FieldKind::List, WEAP_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, WEAP_F(keywordsToRemove) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, WEAP_F(modNames) },
+			{ "fullName", sp::FieldKind::ValueTilde, WEAP_F(fullName) },
+			{ "enchantAmount", sp::FieldKind::Value, WEAP_F(enchantAmount) },
+			{ "filterByAnimationTypeOr", sp::FieldKind::ListAssign, WEAP_F(filterAnimationTypeOr) },
+			{ "animationType", sp::FieldKind::ListAssign, WEAP_F(setAnimationType) },
+			{ "skillType", sp::FieldKind::ListAssign, WEAP_F(setSkillType) },
+			{ "setFlags", sp::FieldKind::ListAssign, WEAP_F(setFlags) },
+			{ "removeFlags", sp::FieldKind::ListAssign, WEAP_F(removeFlags) },
+			{ "minX", sp::FieldKind::Value, WEAP_F(minX) },
+			{ "minY", sp::FieldKind::Value, WEAP_F(minY) },
+			{ "minZ", sp::FieldKind::Value, WEAP_F(minZ) },
+			{ "maxX", sp::FieldKind::Value, WEAP_F(maxX) },
+			{ "maxY", sp::FieldKind::Value, WEAP_F(maxY) },
+			{ "maxZ", sp::FieldKind::Value, WEAP_F(maxZ) },
+			{ "acswMatch", sp::FieldKind::Value, WEAP_F(acswMatch) },
+			{ "hasPlugins", sp::FieldKind::ListAssign, WEAP_F(hasPlugin) },
+			{ "hasPluginsOr", sp::FieldKind::ListAssign, WEAP_F(hasPluginOr) },
+			{ "filterByFirstPersonModelOr", sp::FieldKind::List, WEAP_F(filterByFirstPersonModelOr) },
+			{ "dwMatch", sp::FieldKind::Value, WEAP_F(dwMatch) },
+			{ "soundLevel", sp::FieldKind::Value, WEAP_F(soundlevel) },
+			{ "weaponHitType", sp::FieldKind::Value, WEAP_F(hittype) },
+		};
+
+#undef WEAP_F
+
+		const sp::KeyTable& weaponKeyTable()
+		{
+			static const sp::KeyTable table(kWeaponKeys, std::size(kWeaponKeys));
+			return table;
+		}
+	}
+
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-
-
-		extractData(line, "filterByWeapons\\s*=([^:]+)", l.object);
-
-		extractDataStrings(line, "filterBySkills\\s*=([^:]+)", l.embeddedAVs);
-
-		extractDataStrings(line, "restrictToFlags\\s*=([^:]+)", l.filterByWFlags);
-		extractDataStrings(line, "restrictToSkills\\s*=([^:]+)", l.restrictToSkill);
-
-		extractData(line, "filterByWeaponsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-
-		extractValueString(line, "attackDamage\\s*=([^:]+)", l.attackDamage);
-		extractValueString(line, "attackDamageToAdd\\s*=([^:]+)", l.attackDamageToAdd);
-
-
-		extractValueString(line, "critDamageToAdd\\s*=([^:]+)", l.critDamageToAdd);
-		extractValueString(line, "critDamageSetToBase\\s*=([^:]+)", l.critDamageSetToBase);
-		extractValueString(line, "critDamageMult\\s*=([^:]+)", l.critDamageMult);
-		extractValueString(line, "critPercentMult\\s*=([^:]+)", l.critPercentMult);
-		extractValueString(line, "critDamage\\s*=([^:]+)", l.critDamage);
-
-		//extractValueString(line, "speed\\s *= ([^:] +)", l.speed);
-		extractValueString(line, "model\\s*=([^:]+)", l.model);
-		extractValueString(line, "mirrorWeapon\\s*=([^:]+)", l.mirrorWeapon);
-		extractValueString(line, "speed\\s*=([^:]+)", l.speed);
-		extractValueString(line, "speedMult\\s*=([^:]+)", l.speedMult);
-		extractValueString(line, "reach\\s*=([^:]+)", l.reach);
-		extractValueString(line, "rangeMin\\s*=([^:]+)", l.rangeMin);
-		extractValueString(line, "rangeMax\\s*=([^:]+)", l.rangeMax);
-		extractValueString(line, "stagger\\s*=([^:]+)", l.stagger);
-
-		extractValueString(line, "impactDataSet\\s*=([^:]+)", l.impactDataSet);
-		extractValueString(line, "equipSound\\s*=([^:]+)", l.equipSound);
-		extractValueString(line, "unequipSound\\s*=([^:]+)", l.unequipSound);
-		extractValueString(line, "attackFailSound\\s*=([^:]+)", l.failSound);
-		extractValueString(line, "soundLevel\\s*=([^:]+)", l.soundlevel);
-		
-
-		extractValueString(line, "attackDamageMult\\s*=([^:]+)", l.attackDamageMult);
-		extractValueString(line, "attackDamageMatch\\s*=([^:]+)", l.attackDamageMatch);
-		extractValueString(line, "modelFirstPerson\\s*=([^:]+)", l.modelFirstPerson);
-		extractValueString(line, "value\\s*=([^:]+)", l.value);
-		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
-		extractValueString(line, "objectEffect\\s*=([^:]+)", l.objectEffect);
-		extractValueString(line, "templateWeapon\\s*=([^:]+)", l.templateWeapon);
-		extractValueString(line, "altBlockMaterialType\\s*=([^:]+)", l.altBlockMaterialType);
-		extractValueString(line, "blockBashImpactDataSet\\s*=([^:]+)", l.blockBashImpactDataSet);
-		extractValueString(line, "equipSlot\\s*=([^:]+)", l.equipSlot);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-		extractValueString(line, "enchantAmount\\s*=([^:]+)", l.enchantAmount);
-
-		extractDataStrings(line, "filterByAnimationTypeOr\\s*=([^:]+)", l.filterAnimationTypeOr);
-		extractDataStrings(line, "animationType\\s*=([^:]+)", l.setAnimationType);
-		extractDataStrings(line, "skillType\\s*=([^:]+)", l.setSkillType);
-
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-
-		extractValueString(line, "minX\\s*=([^:]+)", l.minX);
-		extractValueString(line, "minY\\s*=([^:]+)", l.minY);
-		extractValueString(line, "minZ\\s*=([^:]+)", l.minZ);
-		extractValueString(line, "maxX\\s*=([^:]+)", l.maxX);
-		extractValueString(line, "maxY\\s*=([^:]+)", l.maxY);
-		extractValueString(line, "maxZ\\s*=([^:]+)", l.maxZ);
-
-		extractValueString(line, "acswMatch\\s*=([^:]+)", l.acswMatch);
-
-		extractDataStrings(line, "hasPlugins\\s*=([^:]+)", l.hasPlugin);
-		extractDataStrings(line, "hasPluginsOr\\s*=([^:]+)", l.hasPluginOr);
-
-		extractData(line, "filterByFirstPersonModelOr\\s*=([^:]+)", l.filterByFirstPersonModelOr);
-		extractValueString(line, "dwMatch\\s*=([^:]+)", l.dwMatch);
-
-		extractValueString(line, "soundLevel\\s*=([^:]+)", l.soundlevel);
-		extractValueString(line, "weaponHitType\\s*=([^:]+)", l.hittype);
-
+		weaponKeyTable().parse(line, &l);
 		return l;
-	}  //endStruct
+	}
+
 
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
@@ -338,30 +361,16 @@ namespace WEAPON
 				continue;
 			}
 
-			// PHASE 1: one RESOLVED filter set per rule, not per (rule, weapon)
-			// pair. The reference view is still built first because it is what
-			// formfilter::resolve consumes; it costs ten pointer stores.
-			const formfilter::CommonFilterView view{
-				line.modNames, line.hasPlugin, line.hasPluginOr,
-				line.keywords, line.keywordsOr, line.keywordsExcluded,
-				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
-				line.filterByEditorIdContainsExcluded, line.objectExcluded
-			};
-			const formfilter::ResolvedCommonFilters common =
-				formfilter::resolve(view, RE::FormType::Weapon);
-
-			// hasPlugin / hasPluginOr consult no form at all, so the upstream
-			// per-form `continue` is exactly a per-rule skip. Both bools are
-			// already `empty() || test()`, so the emptiness guards are folded in.
-			if (!common.allPluginsInstalled || !common.anyPluginInstalled) {
+			// PHASE 1 + 2: the rule is compiled ONCE into a flat predicate
+			// program; the form loop below is a walk over it.
+			const formfilter::MatchProgram program = compileRule(line);
+			if (program.skipRule) {
 				continue;
 			}
 
-			const ResolvedWeaponFilters wf = resolveWeaponFilters(line);
-
 			// PHASE 3: restrict the scan to the weapons carrying at least one
-			// of the signals this rule names.
-			const bool keyed = !indexStale && weaponRuleSignals(line, common, wf, keys);
+			// of the signals this rule names, read off the program's opcodes.
+			const bool keyed = !indexStale && formfilter::programSignals(program, keys);
 			if (keyed) {
 				if (!indexBuilt) {
 					buildWeaponIndex(ObjectArray, index);
@@ -384,192 +393,24 @@ namespace WEAPON
 				formfilter::stats().scanVisits += scanCount;
 			}
 
+			// Reused across the whole form loop, so the lowered EditorID
+			// allocates once rather than once per pair.
+			formfilter::MatchScratch scratch;
+			formfilter::MatchTarget  target;
 			for (std::uint32_t scanIdx = 0; scanIdx < scanCount; ++scanIdx) {
 				const auto& curobj = ObjectArray[keyed ? candidates[scanIdx] : scanIdx];
-				//logger::info("processing npc");
-				bool found = false;
-				bool keywordAnd = false;
-				bool keywordOr = false;
-				bool contains = false;
-				bool containsOr = false;
-				//logger::info(FMT_STRING("Its a form! {:08X}"), curobj->formID);
 				if (!curobj || curobj->IsDeleted()) {
 					continue;
 				}
 
-				if (!line.modNames.empty() && !formfilter::matchesModName(common, curobj)) {
+				if (!line.modNames.empty() && !formfilter::matchesModName(program, curobj)) {
 					continue;
 				}
 
-				// filterAnimationTypeOr: the ten toLowerCase(setFlag) calls that
-				// used to run here per pair are now one lookup per entry, done
-				// once for the whole rule.
-				for (const RE::WEAPON_TYPE t : wf.animationTypeOr) {
-					if (curobj->weaponData.animationType == t) {
-						found = true;
-						break;
-					}
-				}
-
-				for (const RE::FormID id : wf.firstPersonModelOr) {
-					if (curobj->firstPersonModelObject && curobj->firstPersonModelObject->formID == id) {
-						found = true;
-						//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-						break;
-					}
-				}
-
-				//logger::debug("skill {}", curobj->weaponData.skill.underlying());
-				for (const RE::ActorValue av : wf.embeddedAVs) {
-					if (curobj->weaponData.skill == av) {
-						found = true;
-						break;
-					}
-				}
-
-				if (!found && !line.filterByEditorIdContains.empty()) {
-					contains = formfilter::matchesEditorIdAnd(common, curobj);
-				} else {
-					contains = true;
-				}
-
-				if (!found && !line.filterByEditorIdContainsOr.empty()) {
-					//logger::info("keywords not empty");
-					containsOr = formfilter::matchesEditorIdOr(common, curobj);
-				} else {
-					containsOr = true;
-				}
-
-				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				
-				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
-					keywordAnd = formfilter::matchesKeywordsAnd(common, curobj, nullptr);
-				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
-					keywordAnd = true;
-				}
-				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
-					keywordOr = formfilter::matchesKeywordsOr(common, curobj, nullptr);
-				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
-					keywordOr = true;
-				}
-
-				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-
-
-				if (line.object.empty() && line.keywords.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.embeddedAVs.empty() && line.filterAnimationTypeOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
-					found = true;
-				}
-
-				if (!line.keywordsExcluded.empty() && found ) {
-					//logger::info("keywords not empty");
-					if (formfilter::hasExcludedKeyword(common, curobj, nullptr)) {
-						found = false;
-					}
-				}
-
-				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
-					if (formfilter::isObjectExcluded(common, curobj)) {
-						found = false;
-						logger::info("Weapon Excluded.");
-					}
-				}
-
-				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-					//logger::info("factions not empty");
-					if (formfilter::hasExcludedEditorId(common, curobj)) {
-						found = false;
-					}
-				}
-
-				if (found && !wf.wFlags.empty()) {
-					//logger::debug("skill {}", curobj->weaponData.skill.underlying());
-					for (const auto& string : wf.wFlags) {
-						if (string == "boundweapon" && curobj->weaponData.flags2 & RE::TESObjectWEAP::Data::Flag2::kBoundWeapon) {
-							break;
-						} else {
-							found = false;
-						}
-					}
-				}
-
-				if (found && !wf.restrictToSkill.empty()) {
-					bool foundType = false;
-					for (const RE::ActorValue av : wf.restrictToSkill) {
-						if (curobj->weaponData.skill == av) {
-							foundType = true;
-						}
-					}
-					if (!foundType)
-						found = false;
-				}
-
-
-
-				//if (!line.filterByFlagsExclude.empty()) {
-				//	for (const auto& flag : line.filterByFlagsExclude) {
-				//		//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude"), curobj->formID, curobj->fullName);
-				//		if (toLowerCase(flag) == "notplayable" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kNotPlayable) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude nonplayable set to false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "cantdrop" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kCantDrop) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "embeddedweapon" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kEmbeddedWeapon) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "chargingattack" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kChargingAttack) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "criteffectondeath" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kCritEffectOnDeath) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "boltaction" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kBoltAction) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "automatic" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kAutomatic) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "secondaryweapon" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kSecondaryWeapon) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "chargingreload" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kChargingReload) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "holdinputtopower" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kHoldInputToPower) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		}
-				//	}
-				//}
-
-				//		const auto vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-				//if (!vm) {
-				//	return false;
-				//}
-
-				//const auto policy = vm->GetObjectHandlePolicy();
-				//if (!policy) {
-				//	return false;
-				//}
-
-				//const auto handle = policy->GetHandleForObject(GetFormType(), this);
-				//return handle != policy->EmptyHandle();
-
-				
-				if (found) {
+				target.form = curobj;
+				target.kf = static_cast<const RE::BGSKeywordForm*>(curobj);
+				target.weapon = curobj;
+				if (formfilter::runProgram(program, target, scratch)) {
 					patch(line, curobj);
 				}
 			}

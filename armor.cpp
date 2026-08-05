@@ -1,5 +1,6 @@
 #include "armor.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include "utility.h"
 
 namespace ARMOR
@@ -11,37 +12,6 @@ namespace ARMOR
 	// =====================================================================
 	namespace
 	{
-		struct ResolvedArmorFilters
-		{
-			// filterByNameContains / ...Or / ...Excluded needles, lowered once.
-			std::vector<std::string> nameContains;
-			std::vector<std::string> nameContainsOr;
-			std::vector<std::string> nameContainsExcluded;
-
-			// filterByArmorTypes / ...Excluded, reduced to the flags they name.
-			// Unrecognised names fall through every arm upstream, so dropping
-			// them is a no-op.
-			std::vector<RE::BIPED_MODEL::ArmorType> armorTypes;
-			std::vector<RE::BIPED_MODEL::ArmorType> armorTypesExcluded;
-
-			// std::stoi + getBipedObjectSlot, once per entry instead of once per
-			// (armor, entry).
-			std::vector<RE::BIPED_MODEL::BipedObjectSlot> bipedSlot;
-			std::vector<RE::BIPED_MODEL::BipedObjectSlot> bipedSlotOr;
-			std::vector<RE::BIPED_MODEL::BipedObjectSlot> bipedSlotExcluded;
-			std::vector<RE::BIPED_MODEL::BipedObjectSlot> restrictSlots;
-
-			// filterByArmorAddons is the ONE list here that must keep a slot for
-			// an identifier that did not resolve: its upstream AND-loop resets
-			// `foundInList = false` at the TOP of every iteration, so a trailing
-			// non-resolving entry drags the whole test to false. 0 marks a hole.
-			std::vector<RE::FormID> armorAddons;
-			std::vector<RE::FormID> armorAddonsOr;
-			std::vector<RE::FormID> armorAddonsExcluded;
-
-			std::vector<RE::BGSKeyword*> restrictKeywords;
-		};
-
 		bool lookupArmorType(const std::string& a_lower, RE::BIPED_MODEL::ArmorType& a_out)
 		{
 			if (a_lower == "light") {
@@ -59,132 +29,161 @@ namespace ARMOR
 			return false;
 		}
 
-		std::vector<RE::BIPED_MODEL::ArmorType> resolveArmorTypes(const std::vector<std::string>& a_in)
+		std::vector<std::uint64_t> armorTypeOperands(const std::vector<std::string>& a_in)
 		{
-			std::vector<RE::BIPED_MODEL::ArmorType> out;
+			std::vector<std::uint64_t> out;
 			out.reserve(a_in.size());
 			for (const auto& s : a_in) {
 				RE::BIPED_MODEL::ArmorType t{};
 				if (lookupArmorType(toLowerCase(s), t)) {
-					out.push_back(t);
+					out.push_back(static_cast<std::uint32_t>(t));
 				}
 			}
 			return out;
 		}
 
-		std::vector<RE::BIPED_MODEL::BipedObjectSlot> resolveSlots(const std::vector<std::string>& a_in)
+		std::vector<std::uint64_t> slotOperands(const std::vector<std::string>& a_in)
 		{
-			std::vector<RE::BIPED_MODEL::BipedObjectSlot> out;
+			std::vector<std::uint64_t> out;
 			out.reserve(a_in.size());
 			for (const auto& s : a_in) {
 				// std::stoi's throw behaviour is preserved, only hoisted: it now
 				// throws before the form loop rather than on the first form the
 				// loop reaches. Both terminate the process; nothing catches it.
-				out.push_back(getBipedObjectSlot(std::stoi(s)));
+				out.push_back(static_cast<std::uint32_t>(getBipedObjectSlot(std::stoi(s))));
 			}
 			return out;
 		}
 
-		ResolvedArmorFilters resolveArmorFilters(const patch_instruction_armor& line)
-		{
-			ResolvedArmorFilters a;
-
-			a.nameContains = formfilter::toLowerAll(line.filterByNameContains);
-			a.nameContainsOr = formfilter::toLowerAll(line.filterByNameContainsOr);
-			a.nameContainsExcluded = formfilter::toLowerAll(line.filterByNameContainsExcluded);
-
-			a.armorTypes = resolveArmorTypes(line.filterByArmorType);
-			a.armorTypesExcluded = resolveArmorTypes(line.filterByArmorTypeExcluded);
-
-			a.bipedSlot = resolveSlots(line.bipedSlot);
-			a.bipedSlotOr = resolveSlots(line.bipedSlotOr);
-			a.bipedSlotExcluded = resolveSlots(line.bipedSlotExcluded);
-			a.restrictSlots = resolveSlots(line.restrictSlots);
-
-			a.armorAddons = formfilter::resolveFormIDsKeepingHoles(line.filterByArmorAddons, RE::FormType::Armature);
-			a.armorAddonsOr = formfilter::resolveFormIDs(line.filterByArmorAddonsOr, RE::FormType::Armature);
-			a.armorAddonsExcluded = formfilter::resolveFormIDs(line.filterByArmorAddonsExcluded, RE::FormType::Armature);
-
-			for (auto* form : formfilter::resolveForms(line.restrictKeywords, RE::FormType::Keyword)) {
-				a.restrictKeywords.push_back(static_cast<RE::BGSKeyword*>(form));
-			}
-
-			return a;
-		}
-
 		// ==================================================================
-		// PHASE 3 -- the rule index for ARMOR. See formfilter.h for the
-		// general argument.
+		// PHASE 2 -- ARMOR's rule compiler.
 		//
-		// process_patch_instructions_armor sets `found = true` at exactly
-		// these places: the EditorID-substring pair, the fullName-substring
-		// pair, filterByArmorTypes, the bipedSlot pair, the keyword pair, the
-		// armorAddon pair, and the "no filter at all" catch-all. Everything
-		// after that is guarded by `found` or only writes `found = false`.
+		// The ~280 lines of filter chain that used to be inlined in
+		// process_patch_instructions_armor are compiled once per rule into a
+		// formfilter::MatchProgram. See formfilter.h.
 		// ==================================================================
-		constexpr std::uint32_t kTagArmorType = 1;
-		constexpr std::uint32_t kTagBipedSlot = 2;
-
-		bool armorRuleSignals(const patch_instruction_armor& line, const formfilter::ResolvedCommonFilters& common,
-			const ResolvedArmorFilters& af, std::vector<std::uint64_t>& a_keys)
+		formfilter::MatchProgram compileRule(const patch_instruction_armor& line)
 		{
-			a_keys.clear();
+			using formfilter::Mode;
+			using formfilter::Op;
 
-			// Two substring tests, neither of which has a finite key set.
-			if (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty() ||
-				!line.filterByNameContains.empty() || !line.filterByNameContainsOr.empty()) {
-				return false;
+			formfilter::MatchProgram p;
+			p.modNames = &line.modNames;
+			p.skipRule = (!line.hasPlugin.empty() && !formfilter::hasAllPlugins(line.hasPlugin)) ||
+				(!line.hasPluginOr.empty() && !formfilter::hasAnyPlugin(line.hasPluginOr));
+
+			std::size_t first = p.preds.size();
+			if (!line.filterByEditorIdContains.empty()) {
+				formfilter::addPred(p, Op::EditorId, Mode::And,
+					formfilter::needleOperands(p, line.filterByEditorIdContains));
 			}
-			// armor.cpp's catch-all.
-			if (line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() &&
-				line.bipedSlot.empty() && line.bipedSlotOr.empty() && line.filterByArmorType.empty() &&
-				line.filterByArmorAddons.empty() && line.filterByArmorAddonsOr.empty()) {
-				return false;
+			if (!line.filterByEditorIdContainsOr.empty()) {
+				formfilter::addPred(p, Op::EditorId, Mode::Or,
+					formfilter::needleOperands(p, line.filterByEditorIdContainsOr));
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			first = p.preds.size();
+			if (!line.filterByNameContains.empty()) {
+				formfilter::addPred(p, Op::NameContains, Mode::And,
+					formfilter::needleOperands(p, line.filterByNameContains));
+			}
+			if (!line.filterByNameContainsOr.empty()) {
+				formfilter::addPred(p, Op::NameContains, Mode::Or,
+					formfilter::needleOperands(p, line.filterByNameContainsOr));
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			if (!line.filterByArmorType.empty()) {
+				first = p.preds.size();
+				formfilter::addPred(p, Op::ArmorType, Mode::Or, armorTypeOperands(line.filterByArmorType));
+				formfilter::pushDisjunct(p, p.positive, first);
 			}
 
-			const auto keyKeyword = [](std::vector<std::uint64_t>& out, RE::BGSKeyword* const& kw) {
-				if (kw) {
-					out.push_back(formfilter::sigForm(kw->formID));
-				}
-			};
-			formfilter::appendAndOrSignals(a_keys, !line.keywords.empty(), common.keywords,
-				!line.keywordsOr.empty(), common.keywordsOr, keyKeyword);
-
-			// `bipedModelData.armorType & t` and `bipedObjectSlots & slot` are
-			// both bit tests, so the SET BITS are the indexable unit.
-			for (const RE::BIPED_MODEL::ArmorType t : af.armorTypes) {
-				formfilter::appendMaskBits(a_keys, kTagArmorType, static_cast<std::uint32_t>(t));
-			}
+			first = p.preds.size();
 			if (!line.bipedSlot.empty()) {
-				// The AND list needs every slot, so its first entry is a
-				// necessary signal. An AND list that resolved to nothing leaves
-				// bipedSlotAnd false, so it contributes no signal at all.
-				if (!af.bipedSlot.empty()) {
-					formfilter::appendMaskBits(a_keys, kTagBipedSlot, static_cast<std::uint32_t>(af.bipedSlot.front()));
+				formfilter::addPred(p, Op::BipedSlot, Mode::And, slotOperands(line.bipedSlot));
+			}
+			if (!line.bipedSlotOr.empty()) {
+				formfilter::addPred(p, Op::BipedSlot, Mode::Or, slotOperands(line.bipedSlotOr));
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			first = p.preds.size();
+			if (!line.keywords.empty()) {
+				formfilter::addPred(p, Op::Keyword, Mode::And,
+					formfilter::ptrOperands(line.keywords, RE::FormType::Keyword));
+			}
+			if (!line.keywordsOr.empty()) {
+				formfilter::addPred(p, Op::Keyword, Mode::Or,
+					formfilter::ptrOperands(line.keywordsOr, RE::FormType::Keyword));
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			first = p.preds.size();
+			if (!line.filterByArmorAddons.empty()) {
+				// The one AND list here that must keep a slot for an identifier
+				// that did not resolve: its upstream loop resets its accumulator
+				// at the TOP of every iteration, so a trailing non-resolving
+				// entry drags the whole test to false. 0 is the hole marker, and
+				// Mode::And on Op::ArmorAddon is the one arm that honours it.
+				std::vector<std::uint64_t> holes;
+				for (const RE::FormID id : formfilter::resolveFormIDsKeepingHoles(
+						 line.filterByArmorAddons, RE::FormType::Armature)) {
+					holes.push_back(id);
 				}
-			} else if (!line.bipedSlotOr.empty()) {
-				for (const auto slot : af.bipedSlotOr) {
-					formfilter::appendMaskBits(a_keys, kTagBipedSlot, static_cast<std::uint32_t>(slot));
-				}
+				formfilter::addPred(p, Op::ArmorAddon, Mode::And, holes);
+			}
+			if (!line.filterByArmorAddonsOr.empty()) {
+				formfilter::addPred(p, Op::ArmorAddon, Mode::Or,
+					formfilter::idOperands(line.filterByArmorAddonsOr, RE::FormType::Armature));
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+			formfilter::sortCheapestFirst(p.positive);
+
+			p.catchAll = line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() &&
+				line.bipedSlot.empty() && line.bipedSlotOr.empty() && line.filterByArmorType.empty() &&
+				line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() &&
+				line.filterByNameContains.empty() && line.filterByNameContainsOr.empty() &&
+				line.filterByArmorAddons.empty() && line.filterByArmorAddonsOr.empty();
+
+			// --- negative stage, in source order ---------------------------
+			if (!line.keywordsExcluded.empty()) {
+				formfilter::addNegative(p, Op::Keyword, Mode::Exclude,
+					formfilter::ptrOperands(line.keywordsExcluded, RE::FormType::Keyword));
+			}
+			if (!line.bipedSlotExcluded.empty()) {
+				formfilter::addNegative(p, Op::BipedSlot, Mode::Exclude, slotOperands(line.bipedSlotExcluded));
+			}
+			if (!line.filterByEditorIdContainsExcluded.empty()) {
+				formfilter::addNegative(p, Op::EditorId, Mode::Exclude,
+					formfilter::needleOperands(p, line.filterByEditorIdContainsExcluded));
+			}
+			if (!line.filterByNameContainsExcluded.empty()) {
+				formfilter::addNegative(p, Op::NameContains, Mode::Exclude,
+					formfilter::needleOperands(p, line.filterByNameContainsExcluded));
+			}
+			if (!line.filterByArmorAddonsExcluded.empty()) {
+				formfilter::addNegative(p, Op::ArmorAddon, Mode::Exclude,
+					formfilter::idOperands(line.filterByArmorAddonsExcluded, RE::FormType::Armature));
+			}
+			if (!line.objectExcluded.empty()) {
+				formfilter::addNegative(p, Op::ObjectId, Mode::Exclude,
+					formfilter::idOperands(line.objectExcluded, RE::FormType::Armor));
+			}
+			if (!line.filterByArmorTypeExcluded.empty()) {
+				formfilter::addNegative(p, Op::ArmorType, Mode::Exclude,
+					armorTypeOperands(line.filterByArmorTypeExcluded));
+			}
+			if (!line.restrictKeywords.empty()) {
+				formfilter::addNegative(p, Op::Keyword, Mode::Or,
+					formfilter::ptrOperands(line.restrictKeywords, RE::FormType::Keyword));
+			}
+			if (!line.restrictSlots.empty()) {
+				formfilter::addNegative(p, Op::BipedSlot, Mode::Or, slotOperands(line.restrictSlots));
 			}
 
-			if (!line.filterByArmorAddons.empty()) {
-				// af.armorAddons keeps a 0 slot for an identifier that did not
-				// resolve; a 0 entry is skipped by the upstream AND loop, so the
-				// first NON-ZERO entry is the necessary signal. All-holes means
-				// the test can never pass and no signal is emitted.
-				for (const RE::FormID id : af.armorAddons) {
-					if (id) {
-						a_keys.push_back(formfilter::sigForm(id));
-						break;
-					}
-				}
-			} else if (!line.filterByArmorAddonsOr.empty()) {
-				for (const RE::FormID id : af.armorAddonsOr) {
-					a_keys.push_back(formfilter::sigForm(id));
-				}
-			}
-			return true;
+			return p;
 		}
 
 		// patch() writes indexed attributes, so a rule applied earlier can
@@ -223,9 +222,9 @@ namespace ARMOR
 				formfilter::addKeywordSignals(a_index, static_cast<const RE::BGSKeywordForm*>(armor), i);
 
 				bits.clear();
-				formfilter::appendMaskBits(bits, kTagArmorType,
+				formfilter::appendMaskBits(bits, formfilter::kTagArmorType,
 					static_cast<std::uint32_t>(armor->bipedModelData.armorType.underlying()));
-				formfilter::appendMaskBits(bits, kTagBipedSlot,
+				formfilter::appendMaskBits(bits, formfilter::kTagBipedSlot,
 					static_cast<std::uint32_t>(armor->bipedModelData.bipedObjectSlots.underlying()));
 				for (const std::uint64_t key : bits) {
 					a_index.add(key, i);
@@ -240,107 +239,98 @@ namespace ARMOR
 		}
 	}
 
+	// ==================================================================
+	// PHASE 2 -- ARMOR's key table. One row per upstream extract*() call, in
+	// the same order. See parsetable.h.
+	// ==================================================================
+	namespace
+	{
+#define ARMO_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction_armor, member))
+
+		constexpr sp::KeySpec kArmorKeys[] = {
+			{ "filterByArmors", sp::FieldKind::List, ARMO_F(object) },
+			{ "filterByArmorsExcluded", sp::FieldKind::List, ARMO_F(objectExcluded) },
+			{ "filterByKeywords", sp::FieldKind::List, ARMO_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, ARMO_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, ARMO_F(keywordsExcluded) },
+			{ "mirrorArmor", sp::FieldKind::Value, ARMO_F(mirrorArmor) },
+			{ "damageResist", sp::FieldKind::Value, ARMO_F(damageResist) },
+			{ "damageResistMatch", sp::FieldKind::Value, ARMO_F(damageResistMatch) },
+			{ "damageResistMultiply", sp::FieldKind::Value, ARMO_F(damageResistMult) },
+			{ "health", sp::FieldKind::Value, ARMO_F(health) },
+			{ "objectEffect", sp::FieldKind::Value, ARMO_F(objectEffect) },
+			{ "keywordsToAdd", sp::FieldKind::List, ARMO_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, ARMO_F(keywordsToRemove) },
+			{ "filterByBipedSlots", sp::FieldKind::ListAssign, ARMO_F(bipedSlot) },
+			{ "filterByBipedSlotsOr", sp::FieldKind::ListAssign, ARMO_F(bipedSlotOr) },
+			{ "filterByBipedSlotsExcluded", sp::FieldKind::ListAssign, ARMO_F(bipedSlotExcluded) },
+			{ "bipedSlotsToAdd", sp::FieldKind::ListAssign, ARMO_F(setBipedSlot) },
+			{ "bipedSlotsToRemove", sp::FieldKind::ListAssign, ARMO_F(removeBipedSlot) },
+			{ "fullName", sp::FieldKind::ValueTilde, ARMO_F(fullName) },
+			{ "modelFemale", sp::FieldKind::Value, ARMO_F(modelFemale) },
+			{ "modelMale", sp::FieldKind::Value, ARMO_F(modelMale) },
+			{ "value", sp::FieldKind::Value, ARMO_F(value) },
+			{ "valueMult", sp::FieldKind::Value, ARMO_F(valueMult) },
+			{ "weight", sp::FieldKind::Value, ARMO_F(weight) },
+			{ "weightMult", sp::FieldKind::Value, ARMO_F(weightMult) },
+			{ "armorType", sp::FieldKind::Value, ARMO_F(armorType) },
+			{ "pickUpSound", sp::FieldKind::Value, ARMO_F(pickUpSound) },
+			{ "putDownSound", sp::FieldKind::Value, ARMO_F(putDownSound) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, ARMO_F(modNames) },
+			{ "filterByArmorTypes", sp::FieldKind::ListAssign, ARMO_F(filterByArmorType) },
+			{ "filterByArmorTypesExcluded", sp::FieldKind::ListAssign, ARMO_F(filterByArmorTypeExcluded) },
+			{ "altBlockMaterialType", sp::FieldKind::Value, ARMO_F(altBlockMaterialType) },
+			{ "blockBashImpactDataSet", sp::FieldKind::Value, ARMO_F(blockBashImpactDataSet) },
+			{ "equipSlot", sp::FieldKind::Value, ARMO_F(equipSlot) },
+			{ "enchantAmount", sp::FieldKind::Value, ARMO_F(enchantAmount) },
+			{ "filterByNameContains", sp::FieldKind::ListAssign, ARMO_F(filterByNameContains) },
+			{ "filterByNameContainsOr", sp::FieldKind::ListAssign, ARMO_F(filterByNameContainsOr) },
+			{ "filterByNameContainsExcluded", sp::FieldKind::ListAssign, ARMO_F(filterByNameContainsExcluded) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, ARMO_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, ARMO_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, ARMO_F(filterByEditorIdContainsExcluded) },
+			{ "reCalcArmorRating", sp::FieldKind::Arr2D, ARMO_F(reCalcArmorRating) },
+			{ "reCalcArmorRatingv2", sp::FieldKind::Arr2D, ARMO_F(reCalcArmorRatingv2) },
+			{ "filterByArmorAddons", sp::FieldKind::ListAssign, ARMO_F(filterByArmorAddons) },
+			{ "filterByArmorAddonsOr", sp::FieldKind::ListAssign, ARMO_F(filterByArmorAddonsOr) },
+			{ "filterByArmorAddonsExcluded", sp::FieldKind::ListAssign, ARMO_F(filterByArmorAddonsExcluded) },
+			{ "armorAddonsToAdd", sp::FieldKind::List, ARMO_F(armorAddonToAdd) },
+			{ "armorAddonsToRemove", sp::FieldKind::List, ARMO_F(armorAddonToRemove) },
+			{ "clearArmorAddons", sp::FieldKind::Value, ARMO_F(clearArmorAddons) },
+			{ "templateArmor", sp::FieldKind::Value, ARMO_F(templateArmor) },
+			{ "minX", sp::FieldKind::Value, ARMO_F(minX) },
+			{ "minY", sp::FieldKind::Value, ARMO_F(minY) },
+			{ "minZ", sp::FieldKind::Value, ARMO_F(minZ) },
+			{ "maxX", sp::FieldKind::Value, ARMO_F(maxX) },
+			{ "maxY", sp::FieldKind::Value, ARMO_F(maxY) },
+			{ "maxZ", sp::FieldKind::Value, ARMO_F(maxZ) },
+			{ "dwMatch", sp::FieldKind::Value, ARMO_F(dwMatch) },
+			{ "modelMatch", sp::FieldKind::Value, ARMO_F(modelMatch) },
+			{ "hasPlugins", sp::FieldKind::ListAssign, ARMO_F(hasPlugin) },
+			{ "hasPluginsOr", sp::FieldKind::ListAssign, ARMO_F(hasPluginOr) },
+			{ "armaRaceToAdd", sp::FieldKind::Arr2D, ARMO_F(armaRaceToAdd) },
+			{ "setFlags", sp::FieldKind::ListAssign, ARMO_F(setFlags) },
+			{ "removeFlags", sp::FieldKind::ListAssign, ARMO_F(removeFlags) },
+			{ "restrictToKeywords", sp::FieldKind::List, ARMO_F(restrictKeywords) },
+			{ "restrictToBipedSlots", sp::FieldKind::List, ARMO_F(restrictSlots) },
+		};
+
+#undef ARMO_F
+
+		const sp::KeyTable& armorKeyTable()
+		{
+			static const sp::KeyTable table(kArmorKeys, std::size(kArmorKeys));
+			return table;
+		}
+	}
+
 	struct patch_instruction_armor create_patch_instruction_armor(const std::string& line)
 	{
 		patch_instruction_armor l;
-
-		extractData(line, "filterByArmors\\s*=([^:]+)", l.object);
-
-		extractData(line, "filterByArmorsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-		extractValueString(line, "mirrorArmor\\s*=([^:]+)", l.mirrorArmor);
-		extractValueString(line, "damageResist\\s*=([^:]+)", l.damageResist);
-		extractValueString(line, "damageResistMatch\\s*=([^:]+)", l.damageResistMatch);
-
-		extractValueString(line, "damageResistMultiply\\s*=([^:]+)", l.damageResistMult);
-
-		extractValueString(line, "health\\s*=([^:]+)", l.health);
-
-		extractValueString(line, "objectEffect\\s*=([^:]+)", l.objectEffect);
-
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-
-		extractDataStrings(line, "filterByBipedSlots\\s*=([^:]+)", l.bipedSlot);
-
-		extractDataStrings(line, "filterByBipedSlotsOr\\s*=([^:]+)", l.bipedSlotOr);
-
-		extractDataStrings(line, "filterByBipedSlotsExcluded\\s*=([^:]+)", l.bipedSlotExcluded);
-
-		extractDataStrings(line, "bipedSlotsToAdd\\s*=([^:]+)", l.setBipedSlot);
-
-		extractDataStrings(line, "bipedSlotsToRemove\\s*=([^:]+)", l.removeBipedSlot);
-
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-
-		extractValueString(line, "modelFemale\\s*=([^:]+)", l.modelFemale);
-		extractValueString(line, "modelMale\\s*=([^:]+)", l.modelMale);
-		extractValueString(line, "value\\s*=([^:]+)", l.value);
-		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
-		extractValueString(line, "armorType\\s*=([^:]+)", l.armorType);
-		
-
-		extractValueString(line, "pickUpSound\\s*=([^:]+)", l.pickUpSound);
-		extractValueString(line, "putDownSound\\s*=([^:]+)", l.putDownSound);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractDataStrings(line, "filterByArmorTypes\\s*=([^:]+)", l.filterByArmorType);
-		extractDataStrings(line, "filterByArmorTypesExcluded\\s*=([^:]+)", l.filterByArmorTypeExcluded);
-		extractValueString(line, "altBlockMaterialType\\s*=([^:]+)", l.altBlockMaterialType);
-		extractValueString(line, "blockBashImpactDataSet\\s*=([^:]+)", l.blockBashImpactDataSet);
-		extractValueString(line, "equipSlot\\s*=([^:]+)", l.equipSlot);
-		extractValueString(line, "enchantAmount\\s*=([^:]+)", l.enchantAmount);
-
-		extractDataStrings(line, "filterByNameContains\\s*=([^:]+)", l.filterByNameContains);
-		extractDataStrings(line, "filterByNameContainsOr\\s*=([^:]+)", l.filterByNameContainsOr);
-		extractDataStrings(line, "filterByNameContainsExcluded\\s*=([^:]+)", l.filterByNameContainsExcluded);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-		extractToArr2D(line, "reCalcArmorRating\\s*=([^:]+)", l.reCalcArmorRating);
-		extractToArr2D(line, "reCalcArmorRatingv2\\s*=([^:]+)", l.reCalcArmorRatingv2);
-		
-		
-		extractDataStrings(line, "filterByArmorAddons\\s*=([^:]+)", l.filterByArmorAddons);
-		extractDataStrings(line, "filterByArmorAddonsOr\\s*=([^:]+)", l.filterByArmorAddonsOr);
-		extractDataStrings(line, "filterByArmorAddonsExcluded\\s*=([^:]+)", l.filterByArmorAddonsExcluded);
-		
-		extractData(line, "armorAddonsToAdd\\s*=([^:]+)", l.armorAddonToAdd);
-		extractData(line, "armorAddonsToRemove\\s*=([^:]+)", l.armorAddonToRemove);
-		extractValueString(line, "clearArmorAddons\\s*=([^:]+)", l.clearArmorAddons);
-		
-		extractValueString(line, "templateArmor\\s*=([^:]+)", l.templateArmor);
-		
-		extractValueString(line, "minX\\s*=([^:]+)", l.minX);
-		extractValueString(line, "minY\\s*=([^:]+)", l.minY);
-		extractValueString(line, "minZ\\s*=([^:]+)", l.minZ);
-		extractValueString(line, "maxX\\s*=([^:]+)", l.maxX);
-		extractValueString(line, "maxY\\s*=([^:]+)", l.maxY);
-		extractValueString(line, "maxZ\\s*=([^:]+)", l.maxZ);
-
-		extractValueString(line, "dwMatch\\s*=([^:]+)", l.dwMatch);
-		extractValueString(line, "modelMatch\\s*=([^:]+)", l.modelMatch);
-
-		extractDataStrings(line, "hasPlugins\\s*=([^:]+)", l.hasPlugin);
-		extractDataStrings(line, "hasPluginsOr\\s*=([^:]+)", l.hasPluginOr);
-
-		extractToArr2D(line, "armaRaceToAdd\\s*=([^:]+)", l.armaRaceToAdd);
-
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-
-		extractData(line, "restrictToKeywords\\s*=([^:]+)", l.restrictKeywords);
-		extractData(line, "restrictToBipedSlots\\s*=([^:]+)", l.restrictSlots);
-
+		armorKeyTable().parse(line, &l);
 		return l;
 	}
+
 
 	void process_patch_instructions_armor(const std::list<patch_instruction_armor>& tokens)
 	{
@@ -378,26 +368,16 @@ namespace ARMOR
 				continue;
 			}
 
-			// PHASE 1: one RESOLVED filter set per rule, not per (rule, armor) pair.
-			const formfilter::CommonFilterView view{
-				line.modNames, line.hasPlugin, line.hasPluginOr,
-				line.keywords, line.keywordsOr, line.keywordsExcluded,
-				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
-				line.filterByEditorIdContainsExcluded, line.objectExcluded
-			};
-			const formfilter::ResolvedCommonFilters common =
-				formfilter::resolve(view, RE::FormType::Armor);
-
-			// hasPlugin / hasPluginOr consult no form at all.
-			if (!common.allPluginsInstalled || !common.anyPluginInstalled) {
+			// PHASE 1 + 2: the rule is compiled ONCE into a flat predicate
+			// program; the form loop below is a walk over it.
+			const formfilter::MatchProgram program = compileRule(line);
+			if (program.skipRule) {
 				continue;
 			}
 
-			const ResolvedArmorFilters af = resolveArmorFilters(line);
-
 			// PHASE 3: restrict the scan to the armors carrying at least one of
-			// the signals this rule names.
-			const bool keyed = !indexStale && armorRuleSignals(line, common, af, keys);
+			// the signals this rule names, read off the program's opcodes.
+			const bool keyed = !indexStale && formfilter::programSignals(program, keys);
 			if (keyed) {
 				if (!indexBuilt) {
 					buildArmorIndex(ArmorArray, index);
@@ -420,305 +400,24 @@ namespace ARMOR
 				formfilter::stats().scanVisits += scanCount;
 			}
 
+			// Reused across the whole form loop: the lowered fullName and the
+			// lowered EditorID now allocate once, not once per pair.
+			formfilter::MatchScratch scratch;
+			formfilter::MatchTarget  target;
 			for (std::uint32_t scanIdx = 0; scanIdx < scanCount; ++scanIdx) {
 				const auto& curobj = ArmorArray[keyed ? candidates[scanIdx] : scanIdx];
-				bool found = false;
-				bool keywordAnd = false;
-				bool keywordOr = false;
-				bool bipedSlotAnd = false;
-				bool bipedSlotOr = false;
-				bool contains = false;
-				bool containsOr = false;
-				bool namecontains = false;
-				bool namecontainsOr = false;
-				bool mgefAnd = false;
-				bool mgefOr = false;
-
 				if (!curobj || curobj->IsDeleted()) {
 					continue;
 				}
 
-				if (!line.modNames.empty() && !formfilter::matchesModName(common, curobj)) {
+				if (!line.modNames.empty() && !formfilter::matchesModName(program, curobj)) {
 					continue;
 				}
 
-				if (!found && !line.filterByEditorIdContains.empty()) {
-					contains = formfilter::matchesEditorIdAnd(common, curobj);
-				} else {
-					contains = true;
-				}
-
-				if (!found && !line.filterByEditorIdContainsOr.empty()) {
-					//logger::info("keywords not empty");
-					containsOr = formfilter::matchesEditorIdOr(common, curobj);
-				} else {
-					containsOr = true;
-				}
-
-				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				//++++++++++++++++++++++++++++//
-				// The needles are pre-lowered; the form's own name is lowered
-				// ONCE per pair instead of once per needle, and only when a name
-				// filter is actually present.
-				std::string lowerFullName;
-				if (!af.nameContains.empty() || !af.nameContainsOr.empty() || !af.nameContainsExcluded.empty()) {
-					lowerFullName = toLowerCase(curobj->fullName.c_str());
-				}
-
-				if (!found && !line.filterByNameContains.empty()) {
-					for (const auto& editorString : af.nameContains) {
-						if (lowerFullName.find(editorString) != std::string::npos) {
-							namecontains = true;
-						} else {
-							namecontains = false;
-							break;
-						}
-					}
-				} else {
-					namecontains = true;
-				}
-
-				if (!found && !line.filterByNameContainsOr.empty()) {
-					//logger::info("keywords not empty");
-					for (const auto& editorString : af.nameContainsOr) {
-						if (lowerFullName.find(editorString) != std::string::npos) {
-							namecontainsOr = true;
-							break;
-						}
-					}
-				} else {
-					namecontainsOr = true;
-				}
-
-				if (!found && (!line.filterByNameContains.empty() || !line.filterByNameContainsOr.empty()) && namecontains && namecontainsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-				//++++++++++++++++++++++++++++//
-
-				//logger::info("npc not empty");
-				for (const RE::BIPED_MODEL::ArmorType t : af.armorTypes) {
-					if (curobj->bipedModelData.armorType & t) {
-						found = true;
-						break;
-					}
-				}
-
-				if (!line.bipedSlot.empty()) {
-					//logger::info("keywords not empty");
-					for (const auto slot : af.bipedSlot) {
-						if (curobj->bipedModelData.bipedObjectSlots & slot) {
-							bipedSlotAnd = true;
-						} else {
-							bipedSlotAnd = false;
-							break;
-						}
-					}
-
-				} else {
-					bipedSlotAnd = true;
-				}
-
-				if (!line.bipedSlotOr.empty()) {
-					//logger::info("keywords not empty");
-					for (const auto slot : af.bipedSlotOr) {
-						if (curobj->bipedModelData.bipedObjectSlots & slot) {
-							bipedSlotOr = true;
-							break;
-						}
-					}
-					if (found) {
-						logger::debug(FMT_STRING("Armor has bipedSlot. {:08X} {}"), curobj->formID, curobj->fullName);
-					}
-				} else {
-					bipedSlotOr = true;
-				}
-
-				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
-					keywordAnd = formfilter::matchesKeywordsAnd(common, curobj, nullptr);
-				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
-					keywordAnd = true;
-				}
-				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
-					keywordOr = formfilter::matchesKeywordsOr(common, curobj, nullptr);
-				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
-					keywordOr = true;
-				}
-
-				if ((!line.bipedSlot.empty() || !line.bipedSlotOr.empty()) && bipedSlotAnd && bipedSlotOr) {
-					//logger::debug(FMT_STRING("Found a matching armor by bipedSlots. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching armor by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				if (!line.filterByArmorAddons.empty()) {
-					bool foundInList = false;
-					// `af.armorAddons` keeps one slot per input identifier, with 0
-					// for one that did not resolve to an Armature -- because
-					// `foundInList` is reset at the top of EVERY iteration, a
-					// non-resolving entry is observable here (it leaves
-					// foundInList false without breaking), unlike in every other
-					// AND-loop in this codebase.
-					for (const RE::FormID addonID : af.armorAddons) {
-						foundInList = false;
-						//logger::debug(FMT_STRING("mgefAnd set foundInList False."));
-						if (addonID) {
-							for (const auto& addon : curobj->armorAddons) {
-								if (addon->formID == addonID) {
-									foundInList = true;
-									//logger::debug(FMT_STRING("mgefAnd found in list."));
-									break;
-								}
-							}
-							if (!foundInList) {
-								mgefAnd = false;
-								//logger::debug(FMT_STRING("mgefAnd not found in list, break."));
-								break;
-							}
-						}
-					}
-					if (foundInList) {
-						mgefAnd = true;
-					}
-				} else {
-					//logger::debug(FMT_STRING("mgefAnd is empty, we pass true."));
-					mgefAnd = true;
-				}
-				if (!line.filterByArmorAddonsOr.empty()) {
-					for (const RE::FormID addonID : af.armorAddonsOr) {
-						for (const auto& addon : curobj->armorAddons) {
-							if (addon->formID == addonID) {
-								mgefOr = true;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
-						if (mgefOr) {
-							break;
-						}
-					}
-				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
-					mgefOr = true;
-				}
-
-				if ((!line.filterByArmorAddons.empty() || !line.filterByArmorAddonsOr.empty()) && mgefAnd && mgefOr) {
-					//logger::debug(FMT_STRING("mgef found. {} {}"), mgefAnd, mgefOr);
-					found = true;
-				}
-
-				if (line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.bipedSlot.empty() && line.bipedSlotOr.empty() && line.filterByArmorType.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByNameContains.empty() && line.filterByNameContainsOr.empty() && line.filterByArmorAddons.empty() && line.filterByArmorAddonsOr.empty()) {
-					//logger::debug(FMT_STRING("Found a matching armor by no filter. {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-
-				if (!line.keywordsExcluded.empty() && found) {
-					//logger::info("keywords not empty");
-					if (formfilter::hasExcludedKeyword(common, curobj, nullptr)) {
-						found = false;
-					}
-				}
-
-				if (!line.bipedSlotExcluded.empty() && found) {
-					//logger::info("keywords not empty");
-					for (const auto slot : af.bipedSlotExcluded) {
-						if (curobj->bipedModelData.bipedObjectSlots & slot) {
-							found = false;
-							logger::debug(FMT_STRING("Armor Excluded has bipedSlot. {:08X} {}"), curobj->formID, curobj->fullName);
-							break;
-						}
-						//logger::debug(FMT_STRING("KeywordAnd armor true"));
-					}
-				}
-
-				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-					//logger::info("factions not empty");
-					if (formfilter::hasExcludedEditorId(common, curobj)) {
-						found = false;
-					}
-				}
-
-				if (!line.filterByNameContainsExcluded.empty() && found) {
-					//logger::info("factions not empty");
-					for (const auto& editorString : af.nameContainsExcluded) {
-						if (lowerFullName.find(editorString) != std::string::npos) {
-							found = false;
-							break;
-						}
-					}
-				}
-
-				if (!line.filterByArmorAddonsExcluded.empty() && found) {
-					//logger::info("mgefs not empty");
-					for (const RE::FormID addonID : af.armorAddonsExcluded) {
-						for (const auto& addon : curobj->armorAddons) {
-							if (addon && addon->formID == addonID) {
-								found = false;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
-					}
-				}
-
-				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
-					if (formfilter::isObjectExcluded(common, curobj)) {
-						found = false;
-					}
-				}
-
-				//logger::info("npc not empty");
-				for (const RE::BIPED_MODEL::ArmorType t : af.armorTypesExcluded) {
-					if (curobj->bipedModelData.armorType & t) {
-						found = false;
-						break;
-					}
-				}
-
-				if (found && !line.restrictKeywords.empty()) {
-					bool hasObject = false;
-					for (auto* tempForm : af.restrictKeywords) {
-						if (curobj->HasKeyword(tempForm)) {
-							hasObject = true;
-							break;
-						}
-					}
-					if (!hasObject) {
-						found = false;
-					}
-				}
-
-				if (found && !line.restrictSlots.empty()) {
-					bool hasObject = false;
-					for (const auto slot : af.restrictSlots) {
-						if (curobj->bipedModelData.bipedObjectSlots & slot) {
-							hasObject = true;
-							break;
-						}
-					}
-					if (!hasObject) {
-						found = false;
-					}
-				}
-
-
-
-				if (found) {
+				target.form = curobj;
+				target.kf = static_cast<const RE::BGSKeywordForm*>(curobj);
+				target.armor = curobj;
+				if (formfilter::runProgram(program, target, scratch)) {
 					patch(line, curobj);
 				}
 			}

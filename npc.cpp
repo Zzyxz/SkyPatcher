@@ -1,5 +1,6 @@
 #include "npc.h"
 #include "formfilter.h"
+#include "parsetable.h"
 #include <algorithm>
 #include <unordered_map>
 //#include <execution>
@@ -12,347 +13,143 @@ namespace NPC
 	ActorData aData;
 	bool      bEnableSetLevelDirectlyByPCMult = false;
 
+	// ==================================================================
+	// PHASE 2 -- NPC's key table.
+	//
+	// This replaces 97 extract*() calls, each of which ran its own
+	// std::regex_search over the whole line. See parsetable.h for the
+	// equivalence argument; the table below is a transliteration of the old
+	// call list, one row per call, IN THE SAME ORDER, so the two can be
+	// diffed by eye.
+	//
+	// Rows that look redundant are not:
+	//   * "ObjectsToRemove" and "objectsToRemove" are two separate upstream
+	//     extractData calls writing two different members, and because both
+	//     patterns are case-INsensitive a line carrying either key fills
+	//     BOTH. Removing one would change the golden snapshots.
+	//   * "spellsToAdd" also fires on "levSpellsToAdd" for the same reason,
+	//     which is why both rows exist and why neither can be made exact.
+	// ==================================================================
+	namespace
+	{
+#define NPC_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
+
+		constexpr sp::KeySpec kNpcKeys[] = {
+			{ "filterByNpcs", sp::FieldKind::List, NPC_F(object) },
+			{ "filterByNpcsExcluded", sp::FieldKind::List, NPC_F(objectExcluded) },
+			{ "filterByDefaultOutfits", sp::FieldKind::List, NPC_F(filterByOutfit) },
+			{ "filterByKeywords", sp::FieldKind::List, NPC_F(keywords) },
+			{ "filterByKeywordsOr", sp::FieldKind::List, NPC_F(keywordsOr) },
+			{ "filterByKeywordsExcluded", sp::FieldKind::List, NPC_F(keywordsExcluded) },
+			{ "filterByRaces", sp::FieldKind::List, NPC_F(races) },
+			{ "restrictToRaces", sp::FieldKind::List, NPC_F(restrictToRaces) },
+			{ "filterByClass", sp::FieldKind::List, NPC_F(filterClass) },
+			{ "filterByCombatStyle", sp::FieldKind::List, NPC_F(filterCombatStyle) },
+			{ "filterByClassExclude", sp::FieldKind::List, NPC_F(filterClassExclude) },
+			{ "filterByFactions", sp::FieldKind::List, NPC_F(filterFactions) },
+			{ "filterByFactionsOr", sp::FieldKind::List, NPC_F(filterFactionsOr) },
+			{ "filterByFactionsExcluded", sp::FieldKind::List, NPC_F(filterFactionsExcluded) },
+			{ "restrictToMaleModelContains", sp::FieldKind::ListAssign, NPC_F(restrictToMaleModelContains) },
+			{ "setAutoCalcStats", sp::FieldKind::Value, NPC_F(calcStats) },
+			{ "setPcLevelMult", sp::FieldKind::MultiInt, NPC_F(pcMultFlag), NPC_F(PCvalues1), NPC_F(PCvalues2) },
+			{ "setEssential", sp::FieldKind::Value, NPC_F(kEssential) },
+			{ "setProtected", sp::FieldKind::Value, NPC_F(kProtected) },
+			{ "levelRange", sp::FieldKind::LevelRange, NPC_F(level_min), NPC_F(level_max) },
+			{ "changeStats", sp::FieldKind::MultiFloat, NPC_F(avifs), NPC_F(values1), NPC_F(values2) },
+			{ "changeSkills", sp::FieldKind::MultiInt, NPC_F(skills), NPC_F(skillvalues1), NPC_F(skillvalues2) },
+			{ "restrictToSkill", sp::FieldKind::Arr2D, NPC_F(skillRestrict) },
+			{ "factionsToAdd", sp::FieldKind::FactionRanks, NPC_F(factionsToAdd), NPC_F(factionsToAddRank1), NPC_F(factionsToAddRank2) },
+			{ "keywordsToAdd", sp::FieldKind::List, NPC_F(keywordsToAdd) },
+			{ "keywordsToRemove", sp::FieldKind::List, NPC_F(keywordsToRemove) },
+			{ "factionsToRemove", sp::FieldKind::List, NPC_F(factionsToRemove) },
+			{ "perksToAdd", sp::FieldKind::List, NPC_F(perksToAdd) },
+			{ "objectsToAdd", sp::FieldKind::ObjectsToAdd, NPC_F(objectsToAdd), NPC_F(objectsToAddValue) },
+			{ "ObjectsToRemove", sp::FieldKind::List, NPC_F(objectsToRemove) },
+			{ "objectsToRemove", sp::FieldKind::List, NPC_F(objectsToRemoveNew) },
+			{ "outfitDefault", sp::FieldKind::Value, NPC_F(outfitDefault) },
+			{ "outfitSleep", sp::FieldKind::Value, NPC_F(outfitSleep) },
+			{ "deathItem", sp::FieldKind::Value, NPC_F(deathItem) },
+			{ "skin", sp::FieldKind::Value, NPC_F(skin) },
+			{ "race", sp::FieldKind::Value, NPC_F(race) },
+			{ "class", sp::FieldKind::Value, NPC_F(Class) },
+			{ "level", sp::FieldKind::Value, NPC_F(level) },
+			{ "calcLevelMin", sp::FieldKind::Value, NPC_F(calcLevelMin) },
+			{ "calcLevelMax", sp::FieldKind::Value, NPC_F(calcLevelMax) },
+			{ "filterByGender", sp::FieldKind::Value, NPC_F(isFemale) },
+			{ "restrictToGender", sp::FieldKind::Value, NPC_F(restrictGender) },
+			{ "restrictToCombatStyle", sp::FieldKind::ListAssign, NPC_F(restrictToCombatStyle) },
+			{ "restrictToKeywords", sp::FieldKind::ListAssign, NPC_F(restrictToKeyword) },
+			{ "healthBonus", sp::FieldKind::Value, NPC_F(healthBonus) },
+			{ "staminaBonus", sp::FieldKind::Value, NPC_F(staminaBonus) },
+			{ "magickaBonus", sp::FieldKind::Value, NPC_F(magickaBonus) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, NPC_F(modNames) },
+			{ "shoutsToAdd", sp::FieldKind::List, NPC_F(shoutsToAdd) },
+			{ "shoutsToRemove", sp::FieldKind::List, NPC_F(shoutsToRemove) },
+			{ "levSpellsToAdd", sp::FieldKind::List, NPC_F(levSpellsToAdd) },
+			{ "levSpellsToRemove", sp::FieldKind::List, NPC_F(levSpellsToRemove) },
+			{ "spellsToAdd", sp::FieldKind::List, NPC_F(spellsToAdd) },
+			{ "spellsToRemove", sp::FieldKind::List, NPC_F(spellsToRemove) },
+			{ "fullName", sp::FieldKind::ValueTilde, NPC_F(fullName) },
+			{ "speedMultiplier", sp::FieldKind::Value, NPC_F(speedMultiplier) },
+			{ "raceAttack", sp::FieldKind::Value, NPC_F(attackRace) },
+			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, NPC_F(filterByEditorIdContains) },
+			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, NPC_F(filterByEditorIdContainsOr) },
+			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, NPC_F(filterByEditorIdContainsExcluded) },
+			{ "clearClassFromAttributes", sp::FieldKind::Value, NPC_F(clearClassFromAttributes) },
+			{ "filterByPCLevelMult", sp::FieldKind::Value, NPC_F(filterPCMult) },
+			{ "filterByAutoCalc", sp::FieldKind::Value, NPC_F(filterAutoCalc) },
+			{ "filterByEssential", sp::FieldKind::Value, NPC_F(filterEssential) },
+			{ "filterByProtected", sp::FieldKind::Value, NPC_F(filterProtected) },
+			{ "voiceType", sp::FieldKind::Value, NPC_F(voiceType) },
+			{ "restrictToVoiceType", sp::FieldKind::List, NPC_F(restrictToVoiceType) },
+			{ "setTemplateFlags", sp::FieldKind::ListAssign, NPC_F(setTemplateFlags) },
+			{ "removeTemplateFlags", sp::FieldKind::ListAssign, NPC_F(removeTemplateFlags) },
+			{ "setFlags", sp::FieldKind::ListAssign, NPC_F(setFlags) },
+			{ "removeFlags", sp::FieldKind::ListAssign, NPC_F(removeFlags) },
+			{ "clearInventory", sp::FieldKind::Value, NPC_F(clearInventory) },
+			{ "removeInventoryObjectsByCount", sp::FieldKind::Arr2D, NPC_F(removeContainerObjectsByCount) },
+			{ "removeInventoryObjectsByKeywords", sp::FieldKind::List, NPC_F(removeContainerObjectsByKeyword) },
+			{ "addOnceToInventory", sp::FieldKind::Arr2D, NPC_F(addedContainerObjectsOnce) },
+			{ "setRandomCombatStyle", sp::FieldKind::Arr2D, NPC_F(rcslist) },
+			{ "copyVisualStyle", sp::FieldKind::Value, NPC_F(copyVisualStyle) },
+			{ "rvsRestrictToTraits", sp::FieldKind::Value, NPC_F(rvsRestrictToTraits) },
+			{ "setRandomVisualStyle", sp::FieldKind::Arr2D, NPC_F(setRandomVisualStyle) },
+			{ "aggressionRadiusRanges", sp::FieldKind::Arr2D, NPC_F(aggressionRadiusRanges) },
+			{ "addRandomVisualStyle", sp::FieldKind::Arr2D, NPC_F(addRandomVisualStyle) },
+			{ "weight", sp::FieldKind::Value, NPC_F(weight) },
+			{ "height", sp::FieldKind::Value, NPC_F(height) },
+			{ "setAggression", sp::FieldKind::Value, NPC_F(setAggression) },
+			{ "setAssistance", sp::FieldKind::Value, NPC_F(setAssistance) },
+			{ "setConfidence", sp::FieldKind::Value, NPC_F(setConfidence) },
+			{ "setMood", sp::FieldKind::Value, NPC_F(setMood) },
+			{ "setMorality", sp::FieldKind::Value, NPC_F(setMorality) },
+			{ "aggressionRadiusBehavior", sp::FieldKind::Value, NPC_F(aggressionRadiusBehavior) },
+			{ "attackDataToRemove", sp::FieldKind::ListAssign, NPC_F(removeAttackData) },
+			{ "restrictToFlags", sp::FieldKind::ListAssign, NPC_F(restrictToFlags) },
+			{ "restrictToTemplateFlags", sp::FieldKind::ListAssign, NPC_F(restrictToTemplateFlags) },
+			{ "haircolor", sp::FieldKind::Value, NPC_F(haircolor) },
+			{ "objectsToReplace", sp::FieldKind::Arr2D, NPC_F(objectsToReplace) },
+			{ "attackDataToAdd", sp::FieldKind::AttackData3D, NPC_F(addedAttackData) },
+			{ "attackDataToChange", sp::FieldKind::AttackData3D, NPC_F(attackDataToChange) },
+			{ "changeBaseObject", sp::FieldKind::Value, NPC_F(baseObject) },
+		};
+
+#undef NPC_F
+
+		const sp::KeyTable& npcKeyTable()
+		{
+			static const sp::KeyTable table(kNpcKeys, std::size(kNpcKeys));
+			return table;
+		}
+	}
+
 	struct patch_instruction create_patch_instruction(const std::string& line)
 	{
 		patch_instruction l;
-
-		extractData(line, "filterByNpcs\\s*=([^:]+)", l.object);
-		extractData(line, "filterByNpcsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractData(line, "filterByDefaultOutfits\\s*=([^:]+)", l.filterByOutfit);
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-
-		extractData(line, "filterByRaces\\s*=([^:]+)", l.races);
-
-		extractData(line, "restrictToRaces\\s*=([^:]+)", l.restrictToRaces);
-
-		extractData(line, "filterByClass\\s*=([^:]+)", l.filterClass);
-
-		extractData(line, "filterByCombatStyle\\s*=([^:]+)", l.filterCombatStyle);
-
-		extractData(line, "filterByClassExclude\\s*=([^:]+)", l.filterClassExclude);
-
-		extractData(line, "filterByFactions\\s*=([^:]+)", l.filterFactions);
-
-		extractData(line, "filterByFactionsOr\\s*=([^:]+)", l.filterFactionsOr);
-
-		extractData(line, "filterByFactionsExcluded\\s*=([^:]+)", l.filterFactionsExcluded);
-
-		extractDataStrings(line, "restrictToMaleModelContains\\s*=([^:]+)", l.restrictToMaleModelContains);
-
-		extractValueString(line, "setAutoCalcStats\\s*=([^:]+)", l.calcStats);
-
-		extractMultiDataInt(line, "setPcLevelMult\\s*=([^:]+)", l.pcMultFlag, l.PCvalues1, l.PCvalues2);
-
-		extractValueString(line, "setEssential\\s*=([^:]+)", l.kEssential);
-
-		extractValueString(line, "setProtected\\s*=([^:]+)", l.kProtected);
-
-		// extract getLevelRange
-		static const std::regex levelRange_regex("levelRange\\s*=\\s*(\\d+)\\s*~\\s*(\\d+)", regex::icase);
-		std::smatch levelRange;
-		std::regex_search(line, levelRange, levelRange_regex);
-		if (levelRange.empty() || levelRange.size() < 3) {
-			l.level_min = "none";
-			l.level_max = "none";
-		}
-		else {
-			l.level_min = levelRange[1].str();
-			l.level_max = levelRange[2].str();
-		}
-
-		extractMultiDataFloat(line, "changeStats\\s*=([^:]+)", l.avifs, l.values1, l.values2);
-
-		extractMultiDataInt(line, "changeSkills\\s*=([^:]+)", l.skills, l.skillvalues1, l.skillvalues2);
-
-		extractToArr2D(line, "restrictToSkill\\s*=([^:]+)", l.skillRestrict);
-		// extract Faction
-		static const std::regex Faction_regex("factionsToAdd\\s*=([^:]+)", std::regex::icase);
-		std::smatch Faction_match;
-		std::regex_search(line, Faction_match, Faction_regex);
-		if (!Faction_match.empty() && !Faction_match[1].str().empty()) {
-			std::string              Faction_str = Faction_match[1];
-			std::regex               Faction_list_regex("([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", std::regex::icase);
-			std::vector<std::string> temp_factionsToAdd;
-			std::vector<float>       temp_factionsToAddRank1;
-			std::vector<float>       temp_factionsToAddRank2;
-			std::sregex_iterator     Faction_iterator(Faction_str.begin(), Faction_str.end(), Faction_list_regex);
-			std::sregex_iterator     Faction_end;
-			while (Faction_iterator != Faction_end) {
-				std::string avif = (*Faction_iterator)[1].str();
-				avif.erase(avif.begin(), std::find_if_not(avif.begin(), avif.end(), ::isspace));
-				avif.erase(std::find_if_not(avif.rbegin(), avif.rend(), ::isspace).base(), avif.end());
-				if (avif == "none") {
-					break;
-				}
-				temp_factionsToAdd.push_back(avif);
-				temp_factionsToAddRank1.push_back(std::stof((*Faction_iterator)[2]));
-				temp_factionsToAddRank2.push_back((*Faction_iterator)[3] != "" ? std::stof((*Faction_iterator)[3]) : std::stof((*Faction_iterator)[2]));
-				++Faction_iterator;
-			}
-			l.factionsToAdd = std::move(temp_factionsToAdd);
-			l.factionsToAddRank1 = std::move(temp_factionsToAddRank1);
-			l.factionsToAddRank2 = std::move(temp_factionsToAddRank2);
-		}
-
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-
-		extractData(line, "factionsToRemove\\s*=([^:]+)", l.factionsToRemove);
-
-		extractData(line, "perksToAdd\\s*=([^:]+)", l.perksToAdd);
-
-		static const std::regex objectsToAdd_regex("objectsToAdd\\s*=([^:]+)", regex::icase);
-		std::smatch objectsToAdd_match;
-		std::regex_search(line, objectsToAdd_match, objectsToAdd_regex);
-		std::vector<std::string> objectsToAdd;
-		if (objectsToAdd_match.empty() || objectsToAdd_match[1].str().empty()) {
-			//empty
-		}
-		else {
-			std::string objectsToAdd_str = objectsToAdd_match[1];
-			std::regex  pattern("([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\\s*=\\s*([^,]+)", regex::icase);
-			std::smatch match;
-
-			auto begin = std::sregex_iterator(objectsToAdd_str.begin(), objectsToAdd_str.end(), pattern);
-			auto end = std::sregex_iterator();
-
-			for (std::sregex_iterator i = begin; i != end; ++i) {
-				std::smatch match = *i;
-				l.objectsToAdd.push_back(match[1]);
-				l.objectsToAddValue.push_back(match[2]);
-				//logger::debug(FMT_STRING("Match: {} {}"), match[1].str(), match[2].str());
-			}
-		}
-
-		//extractMultiDataString(line, "objectsToAdd\\s*=([^:]+)", );
-
-		extractData(line, "ObjectsToRemove\\s*=([^:]+)", l.objectsToRemove);
-		extractData(line, "objectsToRemove\\s*=([^:]+)", l.objectsToRemoveNew);
-
-		extractValueString(line, "outfitDefault\\s*=([^:]+)", l.outfitDefault);
-
-		extractValueString(line, "outfitSleep\\s*=([^:]+)", l.outfitSleep);
-
-		extractValueString(line, "deathItem\\s*=([^:]+)", l.deathItem);
-
-		extractValueString(line, "skin\\s*=([^:]+)", l.skin);
-
-		extractValueString(line, "race\\s*=([^:]+)", l.race);
-
-		extractValueString(line, "class\\s*=([^:]+)", l.Class);
-
-		extractValueString(line, "level\\s*=([^:]+)", l.level);
-
-		extractValueString(line, "calcLevelMin\\s*=([^:]+)", l.calcLevelMin);
-
-		extractValueString(line, "calcLevelMax\\s*=([^:]+)", l.calcLevelMax);
-
-		extractValueString(line, "filterByGender\\s*=([^:]+)", l.isFemale);
-		extractValueString(line, "restrictToGender\\s*=([^:]+)", l.restrictGender);
-		extractDataStrings(line, "restrictToCombatStyle\\s*=([^:]+)", l.restrictToCombatStyle);
-
-		extractDataStrings(line, "restrictToKeywords\\s*=([^:]+)", l.restrictToKeyword);
-
-		extractValueString(line, "healthBonus\\s*=([^:]+)", l.healthBonus);
-		extractValueString(line, "staminaBonus\\s*=([^:]+)", l.staminaBonus);
-		extractValueString(line, "magickaBonus\\s*=([^:]+)", l.magickaBonus);
-
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-
-		extractData(line, "shoutsToAdd\\s*=([^:]+)", l.shoutsToAdd);
-		extractData(line, "shoutsToRemove\\s*=([^:]+)", l.shoutsToRemove);
-		extractData(line, "levSpellsToAdd\\s*=([^:]+)", l.levSpellsToAdd);
-		extractData(line, "levSpellsToRemove\\s*=([^:]+)", l.levSpellsToRemove);
-		extractData(line, "spellsToAdd\\s*=([^:]+)", l.spellsToAdd);
-		extractData(line, "spellsToRemove\\s*=([^:]+)", l.spellsToRemove);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-		extractValueString(line, "speedMultiplier\\s*=([^:]+)", l.speedMultiplier);
-
-		extractValueString(line, "raceAttack\\s*=([^:]+)", l.attackRace);
-
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-		//extractDataStrings(line, "filterByEditorIdContainsExcludedForRVS\\s*=([^:]+)", l.filterByEditorIdContainsExcludedForRVS);
-		extractValueString(line, "clearClassFromAttributes\\s*=([^:]+)", l.clearClassFromAttributes);
-
-		extractValueString(line, "filterByPCLevelMult\\s*=([^:]+)", l.filterPCMult);
-		extractValueString(line, "filterByAutoCalc\\s*=([^:]+)", l.filterAutoCalc);
-		extractValueString(line, "filterByEssential\\s*=([^:]+)", l.filterEssential);
-		extractValueString(line, "filterByProtected\\s*=([^:]+)", l.filterProtected);
-		extractValueString(line, "voiceType\\s*=([^:]+)", l.voiceType);
-		extractData(line, "restrictToVoiceType\\s*=([^:]+)", l.restrictToVoiceType);
-		extractDataStrings(line, "setTemplateFlags\\s*=([^:]+)", l.setTemplateFlags);
-		extractDataStrings(line, "removeTemplateFlags\\s*=([^:]+)", l.removeTemplateFlags);
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-		extractValueString(line, "clearInventory\\s*=([^:]+)", l.clearInventory);
-		extractToArr2D(line, "removeInventoryObjectsByCount\\s*=([^:]+)", l.removeContainerObjectsByCount);
-		extractData(line, "removeInventoryObjectsByKeywords\\s*=([^:]+)", l.removeContainerObjectsByKeyword);
-		extractToArr2D(line, "addOnceToInventory\\s*=([^:]+)", l.addedContainerObjectsOnce);
-		extractToArr2D(line, "setRandomCombatStyle\\s*=([^:]+)", l.rcslist);
-		extractValueString(line, "copyVisualStyle\\s*=([^:]+)", l.copyVisualStyle);
-		extractValueString(line, "rvsRestrictToTraits\\s*=([^:]+)", l.rvsRestrictToTraits);
-		extractToArr2D(line, "setRandomVisualStyle\\s*=([^:]+)", l.setRandomVisualStyle);
-		extractToArr2D(line, "aggressionRadiusRanges\\s*=([^:]+)", l.aggressionRadiusRanges);
-		extractToArr2D(line, "addRandomVisualStyle\\s*=([^:]+)", l.addRandomVisualStyle);
-
-
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-		extractValueString(line, "height\\s*=([^:]+)", l.height);
-
-		extractValueString(line, "setAggression\\s*=([^:]+)", l.setAggression);
-		extractValueString(line, "setAssistance\\s*=([^:]+)", l.setAssistance);
-		extractValueString(line, "setConfidence\\s*=([^:]+)", l.setConfidence);
-		extractValueString(line, "setMood\\s*=([^:]+)", l.setMood);
-		extractValueString(line, "setMorality\\s*=([^:]+)", l.setMorality);
-		extractValueString(line, "aggressionRadiusBehavior\\s*=([^:]+)", l.aggressionRadiusBehavior);
-
-
-
-		extractDataStrings(line, "attackDataToRemove\\s*=([^:]+)", l.removeAttackData);
-		extractDataStrings(line, "restrictToFlags\\s*=([^:]+)", l.restrictToFlags);
-		extractDataStrings(line, "restrictToTemplateFlags\\s*=([^:]+)", l.restrictToTemplateFlags);
-		extractValueString(line, "haircolor\\s*=([^:]+)", l.haircolor);
-
-		extractToArr2D(line, "objectsToReplace\\s*=([^:]+)", l.objectsToReplace);
-
-		//extractToArr2D(line, "overlayToAdd\\s*=([^:]+)", l.overlayToAdd);
-		static const std::regex add_regex("attackDataToAdd\\s*=([^:]+)", regex::icase);
-		std::smatch add_match;
-		std::regex_search(line, add_match, add_regex);
-		std::vector<std::string> add;
-		if (add_match.empty() || add_match[1].str().empty()) {
-			// empty
-		}
-		else {
-			std::string                                        valueLine = add_match[1].str();
-			std::vector<std::vector<std::vector<std::string>>> arr3D;
-
-			// Split the input string by commas
-			std::vector<std::string> sections;
-			size_t                   startPos = 0;
-			size_t                   pos = 0;
-			while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
-				sections.push_back(valueLine.substr(startPos, pos - startPos));
-				startPos = pos + 1;
-			}
-			sections.push_back(valueLine.substr(startPos));
-
-			for (const auto& section : sections) {
-				std::vector<std::string> arr;
-
-				// exclude the addToLL= part from the first string
-				startPos = 0;
-				pos = 0;
-				std::string token;
-				while ((pos = section.find("~", startPos)) != std::string::npos) {
-					token = section.substr(startPos, pos - startPos);
-					token = trim(token);  // remove leading and trailing white spaces
-					arr.push_back(token);
-					startPos = pos + 1;
-				}
-				token = section.substr(startPos);
-				token = trim(token);  // remove leading and trailing white spaces
-				arr.push_back(token);
-
-				std::vector<std::vector<std::string>> arr2D(arr.size());
-
-				for (int i = 0; i < arr.size(); i++) {
-					std::vector<std::string> splitArr;
-					size_t                   innerPos = 0;
-					std::string              innerToken;
-					while ((innerPos = arr[i].find("=")) != std::string::npos) {
-						innerToken = arr[i].substr(0, innerPos);
-						innerToken = trim(innerToken);  // remove leading and trailing white spaces
-						splitArr.push_back(innerToken);
-						arr[i].erase(0, innerPos + 1);
-					}
-					innerToken = arr[i];
-					innerToken = trim(innerToken);  // remove leading and trailing white spaces
-					splitArr.push_back(innerToken);
-					arr2D[i] = splitArr;
-				}
-
-				arr3D.push_back(arr2D);
-			}
-
-			l.addedAttackData = arr3D;
-		}
-
-		static const std::regex change_regex("attackDataToChange\\s*=([^:]+)", regex::icase);
-		std::smatch change_match;
-		std::regex_search(line, change_match, change_regex);
-		std::vector<std::string> change;
-		if (change_match.empty() || change_match[1].str().empty()) {
-			// empty
-		}
-		else {
-			std::string                                        valueLine = change_match[1].str();
-			std::vector<std::vector<std::vector<std::string>>> arr3D;
-
-			// Split the input string by commas
-			std::vector<std::string> sections;
-			size_t                   startPos = 0;
-			size_t                   pos = 0;
-			while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
-				sections.push_back(valueLine.substr(startPos, pos - startPos));
-				startPos = pos + 1;
-			}
-			sections.push_back(valueLine.substr(startPos));
-
-			for (const auto& section : sections) {
-				std::vector<std::string> arr;
-
-				// exclude the changeToLL= part from the first string
-				startPos = 0;
-				pos = 0;
-				std::string token;
-				while ((pos = section.find("~", startPos)) != std::string::npos) {
-					token = section.substr(startPos, pos - startPos);
-					token = trim(token);  // remove leading and trailing white spaces
-					arr.push_back(token);
-					startPos = pos + 1;
-				}
-				token = section.substr(startPos);
-				token = trim(token);  // remove leading and trailing white spaces
-				arr.push_back(token);
-
-				std::vector<std::vector<std::string>> arr2D(arr.size());
-
-				for (int i = 0; i < arr.size(); i++) {
-					std::vector<std::string> splitArr;
-					size_t                   innerPos = 0;
-					std::string              innerToken;
-					while ((innerPos = arr[i].find("=")) != std::string::npos) {
-						innerToken = arr[i].substr(0, innerPos);
-						innerToken = trim(innerToken);  // remove leading and trailing white spaces
-						splitArr.push_back(innerToken);
-						arr[i].erase(0, innerPos + 1);
-					}
-					innerToken = arr[i];
-					innerToken = trim(innerToken);  // remove leading and trailing white spaces
-					splitArr.push_back(innerToken);
-					arr2D[i] = splitArr;
-				}
-
-				arr3D.push_back(arr2D);
-			}
-
-			l.attackDataToChange = arr3D;
-		}
-
-		extractValueString(line, "changeBaseObject\\s*=([^:]+)", l.baseObject);
-
+		npcKeyTable().parse(line, &l);
 		return l;
 	}
+
 
 	// ======================================================================
 	// PHASE 3 -- the rule index for NPC. See formfilter.h for the general
@@ -384,69 +181,10 @@ namespace NPC
 			return !a_value.empty() && a_value != "none";
 		}
 
-		// Returns true if the rule may be restricted to the forms carrying one
-		// of a_keys; false if it has to see every NPC.
-		bool npcRuleSignals(const patch_instruction& line, const ResolvedNpcFilters& view,
-			std::vector<std::uint64_t>& a_keys)
-		{
-			a_keys.clear();
-
-			// The four unguarded flag filters. Any of them can set found=true
-			// on a form no other filter selected, so the rule is not keyable.
-			if (liveScalarFilter(line.filterPCMult) || liveScalarFilter(line.filterAutoCalc) ||
-				liveScalarFilter(line.filterEssential) || liveScalarFilter(line.filterProtected)) {
-				return false;
-			}
-
-			// A substring over the EditorID has no finite key set.
-			if (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) {
-				return false;
-			}
-
-			// npc.cpp:2670 -- with every identifying filter empty the rule
-			// matches every NPC but the player. (The two EditorID members of
-			// that condition are already known empty here.)
-			if (line.object.empty() && line.races.empty() && line.keywords.empty() &&
-				line.keywordsOr.empty() && line.filterClass.empty() && line.filterCombatStyle.empty() &&
-				line.filterFactions.empty() && line.filterFactionsOr.empty() && line.filterByOutfit.empty()) {
-				return false;
-			}
-
-			const auto keyKeyword = [](std::vector<std::uint64_t>& out, RE::BGSKeyword* const& kw) {
-				if (kw) {
-					out.push_back(formfilter::sigForm(kw->formID));
-				}
-			};
-			const auto keyFaction = [](std::vector<std::uint64_t>& out, RE::TESFaction* const& f) {
-				if (f) {
-					out.push_back(formfilter::sigForm(f->formID));
-				}
-			};
-
-			formfilter::appendAndOrSignals(a_keys, !line.keywords.empty(), view.common.keywords,
-				!line.keywordsOr.empty(), view.common.keywordsOr, keyKeyword);
-			formfilter::appendAndOrSignals(a_keys, !line.filterFactions.empty(), view.factions,
-				!line.filterFactionsOr.empty(), view.factionsOr, keyFaction);
-
-			// The plain OR lists. Iterating the RESOLVED list is what makes a
-			// filter whose identifiers all failed to resolve contribute nothing:
-			// upstream that loop never fires either.
-			for (auto* race : view.races) {
-				if (race) {
-					a_keys.push_back(formfilter::sigForm(race->formID));
-				}
-			}
-			for (const RE::FormID id : view.outfits) {
-				a_keys.push_back(formfilter::sigForm(id));
-			}
-			for (const RE::FormID id : view.classes) {
-				a_keys.push_back(formfilter::sigForm(id));
-			}
-			for (const RE::FormID id : view.combatStyles) {
-				a_keys.push_back(formfilter::sigForm(id));
-			}
-			return true;
-		}
+		// PHASE 2: npcRuleSignals used to live here -- a second, hand-written
+		// reading of findObject's positive disjuncts, kept in sync with
+		// findObject by hand. It is now formfilter::programSignals, which reads
+		// the SAME MatchProgram findObject executes, so the two cannot drift.
 
 		// patch() writes the very attributes the index is keyed on, and a rule
 		// applied earlier in the list can therefore change whether a LATER rule
@@ -558,16 +296,17 @@ namespace NPC
 				continue;
 			}
 
-			// PHASE 1: every filter value this rule carries is resolved ONCE,
-			// here, not once per (rule, NPC) pair.
-			const ResolvedNpcFilters view = makeFilterView(line);
+			// PHASE 1 + 2: every filter value this rule carries is resolved
+			// ONCE, here, into the flat predicate program findObject executes.
+			const formfilter::MatchProgram program = makeFilterView(line);
 
 			// PHASE 3: restrict the scan to the NPCs that carry at least one of
 			// the signals this rule's filters name. `keyed == false` means the
 			// rule has a filter with no finite key set and still scans
 			// everything; an empty candidate list means the rule's filters all
-			// resolved to nothing and it can never match.
-			const bool keyed = !indexStale && npcRuleSignals(line, view, keys);
+			// resolved to nothing and it can never match. The key set is now
+			// read straight off the program's opcodes.
+			const bool keyed = !indexStale && formfilter::programSignals(program, keys);
 			if (keyed) {
 				if (!indexBuilt) {
 					buildNpcIndex(NPCArray, index);
@@ -600,11 +339,11 @@ namespace NPC
 					continue;
 				}
 
-				if (!line.modNames.empty() && !formfilter::matchesModName(view.common, curobj)) {
+				if (!line.modNames.empty() && !formfilter::matchesModName(program, curobj)) {
 					continue;
 				}
 
-				if (findObject(line, view, curobj)) {
+				if (findObject(line, program, curobj)) {
 					patch(line, curobj);
 				}
 			}
@@ -2563,74 +2302,323 @@ namespace NPC
 		//return;
 	}
 
-	// PHASE 1: resolve every filter value this rule carries, ONCE. The
-	// patch_instruction struct itself is untouched, so the golden snapshots are
-	// unaffected. NPC has no hasPlugin/hasPluginOr keys, so those bind to the
-	// shared empty vector and their resolved bools are both true.
-	ResolvedNpcFilters makeFilterView(const patch_instruction& line)
+	// =====================================================================
+	// PHASE 2 -- NPC's rule compiler.
+	//
+	// findObject used to be ~590 lines of `if` blocks that re-asked, on every
+	// (NPC, rule) pair, which filters the rule even carries. Those questions
+	// are answered once, here, and the answer is a formfilter::MatchProgram --
+	// a flat predicate list over one flat operand pool. findObject is now
+	// formfilter::runProgram.
+	//
+	// The stage structure is a transcription of upstream's control flow; see
+	// formfilter.h for why the positive stages may be reordered and the rest
+	// may not. The `formID != 0x000007` guards upstream sprinkles over SOME
+	// (not all) of its blocks survive as the per-predicate `skipIfPlayer` bit:
+	// filterByDefaultOutfits, filterByClass, filterByCombatStyle and every
+	// flag/restrictTo filter genuinely have no player guard upstream, and the
+	// player therefore can match through them.
+	// =====================================================================
+	namespace
 	{
-		const formfilter::CommonFilterView refs{
-			line.modNames,
-			formfilter::noStrings(),
-			formfilter::noStrings(),
-			line.keywords,
-			line.keywordsOr,
-			line.keywordsExcluded,
-			line.filterByEditorIdContains,
-			line.filterByEditorIdContainsOr,
-			line.filterByEditorIdContainsExcluded,
-			line.objectExcluded
+		// "true"/"false" and "female"/"male" are the only two vocabularies
+		// upstream's scalar flag filters recognise; anything else makes the
+		// whole block a no-op, so no predicate is emitted at all.
+		bool flagPolarity(const std::string& a_lower, const char* a_set, const char* a_clear, bool& a_expectSet)
+		{
+			if (a_lower == a_set) {
+				a_expectSet = true;
+				return true;
+			}
+			if (a_lower == a_clear) {
+				a_expectSet = false;
+				return true;
+			}
+			return false;
+		}
+
+		void addFlagPredicate(formfilter::MatchProgram& a_p, std::vector<formfilter::Predicate>& a_stage,
+			RE::ACTOR_BASE_DATA::Flag a_flag, bool a_expectSet)
+		{
+			const std::vector<std::uint64_t> vals{ static_cast<std::uint64_t>(a_flag) };
+			a_stage.push_back(formfilter::makePredicate(a_p, formfilter::Op::NpcFlag,
+				a_expectSet ? formfilter::Mode::And : formfilter::Mode::Exclude, vals, false));
+		}
+
+		const std::unordered_map<std::string, RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG>& templateFlagMap()
+		{
+			static const std::unordered_map<std::string, RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG> m = {
+				{ "traits", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kTraits },
+				{ "stats", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kStats },
+				{ "factions", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kFactions },
+				{ "spells", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kSpells },
+				{ "aidata", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIData },
+				{ "aipackages", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIPackages },
+				{ "unused", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kUnused },
+				{ "basedata", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kBaseData },
+				{ "inventory", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kInventory },
+				{ "script", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kScript },
+				{ "aidefpacklist", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIDefPackList },
+				{ "attackdata", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAttackData },
+				{ "keywords", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kKeywords },
+				{ "copiedtemplate", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kCopiedTemplate }
+			};
+			return m;
+		}
+
+		const std::unordered_map<std::string, RE::ACTOR_BASE_DATA::Flag>& baseFlagMap()
+		{
+			static const std::unordered_map<std::string, RE::ACTOR_BASE_DATA::Flag> m = {
+				{ "female", RE::ACTOR_BASE_DATA::Flag::kFemale },
+				{ "essential", RE::ACTOR_BASE_DATA::Flag::kEssential },
+				{ "ischargenfacepreset", RE::ACTOR_BASE_DATA::Flag::kIsChargenFacePreset },
+				{ "respawn", RE::ACTOR_BASE_DATA::Flag::kRespawn },
+				{ "autocalcstats", RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats },
+				{ "unique", RE::ACTOR_BASE_DATA::Flag::kUnique },
+				{ "doesntaffectstealthmeter", RE::ACTOR_BASE_DATA::Flag::kDoesntAffectStealthMeter },
+				{ "pclevelmult", RE::ACTOR_BASE_DATA::Flag::kPCLevelMult },
+				{ "usestemplate", RE::ACTOR_BASE_DATA::Flag::kUsesTemplate },
+				{ "calcfalltemplates", RE::ACTOR_BASE_DATA::Flag::kCalcForAllTemplates },
+				{ "protected", RE::ACTOR_BASE_DATA::Flag::kProtected },
+				{ "norumors", RE::ACTOR_BASE_DATA::Flag::kNoRumors },
+				{ "summonable", RE::ACTOR_BASE_DATA::Flag::kSummonable },
+				{ "doesntbleed", RE::ACTOR_BASE_DATA::Flag::kDoesntBleed },
+				{ "bleedoutoverride", RE::ACTOR_BASE_DATA::Flag::kBleedoutOverride },
+				{ "oppositegenderanims", RE::ACTOR_BASE_DATA::Flag::kOppositeGenderAnims },
+				{ "simpleactor", RE::ACTOR_BASE_DATA::Flag::kSimpleActor },
+				{ "loopedscript", RE::ACTOR_BASE_DATA::Flag::kLoopedScript },
+				{ "noactivation", RE::ACTOR_BASE_DATA::Flag::kNoActivation },
+				{ "loopedaudio", RE::ACTOR_BASE_DATA::Flag::kLoopedAudio },
+				{ "isghost", RE::ACTOR_BASE_DATA::Flag::kIsGhost },
+				{ "invulnerable", RE::ACTOR_BASE_DATA::Flag::kInvulnerable }
+			};
+			return m;
+		}
+
+		// The 18-arm if/else chain findObject used to run per pair, as a table.
+		bool lookupSkill(const std::string& a_lower, std::uint64_t& a_out)
+		{
+			static const std::unordered_map<std::string, std::uint64_t> m = {
+				{ "onehanded", RE::TESNPC::Skills::kOneHanded },
+				{ "twohanded", RE::TESNPC::Skills::kTwoHanded },
+				{ "marksman", RE::TESNPC::Skills::kMarksman },
+				{ "block", RE::TESNPC::Skills::kBlock },
+				{ "smithing", RE::TESNPC::Skills::kSmithing },
+				{ "heavyarmor", RE::TESNPC::Skills::kHeavyArmor },
+				{ "lightarmor", RE::TESNPC::Skills::kLightArmor },
+				{ "pickpocket", RE::TESNPC::Skills::kPickpocket },
+				{ "lockpicking", RE::TESNPC::Skills::kLockpicking },
+				{ "sneak", RE::TESNPC::Skills::kSneak },
+				{ "alchemy", RE::TESNPC::Skills::kAlchemy },
+				{ "speechcraft", RE::TESNPC::Skills::kSpeechcraft },
+				{ "alteration", RE::TESNPC::Skills::kAlteration },
+				{ "conjuration", RE::TESNPC::Skills::kConjuration },
+				{ "destruction", RE::TESNPC::Skills::kDestruction },
+				{ "illusion", RE::TESNPC::Skills::kIllusion },
+				{ "restoration", RE::TESNPC::Skills::kRestoration },
+				{ "enchanting", RE::TESNPC::Skills::kEnchanting }
+			};
+			const auto it = m.find(a_lower);
+			if (it == m.end()) {
+				return false;
+			}
+			a_out = it->second;
+			return true;
+		}
+	}
+
+	formfilter::MatchProgram makeFilterView(const patch_instruction& line)
+	{
+		using formfilter::Mode;
+		using formfilter::Op;
+
+		formfilter::MatchProgram p;
+		p.modNames = &line.modNames;
+
+		// ---- positive stage A: the disjuncts upstream evaluates first ------
+		std::size_t first = p.preds.size();
+		if (!line.keywords.empty()) {
+			formfilter::addPred(p, Op::Keyword, Mode::And, formfilter::ptrOperands(line.keywords, RE::FormType::Keyword), true);
+		}
+		if (!line.keywordsOr.empty()) {
+			formfilter::addPred(p, Op::Keyword, Mode::Or, formfilter::ptrOperands(line.keywordsOr, RE::FormType::Keyword), true);
+		}
+		formfilter::pushDisjunct(p, p.positive, first);
+
+		if (!line.races.empty()) {
+			first = p.preds.size();
+			formfilter::addPred(p, Op::Race, Mode::Or, formfilter::idOperands(line.races, RE::FormType::Race), true);
+			formfilter::pushDisjunct(p, p.positive, first);
+		}
+		if (!line.filterByOutfit.empty()) {
+			first = p.preds.size();
+			formfilter::addPred(p, Op::Outfit, Mode::Or, formfilter::idOperands(line.filterByOutfit, RE::FormType::Outfit), false);
+			formfilter::pushDisjunct(p, p.positive, first);
+		}
+		if (!line.filterClass.empty()) {
+			first = p.preds.size();
+			formfilter::addPred(p, Op::NpcClass, Mode::Or, formfilter::idOperands(line.filterClass, RE::FormType::Class), false);
+			formfilter::pushDisjunct(p, p.positive, first);
+		}
+		if (!line.filterCombatStyle.empty()) {
+			first = p.preds.size();
+			formfilter::addPred(p, Op::CombatStyle, Mode::Or, formfilter::idOperands(line.filterCombatStyle, RE::FormType::CombatStyle), false);
+			formfilter::pushDisjunct(p, p.positive, first);
+		}
+		formfilter::sortCheapestFirst(p.positive);
+
+		// ---- the four filters that ASSIGN found, in source order -----------
+		// Each is unguarded upstream, so it can both create and destroy a
+		// match; they are the reason NPC needs a stage of its own here, and
+		// the reason a rule carrying any of them cannot be indexed.
+		struct
+		{
+			const std::string&        raw;
+			RE::ACTOR_BASE_DATA::Flag flag;
+		} const assigns[] = {
+			{ line.filterPCMult, RE::ACTOR_BASE_DATA::Flag::kPCLevelMult },
+			{ line.filterAutoCalc, RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats },
+			{ line.filterEssential, RE::ACTOR_BASE_DATA::Flag::kEssential },
+			{ line.filterProtected, RE::ACTOR_BASE_DATA::Flag::kProtected },
 		};
-
-		ResolvedNpcFilters v;
-		v.common = formfilter::resolve(refs, RE::FormType::NPC);
-
-		for (auto* form : formfilter::resolveForms(line.races, RE::FormType::Race)) {
-			v.races.push_back(static_cast<RE::TESRace*>(form));
-		}
-		v.outfits = formfilter::resolveFormIDs(line.filterByOutfit, RE::FormType::Outfit);
-		v.classes = formfilter::resolveFormIDs(line.filterClass, RE::FormType::Class);
-		v.combatStyles = formfilter::resolveFormIDs(line.filterCombatStyle, RE::FormType::CombatStyle);
-		for (auto* form : formfilter::resolveForms(line.filterFactions, RE::FormType::Faction)) {
-			v.factions.push_back(static_cast<RE::TESFaction*>(form));
-		}
-		for (auto* form : formfilter::resolveForms(line.filterFactionsOr, RE::FormType::Faction)) {
-			v.factionsOr.push_back(static_cast<RE::TESFaction*>(form));
-		}
-		for (auto* form : formfilter::resolveForms(line.filterFactionsExcluded, RE::FormType::Faction)) {
-			v.factionsExcluded.push_back(static_cast<RE::TESFaction*>(form));
-		}
-		v.classesExcluded = formfilter::resolveFormIDs(line.filterClassExclude, RE::FormType::Class);
-		v.restrictToCombatStyle = formfilter::resolveFormIDs(line.restrictToCombatStyle, RE::FormType::CombatStyle);
-		v.restrictToRaces = formfilter::resolveFormIDs(line.restrictToRaces, RE::FormType::Race);
-		v.restrictToVoiceType = formfilter::resolveFormIDs(line.restrictToVoiceType, RE::FormType::VoiceType);
-		for (auto* form : formfilter::resolveForms(line.restrictToKeyword, RE::FormType::Keyword)) {
-			v.restrictToKeyword.push_back(static_cast<RE::BGSKeyword*>(form));
+		for (const auto& a : assigns) {
+			if (!liveScalarFilter(a.raw)) {
+				continue;
+			}
+			// Phase 3 refused to index a rule carrying ANY live one of these,
+			// even one whose value is neither "true" nor "false" and is
+			// therefore a no-op. Preserved exactly so the bucket distribution
+			// stays comparable with Phase 3's measurement.
+			p.unkeyable = true;
+			bool expectSet = false;
+			if (flagPolarity(toLowerCase(a.raw), "true", "false", expectSet)) {
+				addFlagPredicate(p, p.assigns, a.flag, expectSet);
+			}
 		}
 
-		v.filterPCMult = toLowerCase(line.filterPCMult);
-		v.filterAutoCalc = toLowerCase(line.filterAutoCalc);
-		v.filterEssential = toLowerCase(line.filterEssential);
-		v.filterProtected = toLowerCase(line.filterProtected);
-		// Upstream lowered these two with an inline std::transform + std::tolower;
-		// toLowerCase is that exact lambda, so this is the same string.
-		v.isFemale = toLowerCase(line.isFemale);
-		v.restrictGender = toLowerCase(line.restrictGender);
+		// ---- positive stage B: the two pairs upstream evaluates last -------
+		first = p.preds.size();
+		if (!line.filterByEditorIdContains.empty()) {
+			formfilter::addPred(p, Op::EditorId, Mode::And, formfilter::needleOperands(p, line.filterByEditorIdContains), true);
+		}
+		if (!line.filterByEditorIdContainsOr.empty()) {
+			formfilter::addPred(p, Op::EditorId, Mode::Or, formfilter::needleOperands(p, line.filterByEditorIdContainsOr), true);
+		}
+		formfilter::pushDisjunct(p, p.positive2, first);
 
-		v.restrictToTemplateFlags = formfilter::toLowerAll(line.restrictToTemplateFlags);
-		v.restrictToFlags = formfilter::toLowerAll(line.restrictToFlags);
+		first = p.preds.size();
+		if (!line.filterFactions.empty()) {
+			formfilter::addPred(p, Op::Faction, Mode::And, formfilter::ptrOperands(line.filterFactions, RE::FormType::Faction), true);
+		}
+		if (!line.filterFactionsOr.empty()) {
+			formfilter::addPred(p, Op::Faction, Mode::Or, formfilter::ptrOperands(line.filterFactionsOr, RE::FormType::Faction), true);
+		}
+		formfilter::pushDisjunct(p, p.positive2, first);
+		formfilter::sortCheapestFirst(p.positive2);
 
-		v.restrictToMaleModelContains.reserve(line.restrictToMaleModelContains.size());
-		for (const auto& s : line.restrictToMaleModelContains) {
-			v.restrictToMaleModelContains.push_back(normalizePath(trim(toLowerCase(s))));
+		p.catchAll = line.object.empty() && line.races.empty() && line.keywords.empty() &&
+			line.keywordsOr.empty() && line.filterClass.empty() && line.filterCombatStyle.empty() &&
+			line.filterFactions.empty() && line.filterFactionsOr.empty() && line.filterByOutfit.empty() &&
+			line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty();
+
+		// ---- negative stage: source order, never reordered -----------------
+		bool expectSet = false;
+		if (liveScalarFilter(line.isFemale) &&
+			flagPolarity(toLowerCase(line.isFemale), "female", "male", expectSet)) {
+			addFlagPredicate(p, p.negative, RE::ACTOR_BASE_DATA::Flag::kFemale, expectSet);
+		}
+		if (!line.keywordsExcluded.empty()) {
+			p.negative.push_back(formfilter::makePredicate(p, Op::Keyword, Mode::Exclude,
+				formfilter::ptrOperands(line.keywordsExcluded, RE::FormType::Keyword), true));
+		}
+		if (!line.filterFactionsExcluded.empty()) {
+			p.negative.push_back(formfilter::makePredicate(p, Op::Faction, Mode::Exclude,
+				formfilter::ptrOperands(line.filterFactionsExcluded, RE::FormType::Faction), true));
+		}
+		if (!line.filterByEditorIdContainsExcluded.empty()) {
+			p.negative.push_back(formfilter::makePredicate(p, Op::EditorId, Mode::Exclude,
+				formfilter::needleOperands(p, line.filterByEditorIdContainsExcluded), true));
+		}
+		if (!line.filterClassExclude.empty()) {
+			p.negative.push_back(formfilter::makePredicate(p, Op::NpcClass, Mode::Exclude,
+				formfilter::idOperands(line.filterClassExclude, RE::FormType::Class), false));
+		}
+		if (!line.objectExcluded.empty()) {
+			p.negative.push_back(formfilter::makePredicate(p, Op::ObjectId, Mode::Exclude,
+				formfilter::idOperands(line.objectExcluded, RE::FormType::NPC), false));
+		}
+		if (!line.skillRestrict.empty()) {
+			std::vector<std::uint64_t> ranges;
+			for (const auto& skillArr : line.skillRestrict) {
+				// std::stoi still throws on a malformed bound; the throw has
+				// moved from the first NPC the loop reached to rule-build time.
+				// Both terminate the process and nothing catches either.
+				const int lo = std::stoi(skillArr[1]);
+				const int hi = std::stoi(skillArr[2]);
+				std::uint64_t skill = 0;
+				if (!lookupSkill(toLowerCase(skillArr[0]), skill) || lo < 0 || hi < 0) {
+					continue;  // upstream: value stays -99, so the entry does nothing
+				}
+				ranges.push_back(skill);
+				ranges.push_back(static_cast<std::uint64_t>(lo));
+				ranges.push_back(static_cast<std::uint64_t>(hi));
+			}
+			if (!ranges.empty()) {
+				p.negative.push_back(formfilter::makePredicate(p, Op::NpcSkillRange, Mode::And, ranges, false));
+			}
+		}
+		if (!line.restrictToMaleModelContains.empty()) {
+			p.negative.push_back(formfilter::makePredicate(p, Op::ModelContains, Mode::And,
+				formfilter::needleOperands(p, line.restrictToMaleModelContains, true), false));
+		}
+		if (liveScalarFilter(line.restrictGender) &&
+			flagPolarity(toLowerCase(line.restrictGender), "female", "male", expectSet)) {
+			addFlagPredicate(p, p.negative, RE::ACTOR_BASE_DATA::Flag::kFemale, expectSet);
+		}
+		if (!line.restrictToTemplateFlags.empty()) {
+			// An unrecognised name only produced a logger::warn upstream and
+			// left `found` alone; resolving here drops that per-pair warning.
+			std::vector<std::uint64_t> bits;
+			for (const auto& s : line.restrictToTemplateFlags) {
+				const auto it = templateFlagMap().find(toLowerCase(s));
+				if (it != templateFlagMap().end()) {
+					bits.push_back(static_cast<std::uint64_t>(it->second));
+				}
+			}
+			if (!bits.empty()) {
+				p.negative.push_back(formfilter::makePredicate(p, Op::NpcTemplateFlag, Mode::And, bits, false));
+			}
+		}
+		if (!line.restrictToFlags.empty()) {
+			std::vector<std::uint64_t> bits;
+			for (const auto& s : line.restrictToFlags) {
+				const auto it = baseFlagMap().find(toLowerCase(s));
+				if (it != baseFlagMap().end()) {
+					bits.push_back(static_cast<std::uint64_t>(it->second));
+				}
+			}
+			if (!bits.empty()) {
+				p.negative.push_back(formfilter::makePredicate(p, Op::NpcFlag, Mode::And, bits, false));
+			}
+		}
+		if (!line.restrictToCombatStyle.empty()) {
+			p.negative.push_back(formfilter::makePredicate(p, Op::CombatStyle, Mode::Or,
+				formfilter::idOperands(line.restrictToCombatStyle, RE::FormType::CombatStyle), false));
+		}
+		if (!line.restrictToRaces.empty()) {
+			p.negative.push_back(formfilter::makePredicate(p, Op::Race, Mode::Or,
+				formfilter::idOperands(line.restrictToRaces, RE::FormType::Race), false));
+		}
+		if (!line.restrictToVoiceType.empty()) {
+			p.negative.push_back(formfilter::makePredicate(p, Op::VoiceType, Mode::Or,
+				formfilter::idOperands(line.restrictToVoiceType, RE::FormType::VoiceType), false));
+		}
+		if (!line.restrictToKeyword.empty()) {
+			p.negative.push_back(formfilter::makePredicate(p, Op::Keyword, Mode::Or,
+				formfilter::ptrOperands(line.restrictToKeyword, RE::FormType::Keyword), false));
 		}
 
-		v.skillRestrictNames.reserve(line.skillRestrict.size());
-		for (const auto& skillArr : line.skillRestrict) {
-			v.skillRestrictNames.push_back(toLowerCase(skillArr[0]));
-		}
-
-		return v;
+		return p;
 	}
 
 	bool findObject(const patch_instruction& line, RE::TESNPC* curobj)
@@ -2638,588 +2626,22 @@ namespace NPC
 		return findObject(line, makeFilterView(line), curobj);
 	}
 
-	bool findObject(const patch_instruction& line, const ResolvedNpcFilters& view, RE::TESNPC* curobj)
+	bool findObject(const patch_instruction&, const formfilter::MatchProgram& program, RE::TESNPC* curobj)
 	{
-		bool found = false;
-		bool keywordAnd = false;
-		bool keywordOr = false;
-		bool contains = false;
-		bool containsOr = false;
-		bool factionAnd = false;
-		bool factionOr = false;
+		// Reused across the whole form loop so the three derived strings
+		// allocate once, not once per pair. SkyPatcher parses and patches
+		// single-threaded at kDataLoaded (see utility.cpp's memo note).
+		static formfilter::MatchScratch scratch;
 
-		// NPC is the one form type whose keyword test also consults the race's
-		// keywords; every other type passes nullptr for the second holder.
-		const RE::BGSKeywordForm* raceKeywords = static_cast<const RE::BGSKeywordForm*>(curobj->race);
-
-		if (!found && !line.keywords.empty() && curobj->formID != 0x000007) {
-			keywordAnd = formfilter::matchesKeywordsAnd(view.common, curobj, raceKeywords);
-		}
-		else if (curobj->formID != 0x000007) {
-			keywordAnd = true;
-		}
-
-		if (!found && !line.keywordsOr.empty() && curobj->formID != 0x000007) {
-			keywordOr = formfilter::matchesKeywordsOr(view.common, curobj, raceKeywords);
-		}
-		else if (curobj->formID != 0x000007) {
-			//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
-			keywordOr = true;
-		}
-
-		if (!found && (!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-			//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-			found = true;
-		}
-
-
-
-		if (!found && !line.races.empty() && curobj->formID != 0x000007) {
-			//logger::info("race not empty");
-			for (auto* race : view.races) {
-				if (curobj->race && curobj->race == race) {
-					found = true;
-
-					break;
-				}
-				else if (!curobj->race) {
-					logger::debug(FMT_STRING("npc has no race id({:08X} )."), curobj->formID);
-				}
-			}
-		}
-
-		if (!found && !line.filterByOutfit.empty()) {
-			//logger::info("npc not empty");
-			for (const RE::FormID outfitID : view.outfits) {
-				if (curobj->defaultOutfit && curobj->defaultOutfit->formID == outfitID) {
-					found = true;
-					//logger::info("NPC found.");
-					break;
-				}
-			}
-		}
-
-
-
-		if (!found && !line.filterClass.empty()) {
-			//logger::info("npc not empty");
-			for (const RE::FormID classID : view.classes) {
-				if (curobj->npcClass && curobj->npcClass->formID == classID) {
-					found = true;
-					//logger::info("NPC found.");
-					break;
-				}
-			}
-		}
-
-		if (!found && !line.filterCombatStyle.empty()) {
-			//logger::info("npc not empty");
-			for (const RE::FormID csID : view.combatStyles) {
-				if (curobj->combatStyle && curobj->combatStyle->formID == csID) {
-					found = true;
-					//logger::info("NPC found.");
-					break;
-				}
-			}
-		}
-
-		if (!line.filterPCMult.empty() && line.filterPCMult != "none") {
-			const std::string& check = view.filterPCMult;
-
-			if ((check == "true")) {
-				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kPCLevelMult) {
-					found = true;
-				}
-				else {
-					found = false;
-				}
-			}
-			else if ((check == "false")) {
-				if (!(curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kPCLevelMult)) {
-					found = true;
-				}
-				else {
-					found = false;
-				}
-			}
-		}
-
-		if (!line.filterAutoCalc.empty() && line.filterAutoCalc != "none") {
-			const std::string& check = view.filterAutoCalc;
-			if ((check == "true")) {
-				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats) {
-					found = true;
-				}
-				else {
-					found = false;
-				}
-			}
-			else if ((check == "false")) {
-				if (!(curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats)) {
-					found = true;
-				}
-				else {
-					found = false;
-				}
-			}
-		}
-
-		if (!line.filterEssential.empty() && line.filterEssential != "none") {
-			const std::string& check = view.filterEssential;
-			if ((check == "true")) {
-				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kEssential) {
-					found = true;
-				}
-				else {
-					found = false;
-				}
-			}
-			else if ((check == "false")) {
-				if (!(curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kEssential)) {
-					found = true;
-				}
-				else {
-					found = false;
-				}
-			}
-		}
-		if (!line.filterProtected.empty() && line.filterProtected != "none") {
-			const std::string& check = view.filterProtected;
-			if ((check == "true")) {
-				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kProtected) {
-					found = true;
-				}
-				else {
-					found = false;
-				}
-			}
-			else if ((check == "false")) {
-				if (!(curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kProtected)) {
-					found = true;
-				}
-				else {
-					found = false;
-				}
-			}
-		}
-
-
-		if (!found && !line.filterFactions.empty() && curobj->formID != 0x000007) {
-			//logger::info("filterByFaction not empty");
-			for (auto* keyword : view.factions) {
-				if (curobj->HasFaction(keyword)) {
-					factionAnd = true;
-				}
-				else {
-					factionAnd = false;
-					//logger::debug(FMT_STRING("KeywordAnd npc does not have all filterByFaction"));
-					break;
-				}
-				//logger::debug(FMT_STRING("KeywordAnd npc true"));
-			}
-		}
-		else if (curobj->formID != 0x000007) {
-			//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
-			factionAnd = true;
-		}
-
-		if (!found && !line.filterFactionsOr.empty() && curobj->formID != 0x000007) {
-			//logger::info("keywords not empty");
-			for (auto* keyword : view.factionsOr) {
-				if (curobj->HasFaction(keyword)) {
-					factionOr = true;
-					//logger::debug(FMT_STRING("NPC has faction {:08X}"), curobj->formID, curobj->fullName);
-					//logger::info("Keyword found.");
-					break;
-				}
-			}
-		}
-		else if (curobj->formID != 0x000007) {
-			//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
-			factionOr = true;
-		}
-
-		if (!found && !line.filterByEditorIdContains.empty() && curobj->formID != 0x000007) {
-			contains = formfilter::matchesEditorIdAnd(view.common, curobj);
-		}
-		else if (curobj->formID != 0x000007) {
-			contains = true;
-		}
-
-		if (!found && !line.filterByEditorIdContainsOr.empty() && curobj->formID != 0x000007) {
-			//logger::info("keywords not empty");
-			containsOr = formfilter::matchesEditorIdOr(view.common, curobj);
-		}
-		else if (curobj->formID != 0x000007) {
-			containsOr = true;
-		}
-
-		if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-			//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-			found = true;
-		}
-
-		if (!found && (!line.filterFactions.empty() || !line.filterFactionsOr.empty()) && factionAnd && factionOr) {
-			//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
-			found = true;
-		}
-
-		if (!found && line.object.empty() && line.races.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterClass.empty() && line.filterCombatStyle.empty() && line.filterFactions.empty() && line.filterFactionsOr.empty() && line.filterByOutfit.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && curobj->formID != 0x000007) {
-			found = true;
-			//logger::debug(FMT_STRING("Patch Everything but skip Player {:08X}"), curobj->formID);
-		}
-
-		if (!line.isFemale.empty() && found && line.isFemale != "none") {
-			const std::string& lowercaseIsFemale = view.isFemale;
-
-			if ((lowercaseIsFemale == "female")) {
-				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kFemale) {
-					found = true;
-					//logger::debug(FMT_STRING("is female {:08X} {}"), curobj->formID, curobj->fullName);
-				}
-				else {
-					found = false;
-					//logger::debug(FMT_STRING("is not female {:08X} {}"), curobj->formID, curobj->fullName);
-				}
-			}
-			else if ((lowercaseIsFemale == "male")) {
-				if (!(curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kFemale)) {
-					//logger::debug(FMT_STRING("is male {:08X} {}"), curobj->formID, curobj->fullName);
-					found = true;
-				}
-				else {
-					//logger::debug(FMT_STRING("is not male {:08X} {}"), curobj->formID, curobj->fullName);
-					found = false;
-				}
-			}
-		}
-
-		if (!line.keywordsExcluded.empty() && found && curobj->formID != 0x000007) {
-			//logger::info("keywords not empty")
-			if (formfilter::hasExcludedKeyword(view.common, curobj, raceKeywords)) {
-				found = false;
-			}
-		}
-
-		if (!line.filterFactionsExcluded.empty() && found && curobj->formID != 0x000007) {
-			//logger::info("factions not empty");
-			for (auto* keyword : view.factionsExcluded) {
-				if (curobj->HasFaction(keyword)) {
-					found = false;
-					//logger::debug(FMT_STRING("KeywordExcluded has a keyword that is excluded.{:08X}"), keyword->formID);
-					//logger::info("Keyword found.");
-					break;
-				}
-			}
-		}
-
-		if (!line.filterByEditorIdContainsExcluded.empty() && found && curobj->formID != 0x000007) {
-			//logger::info("factions not empty");
-			if (formfilter::hasExcludedEditorId(view.common, curobj)) {
-				found = false;
-			}
-		}
-
-
-		if (!line.filterClassExclude.empty() && found) {
-			//logger::info("npc not empty");
-			// npcClass is dereferenced without a null check here, exactly as
-			// upstream does -- preserved, not fixed.
-			for (const RE::FormID classID : view.classesExcluded) {
-				if (curobj->npcClass->formID == classID) {
-					found = false;
-					//logger::info("NPC found.");
-					break;
-				}
-			}
-		}
-
-		if (!line.objectExcluded.empty() && found) {
-			//logger::info("npc not empty");
-			if (formfilter::isObjectExcluded(view.common, curobj)) {
-				found = false;
-			}
-		}
-
-		if (!line.skillRestrict.empty()) {
-			for (size_t i = 0; i < line.skillRestrict.size(); i++) {
-				const auto& skillArr = line.skillRestrict[i];
-				int         value = -99;
-				int         value1 = -99;
-				int         value2 = -99;
-				// The two bounds stay per-pair on purpose: std::stoi throws on a
-				// malformed bound and hoisting it would move where that throw
-				// happens. The skill NAME, which drove a toLowerCase plus up to
-				// 18 string compares per pair, is lowered once per rule.
-				value1 = std::stoi(skillArr[1]);
-				value2 = std::stoi(skillArr[2]);
-				const std::string& lower = view.skillRestrictNames[i];
-
-				if (lower == "onehanded") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kOneHanded];
-				}
-				else if (lower == "twohanded") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kTwoHanded];
-				}
-				else if (lower == "marksman") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kMarksman];
-				}
-				else if (lower == "block") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kBlock];
-				}
-				else if (lower == "smithing") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kSmithing];
-				}
-				else if (lower == "heavyarmor") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kHeavyArmor];
-				}
-				else if (lower == "lightarmor") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kLightArmor];
-				}
-				else if (lower == "pickpocket") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kPickpocket];
-				}
-				else if (lower == "lockpicking") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kLockpicking];
-				}
-				else if (lower == "sneak") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kSneak];
-				}
-				else if (lower == "alchemy") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kAlchemy];
-				}
-				else if (lower == "speechcraft") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kSpeechcraft];
-				}
-				else if (lower == "alteration") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kAlteration];
-				}
-				else if (lower == "conjuration") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kConjuration];
-				}
-				else if (lower == "destruction") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kDestruction];
-				}
-				else if (lower == "illusion") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kIllusion];
-				}
-				else if (lower == "restoration") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kRestoration];
-				}
-				else if (lower == "enchanting") {
-					value = curobj->playerSkills.values[RE::TESNPC::Skills::kEnchanting];
-				}
-				else {
-					//std::cerr << "Unknown skill: " << skill << std::endl;
-				}
-
-				if (value >= 0 && value1 >= 0 && value2 >= 0) {
-					if (value >= value1 && value <= value2) {
-						//logger::debug(FMT_STRING("npc formid: {:08X} {} invalid value found: {} {} {}"), curobj->formID, curobj->fullName, value, value1, value2);
-					}
-					else {
-						found = false;
-					}
-
-				}
-				else {
-					logger::debug(FMT_STRING("npc formid: {:08X} {} invalid value found: {} {} {}"), curobj->formID, curobj->fullName, value, value1, value2);
-				}
-			}
-		}
-
-		if (found && !line.restrictToMaleModelContains.empty()) {
-
-			// The needle is normalised once per RULE (see makeFilterView); the
-			// haystack is form data, so it stays per pair -- but it is now
-			// computed once per pair instead of once per needle.
-			const std::string maleModel = curobj->race
-				? normalizePath(trim(toLowerCase(curobj->race->skeletonModels[RE::SEXES::kMale].model.c_str())))
-				: std::string{};
-
-			for (const auto& searchModel : view.restrictToMaleModelContains) {
-				if (curobj->race) {
-
-					if (maleModel.find(searchModel) != std::string::npos) {
-
-					}
-					else {
-						found = false;
-						//break;
-					}
-				}
-
-			}
-		}
-
-		if (!line.restrictGender.empty() && found && line.restrictGender != "none") {
-			const std::string& lowercaseIsFemale = view.restrictGender;
-
-			if ((lowercaseIsFemale == "female")) {
-				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kFemale) {
-					//found = true;
-					//logger::debug(FMT_STRING("is female {:08X} {}"), curobj->formID, curobj->fullName);
-				}
-				else {
-					found = false;
-					//logger::debug(FMT_STRING("is not female {:08X} {}"), curobj->formID, curobj->fullName);
-				}
-			}
-			else if ((lowercaseIsFemale == "male")) {
-				if (!(curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kFemale)) {
-					//logger::debug(FMT_STRING("is male {:08X} {}"), curobj->formID, curobj->fullName);
-					//found = true;
-				}
-				else {
-					//logger::debug(FMT_STRING("is not male {:08X} {}"), curobj->formID, curobj->fullName);
-					found = false;
-				}
-			}
-		}
-
-		if (!line.restrictToTemplateFlags.empty() && found) {
-			for (const auto& lowerFlag : view.restrictToTemplateFlags) {
-				static const std::unordered_map<std::string, RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG> flagMap = {
-					{"traits", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kTraits},
-					{"stats", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kStats},
-					{"factions", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kFactions},
-					{"spells", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kSpells},
-					{"aidata", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIData},
-					{"aipackages", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIPackages},
-					{"unused", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kUnused},
-					{"basedata", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kBaseData},
-					{"inventory", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kInventory},
-					{"script", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kScript},
-					{"aidefpacklist", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIDefPackList},
-					{"attackdata", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAttackData},
-					{"keywords", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kKeywords},
-					{"copiedtemplate", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kCopiedTemplate}
-				};
-
-
-				auto it = flagMap.find(lowerFlag);
-				if (it != flagMap.end()) {
-					// Check if the flag is set on the NPC
-					if (!curobj->actorData.templateUseFlags.any(it->second)) {
-						found = false;
-						logger::debug(FMT_STRING("npc formid: {:08X} {} is missing required flag: {}"),
-							curobj->formID, curobj->fullName, lowerFlag);
-						break; // Stop checking once we find a missing flag
-					}
-				}
-				else {
-					logger::warn(FMT_STRING("Unknown flag '{}' provided in restrictToTemplateFlags"), lowerFlag);
-				}
-			}
-		}
-
-
-		if (!line.restrictToFlags.empty() && found) {
-			for (const auto& lowerFlag : view.restrictToFlags) {
-				static const std::unordered_map<std::string, RE::ACTOR_BASE_DATA::Flag> flagMap = {
-					{"female", RE::ACTOR_BASE_DATA::Flag::kFemale},
-					{"essential", RE::ACTOR_BASE_DATA::Flag::kEssential},
-					{"ischargenfacepreset", RE::ACTOR_BASE_DATA::Flag::kIsChargenFacePreset},
-					{"respawn", RE::ACTOR_BASE_DATA::Flag::kRespawn},
-					{"autocalcstats", RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats},
-					{"unique", RE::ACTOR_BASE_DATA::Flag::kUnique},
-					{"doesntaffectstealthmeter", RE::ACTOR_BASE_DATA::Flag::kDoesntAffectStealthMeter},
-					{"pclevelmult", RE::ACTOR_BASE_DATA::Flag::kPCLevelMult},
-					{"usestemplate", RE::ACTOR_BASE_DATA::Flag::kUsesTemplate},
-					{"calcfalltemplates", RE::ACTOR_BASE_DATA::Flag::kCalcForAllTemplates},
-					{"protected", RE::ACTOR_BASE_DATA::Flag::kProtected},
-					{"norumors", RE::ACTOR_BASE_DATA::Flag::kNoRumors},
-					{"summonable", RE::ACTOR_BASE_DATA::Flag::kSummonable},
-					{"doesntbleed", RE::ACTOR_BASE_DATA::Flag::kDoesntBleed},
-					{"bleedoutoverride", RE::ACTOR_BASE_DATA::Flag::kBleedoutOverride},
-					{"oppositegenderanims", RE::ACTOR_BASE_DATA::Flag::kOppositeGenderAnims},
-					{"simpleactor", RE::ACTOR_BASE_DATA::Flag::kSimpleActor},
-					{"loopedscript", RE::ACTOR_BASE_DATA::Flag::kLoopedScript},
-					{"noactivation", RE::ACTOR_BASE_DATA::Flag::kNoActivation},
-					{"loopedaudio", RE::ACTOR_BASE_DATA::Flag::kLoopedAudio},
-					{"isghost", RE::ACTOR_BASE_DATA::Flag::kIsGhost},
-					{"invulnerable", RE::ACTOR_BASE_DATA::Flag::kInvulnerable}
-				};
-
-
-				auto it = flagMap.find(lowerFlag);
-				if (it != flagMap.end()) {
-					// Check if the flag is set on the NPC
-					if (!curobj->actorData.actorBaseFlags.any(it->second)) {
-						found = false;
-						logger::debug(FMT_STRING("npc formid: {:08X} {} is missing required flag: {}"),
-							curobj->formID, curobj->fullName, lowerFlag);
-						break; // Stop checking once we find a missing flag
-					}
-				}
-				else {
-					logger::warn(FMT_STRING("Unknown flag '{}' provided in restrictToFlags"), lowerFlag);
-				}
-			}
-		}
-
-		if (found && !line.restrictToCombatStyle.empty()) {
-			bool hasObject = false;
-			for (const RE::FormID csID : view.restrictToCombatStyle) {
-				if (curobj->combatStyle && curobj->combatStyle->formID == csID) {
-					hasObject = true;
-					break;
-				}
-			}
-			if (!hasObject) {
-				found = false;
-			}
-		}
-
-		if (found && !line.restrictToRaces.empty()) {
-			bool hasObject = false;
-			for (const RE::FormID raceID : view.restrictToRaces) {
-				if (curobj->race && curobj->race->formID == raceID) {
-					hasObject = true;
-					break;
-				}
-			}
-			if (!hasObject) {
-				found = false;
-			}
-		}
-
-		if (found && !line.restrictToVoiceType.empty()) {
-			bool hasObject = false;
-			for (const RE::FormID voiceID : view.restrictToVoiceType) {
-				if (curobj->voiceType && curobj->voiceType->formID == voiceID) {
-					hasObject = true;
-					break;
-				}
-			}
-			if (!hasObject) {
-				found = false;
-			}
-		}
-
-
-
-		if (found && !line.restrictToKeyword.empty()) {
-			bool hasObject = false;
-			for (auto* tempForm : view.restrictToKeyword) {
-				if (tempForm && curobj->HasKeyword(tempForm) || curobj->race && curobj->race->HasKeyword(tempForm)) {
-					hasObject = true;
-					break;
-				}
-			}
-			if (!hasObject) {
-				found = false;
-				//logger::debug("not found");
-			}
-			//logger::debug("found");
-		}
-
-
-		if (found)
-			return true;
-		return false;
-
+		formfilter::MatchTarget t;
+		t.form = curobj;
+		t.kf = static_cast<const RE::BGSKeywordForm*>(curobj);
+		t.alt = static_cast<const RE::BGSKeywordForm*>(curobj->race);
+		t.npc = curobj;
+		t.isPlayer = curobj->formID == 0x000007;
+		return formfilter::runProgram(program, t, scratch);
 	}
+
 
 	REL::Relocation<decltype(&LoadRaceDataHook::Hook_Load)> func;
 

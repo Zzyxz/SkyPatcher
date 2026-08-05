@@ -286,6 +286,199 @@ namespace formfilter
 			}
 		}
 	}
+
+	// =====================================================================
+	// PHASE 2 -- the predicate opcode table.
+	//
+	// NPC::findObject is ~590 lines of hand-written `if` blocks; WEAPON's and
+	// ARMOR's equivalents are another ~430 inlined into their
+	// process_patch_instructions. All three are the same program written out
+	// three times, and every one of them re-tests `!line.someList.empty()` on
+	// every (form, rule) pair to decide whether a filter is even present --
+	// a question fixed the moment the rule was parsed.
+	//
+	// A rule is therefore COMPILED ONCE, into a MatchProgram: a flat list of
+	// Predicates over ONE flat operand pool. Matching is a switch over the
+	// opcodes. A rule that carries three filters holds three predicates and a
+	// handful of pool words, instead of ~30 separately-allocated std::vectors
+	// most of which are empty.
+	//
+	// STRUCTURE OF THE PROGRAM, and why it is safe to reorder.
+	//
+	//   found = OR over `positive` disjuncts          (each disjunct is an AND
+	//                                                  chain of predicates)
+	//   then  `assigns` are applied in order          (NPC only -- the four
+	//                                                  filters that write
+	//                                                  `found` with no !found
+	//                                                  guard, so they can turn
+	//                                                  a non-match INTO a match
+	//                                                  and a match into a
+	//                                                  non-match)
+	//   then  if (!found) found = OR over `positive2` (NPC's EditorID and
+	//                                                  faction pairs, which sit
+	//                                                  after the assigns)
+	//   then  if (!found) found = catchAll
+	//   then  found &&= every `negative` predicate    (source order)
+	//
+	// Every disjunct in `positive` / `positive2` only ever WRITES true, and
+	// every one that upstream guards with `!found` is skipped once found is
+	// true, so their relative order cannot change the answer. That is what
+	// makes CHEAPEST-FIRST ordering free: the disjuncts are stable-sorted by
+	// a static per-opcode cost, so an integer compare gets the chance to
+	// reject before an EditorID substring search runs. `assigns` and
+	// `negative` are NOT reordered -- the former are order-sensitive by
+	// construction, and the latter carry upstream's logging.
+	// =====================================================================
+
+	enum class Op : std::uint8_t
+	{
+		Keyword,        // operand: RE::BGSKeyword*      -- form, or its alt holder, carries it
+		EditorId,       // operand: string index         -- lowered EditorID contains the needle
+		NameContains,   // operand: string index         -- lowered fullName contains the needle
+		ModelContains,  // operand: string index         -- NPC male skeleton path contains it
+		Race,           // operand: RE::FormID
+		NpcClass,       // operand: RE::FormID
+		Outfit,         // operand: RE::FormID
+		CombatStyle,    // operand: RE::FormID
+		VoiceType,      // operand: RE::FormID
+		Faction,        // operand: RE::TESFaction*
+		ObjectId,       // operand: RE::FormID           -- compared to the form's own formID
+		NpcFlag,        // operand: ACTOR_BASE_DATA::Flag bit
+		NpcTemplateFlag,// operand: TEMPLATE_USE_FLAG bit
+		NpcSkillRange,  // 3 operands per entry: skill index, lo, hi
+		WeapAnimType,   // operand: RE::WEAPON_TYPE
+		WeapSkill,      // operand: RE::ActorValue
+		WeapModel1st,   // operand: RE::FormID of firstPersonModelObject
+		WeapBound,      // 1 operand: 1 iff restrictToFlags[0] == "boundweapon"
+		ArmorType,      // operand: BIPED_MODEL::ArmorType bit
+		BipedSlot,      // operand: BipedObjectSlot bit
+		ArmorAddon,     // operand: RE::FormID; Mode::And keeps 0 holes (see armor.cpp)
+	};
+
+	// And     -- every operand must hold. NOTE: an EMPTY operand list is
+	//            FALSE, not true, because every upstream AND loop starts its
+	//            accumulator at false and never runs.
+	// Or      -- at least one operand holds.
+	// Exclude -- no operand holds.
+	enum class Mode : std::uint8_t
+	{
+		And,
+		Or,
+		Exclude,
+	};
+
+	struct Predicate
+	{
+		std::uint8_t  op;            // Op
+		std::uint8_t  mode;          // Mode
+		std::uint8_t  skipIfPlayer;  // NPC: several upstream blocks carry `formID != 0x7`
+		std::uint8_t  pad = 0;
+		std::uint32_t operands;      // offset into MatchProgram::pool
+		std::uint16_t count;         // number of operands (entries, not words)
+	};
+
+	// A conjunction of predicates. Upstream's AND/OR filter PAIRS
+	// (`(!and.empty() || !or.empty()) && andHolds && orHolds`) are exactly a
+	// two-predicate disjunct.
+	struct Disjunct
+	{
+		std::uint16_t first;
+		std::uint16_t count;
+		std::uint32_t cost;  // static, from the opcode table; sorts cheapest-first
+	};
+
+	struct MatchProgram
+	{
+		std::vector<Predicate>     preds;
+		std::vector<Disjunct>      positive;
+		std::vector<Predicate>     assigns;
+		std::vector<Disjunct>      positive2;
+		std::vector<Predicate>     negative;
+		std::vector<std::uint64_t> pool;     // ONE flat operand pool for the whole rule
+		std::vector<std::string>   strings;  // substring needles, indexed from the pool
+
+		// The rule's modNames filter, still raw text -- see ResolvedCommonFilters.
+		const std::vector<std::string>* modNames = nullptr;
+
+		bool catchAll = false;   // no identifying filter at all: matches everything
+		bool skipRule = false;   // hasPlugins/hasPluginsOr failed: matches nothing
+		bool unkeyable = false;  // carries a filter with no finite index key set
+
+		// Appends one operand and returns the pool offset of the first of a run.
+		std::uint32_t mark() const { return static_cast<std::uint32_t>(pool.size()); }
+	};
+
+	// What a form looks like to the engine. Built per (form, rule) pair; a
+	// handful of stores. Only the pointer for the program's own form type is
+	// ever read, so no type tag is needed.
+	struct MatchTarget
+	{
+		const RE::TESForm*        form = nullptr;
+		const RE::BGSKeywordForm* kf = nullptr;
+		const RE::BGSKeywordForm* alt = nullptr;  // NPC's race; nullptr elsewhere
+		const RE::TESNPC*         npc = nullptr;
+		const RE::TESObjectWEAP*  weapon = nullptr;
+		const RE::TESObjectARMO*  armor = nullptr;
+		bool                      isPlayer = false;
+	};
+
+	// Per-pair memo for the three expensive derived strings. Owned by the
+	// caller and reused across the whole form loop so it allocates once.
+	struct MatchScratch
+	{
+		std::string editorId;
+		std::string fullName;
+		std::string maleModel;
+		bool        haveEditorId = false;
+		bool        haveFullName = false;
+		bool        haveMaleModel = false;
+
+		void reset()
+		{
+			haveEditorId = false;
+			haveFullName = false;
+			haveMaleModel = false;
+		}
+	};
+
+	bool runProgram(const MatchProgram& a_prog, const MatchTarget& a_t, MatchScratch& a_scratch);
+	bool matchesModName(const MatchProgram& a_p, const RE::TESForm* a_form);
+
+	// --- program construction ---------------------------------------------
+	// Appends `a_values` to the pool and returns the predicate describing them.
+	Predicate makePredicate(MatchProgram& a_prog, Op a_op, Mode a_mode,
+		const std::vector<std::uint64_t>& a_values, bool a_skipIfPlayer = false);
+	// Closes a disjunct over the predicates appended since a_firstPred.
+	void pushDisjunct(MatchProgram& a_prog, std::vector<Disjunct>& a_stage, std::size_t a_firstPred);
+
+	// The three operand encodings every rule compiler needs: identifiers to
+	// formIDs, identifiers to form pointers, and substring needles into the
+	// program's string pool.
+	std::vector<std::uint64_t> idOperands(const std::vector<std::string>& a_ids, RE::FormType a_type);
+	std::vector<std::uint64_t> ptrOperands(const std::vector<std::string>& a_ids, RE::FormType a_type);
+	std::vector<std::uint64_t> needleOperands(MatchProgram& a_prog, const std::vector<std::string>& a_raw,
+		bool a_normalizePath = false);
+	// Append a predicate to the open disjunct / to the negative stage.
+	void addPred(MatchProgram& a_prog, Op a_op, Mode a_mode, const std::vector<std::uint64_t>& a_vals,
+		bool a_skipIfPlayer = false);
+	void addNegative(MatchProgram& a_prog, Op a_op, Mode a_mode, const std::vector<std::uint64_t>& a_vals,
+		bool a_skipIfPlayer = false);
+	// Stable-sorts a positive stage cheapest-first.
+	void sortCheapestFirst(std::vector<Disjunct>& a_stage);
+
+	// --- Phase 3 signal derivation, now read off the opcodes ----------------
+	// Distinct tags for the enum-valued signal spaces. Tag 0 stays RE::FormID.
+	inline constexpr std::uint32_t kTagWeapAnimType = 1;
+	inline constexpr std::uint32_t kTagWeapSkill = 2;
+	inline constexpr std::uint32_t kTagArmorType = 3;
+	inline constexpr std::uint32_t kTagBipedSlot = 4;
+
+	// For each positive disjunct, emit a NECESSARY signal. Returns false if any
+	// disjunct has no finite key set (a substring test, or the catch-all), in
+	// which case the rule must scan every form. See formfilter.h's Phase 3
+	// section for the soundness argument -- this is the same derivation, moved
+	// from three hand-written per-type predicates onto the opcode table.
+	bool programSignals(const MatchProgram& a_prog, std::vector<std::uint64_t>& a_keys);
 }
 
 #endif
