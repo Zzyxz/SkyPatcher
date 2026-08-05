@@ -4,6 +4,113 @@
 
 namespace WEAPON
 {
+	// =====================================================================
+	// PHASE 1 -- WEAPON's own filter vocabulary, resolved once per rule.
+	//
+	// Everything here used to be re-derived from the rule's raw text on every
+	// (weapon, rule) pair. filterAnimationTypeOr was the worst offender: its
+	// upstream body calls toLowerCase(setFlag) once per if/else-if arm, i.e.
+	// up to TEN std::string allocations per list entry per pair, all to
+	// recompute a value fixed at load.
+	//
+	// Deliberately NOT done at parse time: create_patch_instructions must stay
+	// free of CommonLib singletons (golden_dump runs without a game), and
+	// patch_instruction's layout must not change or the golden snapshots move.
+	// =====================================================================
+	namespace
+	{
+		struct ResolvedWeaponFilters
+		{
+			// filterAnimationTypeOr, reduced to the animation types it names.
+			// Unrecognised names are dropped: upstream they fall through every
+			// if/else-if arm to an empty `else`, i.e. they are a pure no-op.
+			std::vector<RE::WEAPON_TYPE> animationTypeOr;
+			// filterBySkills ("embeddedAVs"), same argument.
+			std::vector<RE::ActorValue> embeddedAVs;
+			// filterByFirstPersonModelOr, resolved to FormType::Static formIDs.
+			std::vector<RE::FormID> firstPersonModelOr;
+			// restrictToFlags, lowercased once. NOT reduced to an enum: the
+			// upstream loop's `else { found = false; }` arm makes an
+			// unrecognised entry observable, so every entry must survive.
+			std::vector<std::string> wFlags;
+			// restrictToSkills, mapped through StringToActorValue once. Every
+			// entry survives for the same reason -- StringToActorValue's answer
+			// for an unrecognised name is part of the comparison upstream.
+			std::vector<RE::ActorValue> restrictToSkill;
+		};
+
+		RE::WEAPON_TYPE* lookupAnimationType(const std::string& a_lower)
+		{
+			static RE::WEAPON_TYPE types[] = {
+				RE::WEAPON_TYPE::kHandToHandMelee, RE::WEAPON_TYPE::kOneHandSword,
+				RE::WEAPON_TYPE::kOneHandDagger, RE::WEAPON_TYPE::kOneHandAxe,
+				RE::WEAPON_TYPE::kOneHandMace, RE::WEAPON_TYPE::kTwoHandSword,
+				RE::WEAPON_TYPE::kTwoHandAxe, RE::WEAPON_TYPE::kBow,
+				RE::WEAPON_TYPE::kStaff, RE::WEAPON_TYPE::kCrossbow
+			};
+			static const char* names[] = {
+				"handtohandmelee", "onehandsword", "onehanddagger", "onehandaxe",
+				"onehandmace", "twohandsword", "twohandaxe", "bow", "staff", "crossbow"
+			};
+			for (int i = 0; i < 10; ++i) {
+				if (a_lower == names[i]) {
+					return &types[i];
+				}
+			}
+			return nullptr;
+		}
+
+		RE::ActorValue* lookupEmbeddedAV(const std::string& a_lower)
+		{
+			static RE::ActorValue avs[] = {
+				RE::ActorValue::kOneHanded, RE::ActorValue::kTwoHanded,
+				RE::ActorValue::kArchery, RE::ActorValue::kDestruction,
+				RE::ActorValue::kIllusion, RE::ActorValue::kConjuration,
+				RE::ActorValue::kAlteration, RE::ActorValue::kRestoration
+			};
+			static const char* names[] = {
+				"onehanded", "twohanded", "marksman", "destruction",
+				"illusion", "conjuration", "alteration", "restoration"
+			};
+			for (int i = 0; i < 8; ++i) {
+				if (a_lower == names[i]) {
+					return &avs[i];
+				}
+			}
+			return nullptr;
+		}
+
+		ResolvedWeaponFilters resolveWeaponFilters(const patch_instruction& line)
+		{
+			ResolvedWeaponFilters w;
+
+			w.animationTypeOr.reserve(line.filterAnimationTypeOr.size());
+			for (const auto& s : line.filterAnimationTypeOr) {
+				if (auto* t = lookupAnimationType(toLowerCase(s))) {
+					w.animationTypeOr.push_back(*t);
+				}
+			}
+
+			w.embeddedAVs.reserve(line.embeddedAVs.size());
+			for (const auto& s : line.embeddedAVs) {
+				if (auto* av = lookupEmbeddedAV(toLowerCase(s))) {
+					w.embeddedAVs.push_back(*av);
+				}
+			}
+
+			w.firstPersonModelOr =
+				formfilter::resolveFormIDs(line.filterByFirstPersonModelOr, RE::FormType::Static);
+
+			w.wFlags = formfilter::toLowerAll(line.filterByWFlags);
+
+			w.restrictToSkill.reserve(line.restrictToSkill.size());
+			for (const auto& s : line.restrictToSkill) {
+				w.restrictToSkill.push_back(StringToActorValue(toLowerCase(s)));
+			}
+
+			return w;
+		}
+	}
 
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
@@ -130,22 +237,26 @@ namespace WEAPON
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, weapon) pair.
+			// PHASE 1: one RESOLVED filter set per rule, not per (rule, weapon)
+			// pair. The reference view is still built first because it is what
+			// formfilter::resolve consumes; it costs ten pointer stores.
 			const formfilter::CommonFilterView view{
 				line.modNames, line.hasPlugin, line.hasPluginOr,
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
 				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
 				line.filterByEditorIdContainsExcluded, line.objectExcluded
 			};
+			const formfilter::ResolvedCommonFilters common =
+				formfilter::resolve(view, RE::FormType::Weapon);
 
 			// hasPlugin / hasPluginOr consult no form at all, so the upstream
-			// per-form `continue` is exactly a per-rule skip.
-			if (!line.hasPlugin.empty() && !formfilter::hasAllPlugins(line.hasPlugin)) {
+			// per-form `continue` is exactly a per-rule skip. Both bools are
+			// already `empty() || test()`, so the emptiness guards are folded in.
+			if (!common.allPluginsInstalled || !common.anyPluginInstalled) {
 				continue;
 			}
-			if (!line.hasPluginOr.empty() && !formfilter::hasAnyPlugin(line.hasPluginOr)) {
-				continue;
-			}
+
+			const ResolvedWeaponFilters wf = resolveWeaponFilters(line);
 
 			for (const auto& curobj : ObjectArray) {
 				//logger::info("processing npc");
@@ -159,110 +270,45 @@ namespace WEAPON
 					continue;
 				}
 
-				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+				if (!line.modNames.empty() && !formfilter::matchesModName(common, curobj)) {
 					continue;
 				}
 
-				if (!line.filterAnimationTypeOr.empty()) {
-					for (const auto& setFlag : line.filterAnimationTypeOr) {
-						if (toLowerCase(setFlag) == "handtohandmelee" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kHandToHandMelee) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "onehandsword" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kOneHandSword) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "onehanddagger" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kOneHandDagger) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "onehandaxe" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kOneHandAxe) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "onehandmace" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kOneHandMace) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "twohandsword" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kTwoHandSword) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "twohandaxe" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kTwoHandAxe) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "bow" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kBow) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "staff" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kStaff) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "crossbow" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kCrossbow) {
-							found = true;
-							break;
-						} else {
-							// Handle the case where an invalid flag is provided
-							//logger::warn(FMT_STRING("Invalid set flag: {}"), setFlag);
-						}
+				// filterAnimationTypeOr: the ten toLowerCase(setFlag) calls that
+				// used to run here per pair are now one lookup per entry, done
+				// once for the whole rule.
+				for (const RE::WEAPON_TYPE t : wf.animationTypeOr) {
+					if (curobj->weaponData.animationType == t) {
+						found = true;
+						break;
 					}
 				}
 
-				if (!line.filterByFirstPersonModelOr.empty()) {
-					for (const auto& keywordstring : line.filterByFirstPersonModelOr) {
-						RE::TESForm*       currentform = nullptr;
-						RE::TESObjectSTAT* fpmodel = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Static) {
-							fpmodel = (RE::TESObjectSTAT*)currentform;
-
-							if (curobj->firstPersonModelObject && curobj->firstPersonModelObject->formID == fpmodel->formID) {
-								found = true;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
+				for (const RE::FormID id : wf.firstPersonModelOr) {
+					if (curobj->firstPersonModelObject && curobj->firstPersonModelObject->formID == id) {
+						found = true;
+						//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
+						break;
 					}
 				}
 
-				if (!line.embeddedAVs.empty()) {
-					//logger::debug("skill {}", curobj->weaponData.skill.underlying());
-					for (auto string : line.embeddedAVs) {
-						string = toLowerCase(string);
-						if (string == "onehanded" && curobj->weaponData.skill == RE::ActorValue::kOneHanded) {
-							found = true;
-							break;
-						} else if (string == "twohanded" && curobj->weaponData.skill == RE::ActorValue::kTwoHanded) {
-							found = true;
-							break;
-						} else if (string == "marksman" && curobj->weaponData.skill == RE::ActorValue::kArchery) {
-							found = true;
-							break;
-						} else if (string == "destruction" && curobj->weaponData.skill == RE::ActorValue::kDestruction) {
-							found = true;
-							break;
-						} else if (string == "illusion" && curobj->weaponData.skill == RE::ActorValue::kIllusion) {
-							found = true;
-							break;
-						} else if (string == "conjuration" && curobj->weaponData.skill == RE::ActorValue::kConjuration) {
-							found = true;
-							break;
-						} else if (string == "alteration" && curobj->weaponData.skill == RE::ActorValue::kAlteration) {
-							found = true;
-							break;
-						} else if (string == "restoration" && curobj->weaponData.skill == RE::ActorValue::kRestoration) {
-							found = true;
-							break;
-						}
+				//logger::debug("skill {}", curobj->weaponData.skill.underlying());
+				for (const RE::ActorValue av : wf.embeddedAVs) {
+					if (curobj->weaponData.skill == av) {
+						found = true;
+						break;
 					}
 				}
 
 				if (!found && !line.filterByEditorIdContains.empty()) {
-					contains = formfilter::matchesEditorIdAnd(view, curobj);
+					contains = formfilter::matchesEditorIdAnd(common, curobj);
 				} else {
 					contains = true;
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty()) {
 					//logger::info("keywords not empty");
-					containsOr = formfilter::matchesEditorIdOr(view, curobj);
+					containsOr = formfilter::matchesEditorIdOr(common, curobj);
 				} else {
 					containsOr = true;
 				}
@@ -275,14 +321,14 @@ namespace WEAPON
 				
 				if (!line.keywords.empty()) {
 					//logger::info("keywords not empty");
-					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
+					keywordAnd = formfilter::matchesKeywordsAnd(common, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
 					//logger::info("keywords not empty");
-					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
+					keywordOr = formfilter::matchesKeywordsOr(common, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
@@ -301,14 +347,14 @@ namespace WEAPON
 
 				if (!line.keywordsExcluded.empty() && found ) {
 					//logger::info("keywords not empty");
-					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
+					if (formfilter::hasExcludedKeyword(common, curobj, nullptr)) {
 						found = false;
 					}
 				}
 
 				if (!line.objectExcluded.empty() && found) {
 					//logger::info("npc not empty");
-					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Weapon)) {
+					if (formfilter::isObjectExcluded(common, curobj)) {
 						found = false;
 						logger::info("Weapon Excluded.");
 					}
@@ -316,15 +362,14 @@ namespace WEAPON
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
 					//logger::info("factions not empty");
-					if (formfilter::hasExcludedEditorId(view, curobj)) {
+					if (formfilter::hasExcludedEditorId(common, curobj)) {
 						found = false;
 					}
 				}
 
-				if (found && !line.filterByWFlags.empty()) {
+				if (found && !wf.wFlags.empty()) {
 					//logger::debug("skill {}", curobj->weaponData.skill.underlying());
-					for (auto string : line.filterByWFlags) {
-						string = toLowerCase(string);
+					for (const auto& string : wf.wFlags) {
 						if (string == "boundweapon" && curobj->weaponData.flags2 & RE::TESObjectWEAP::Data::Flag2::kBoundWeapon) {
 							break;
 						} else {
@@ -333,11 +378,10 @@ namespace WEAPON
 					}
 				}
 
-				if (found && !line.restrictToSkill.empty()) {
+				if (found && !wf.restrictToSkill.empty()) {
 					bool foundType = false;
-					for (auto string : line.restrictToSkill) {
-						string = toLowerCase(string);
-						if (curobj->weaponData.skill == StringToActorValue(string)) {
+					for (const RE::ActorValue av : wf.restrictToSkill) {
+						if (curobj->weaponData.skill == av) {
 							foundType = true;
 						}
 					}

@@ -176,4 +176,203 @@ namespace formfilter
 		}
 		return false;
 	}
+
+	// =====================================================================
+	// PHASE 1 -- resolve once per rule. See formfilter.h for the rationale
+	// and for why each equivalence below holds.
+	// =====================================================================
+
+	std::vector<RE::TESForm*> resolveForms(const std::vector<std::string>& a_ids, RE::FormType a_type)
+	{
+		std::vector<RE::TESForm*> out;
+		out.reserve(a_ids.size());
+		for (const auto& id : a_ids) {
+			RE::TESForm* form = GetFormFromIdentifier(id);
+			if (form && form->formType == a_type) {
+				out.push_back(form);
+			}
+		}
+		return out;
+	}
+
+	std::vector<RE::FormID> resolveFormIDs(const std::vector<std::string>& a_ids, RE::FormType a_type)
+	{
+		std::vector<RE::FormID> out;
+		out.reserve(a_ids.size());
+		for (const auto& id : a_ids) {
+			RE::TESForm* form = GetFormFromIdentifier(id);
+			if (form && form->formType == a_type) {
+				out.push_back(form->formID);
+			}
+		}
+		return out;
+	}
+
+	std::vector<RE::FormID> resolveFormIDsKeepingHoles(const std::vector<std::string>& a_ids, RE::FormType a_type)
+	{
+		std::vector<RE::FormID> out;
+		out.reserve(a_ids.size());
+		for (const auto& id : a_ids) {
+			RE::TESForm* form = GetFormFromIdentifier(id);
+			// 0 is not a valid form ID (LookupByID(0) is null), so it is a safe
+			// "this identifier did not resolve to a_type" marker.
+			out.push_back((form && form->formType == a_type) ? form->formID : 0);
+		}
+		return out;
+	}
+
+	std::vector<std::string> toLowerAll(const std::vector<std::string>& a_in)
+	{
+		std::vector<std::string> out;
+		out.reserve(a_in.size());
+		for (const auto& s : a_in) {
+			out.push_back(toLowerCase(s));
+		}
+		return out;
+	}
+
+	namespace
+	{
+		std::vector<RE::BGSKeyword*> resolveKeywords(const std::vector<std::string>& a_ids)
+		{
+			std::vector<RE::BGSKeyword*> out;
+			out.reserve(a_ids.size());
+			for (const auto& id : a_ids) {
+				RE::TESForm* form = GetFormFromIdentifier(id);
+				if (form && form->formType == RE::FormType::Keyword) {
+					out.push_back(static_cast<RE::BGSKeyword*>(form));
+				}
+			}
+			return out;
+		}
+	}
+
+	ResolvedCommonFilters resolve(const CommonFilterView& a_v, RE::FormType a_objectExcludedType)
+	{
+		ResolvedCommonFilters r;
+		r.modNames = &a_v.modNames;
+
+		r.keywords = resolveKeywords(a_v.keywords);
+		r.keywordsOr = resolveKeywords(a_v.keywordsOr);
+		r.keywordsExcluded = resolveKeywords(a_v.keywordsExcluded);
+
+		r.editorIdContains = toLowerAll(a_v.editorIdContains);
+		r.editorIdContainsOr = toLowerAll(a_v.editorIdContainsOr);
+		r.editorIdContainsExcluded = toLowerAll(a_v.editorIdContainsExcluded);
+
+		r.objectExcluded = resolveFormIDs(a_v.objectExcluded, a_objectExcludedType);
+
+		// Mirrors the call sites' own `!list.empty() && test(list)` guard, so an
+		// empty list yields true and the caller can drop the emptiness test.
+		r.allPluginsInstalled = a_v.hasPlugin.empty() || hasAllPlugins(a_v.hasPlugin);
+		r.anyPluginInstalled = a_v.hasPluginOr.empty() || hasAnyPlugin(a_v.hasPluginOr);
+
+		return r;
+	}
+
+	bool matchesModName(const ResolvedCommonFilters& a_r, const RE::TESForm* a_form)
+	{
+		const char* const fileName = a_form->GetFile(0)->fileName;
+		for (const auto& modName : *a_r.modNames) {
+			if (modName == fileName) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool matchesKeywordsAnd(const ResolvedCommonFilters& a_r, const RE::BGSKeywordForm* a_kf, const RE::BGSKeywordForm* a_alt)
+	{
+		bool keywordAnd = false;
+		for (auto* keyword : a_r.keywords) {
+			if (holdsKeyword(a_kf, a_alt, keyword)) {
+				keywordAnd = true;
+			} else {
+				keywordAnd = false;
+				break;
+			}
+		}
+		return keywordAnd;
+	}
+
+	bool matchesKeywordsOr(const ResolvedCommonFilters& a_r, const RE::BGSKeywordForm* a_kf, const RE::BGSKeywordForm* a_alt)
+	{
+		for (auto* keyword : a_r.keywordsOr) {
+			if (holdsKeyword(a_kf, a_alt, keyword)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool hasExcludedKeyword(const ResolvedCommonFilters& a_r, const RE::BGSKeywordForm* a_kf, const RE::BGSKeywordForm* a_alt)
+	{
+		for (auto* keyword : a_r.keywordsExcluded) {
+			if (holdsKeyword(a_kf, a_alt, keyword)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// The form's own EditorID is lowercased ONCE per call instead of once per
+	// needle -- upstream recomputed toLowerCase(get_editorID(form)) inside the
+	// needle loop. get_editorID is deterministic for a given form, so this is a
+	// pure hoist. The empty-list early-out reproduces upstream's result exactly:
+	// with no needles the loop never ran and the accumulator stayed false.
+	bool matchesEditorIdAnd(const ResolvedCommonFilters& a_r, const RE::TESForm* a_form)
+	{
+		if (a_r.editorIdContains.empty()) {
+			return false;
+		}
+		const std::string editorId = toLowerCase(clib_util::editorID::get_editorID(a_form));
+		bool              contains = false;
+		for (const auto& needle : a_r.editorIdContains) {
+			if (editorId.find(needle) != std::string::npos) {
+				contains = true;
+			} else {
+				contains = false;
+				break;
+			}
+		}
+		return contains;
+	}
+
+	bool matchesEditorIdOr(const ResolvedCommonFilters& a_r, const RE::TESForm* a_form)
+	{
+		if (a_r.editorIdContainsOr.empty()) {
+			return false;
+		}
+		const std::string editorId = toLowerCase(clib_util::editorID::get_editorID(a_form));
+		for (const auto& needle : a_r.editorIdContainsOr) {
+			if (editorId.find(needle) != std::string::npos) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool hasExcludedEditorId(const ResolvedCommonFilters& a_r, const RE::TESForm* a_form)
+	{
+		if (a_r.editorIdContainsExcluded.empty()) {
+			return false;
+		}
+		const std::string editorId = toLowerCase(clib_util::editorID::get_editorID(a_form));
+		for (const auto& needle : a_r.editorIdContainsExcluded) {
+			if (editorId.find(needle) != std::string::npos) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool isObjectExcluded(const ResolvedCommonFilters& a_r, const RE::TESForm* a_form)
+	{
+		for (const RE::FormID id : a_r.objectExcluded) {
+			if (a_form->formID == id) {
+				return true;
+			}
+		}
+		return false;
+	}
 }

@@ -4,6 +4,114 @@
 
 namespace ARMOR
 {
+	// =====================================================================
+	// PHASE 1 -- ARMOR's own filter vocabulary, resolved once per rule.
+	// Same rationale, and the same parse-time prohibition, as WEAPON's copy;
+	// see formfilter.h.
+	// =====================================================================
+	namespace
+	{
+		struct ResolvedArmorFilters
+		{
+			// filterByNameContains / ...Or / ...Excluded needles, lowered once.
+			std::vector<std::string> nameContains;
+			std::vector<std::string> nameContainsOr;
+			std::vector<std::string> nameContainsExcluded;
+
+			// filterByArmorTypes / ...Excluded, reduced to the flags they name.
+			// Unrecognised names fall through every arm upstream, so dropping
+			// them is a no-op.
+			std::vector<RE::BIPED_MODEL::ArmorType> armorTypes;
+			std::vector<RE::BIPED_MODEL::ArmorType> armorTypesExcluded;
+
+			// std::stoi + getBipedObjectSlot, once per entry instead of once per
+			// (armor, entry).
+			std::vector<RE::BIPED_MODEL::BipedObjectSlot> bipedSlot;
+			std::vector<RE::BIPED_MODEL::BipedObjectSlot> bipedSlotOr;
+			std::vector<RE::BIPED_MODEL::BipedObjectSlot> bipedSlotExcluded;
+			std::vector<RE::BIPED_MODEL::BipedObjectSlot> restrictSlots;
+
+			// filterByArmorAddons is the ONE list here that must keep a slot for
+			// an identifier that did not resolve: its upstream AND-loop resets
+			// `foundInList = false` at the TOP of every iteration, so a trailing
+			// non-resolving entry drags the whole test to false. 0 marks a hole.
+			std::vector<RE::FormID> armorAddons;
+			std::vector<RE::FormID> armorAddonsOr;
+			std::vector<RE::FormID> armorAddonsExcluded;
+
+			std::vector<RE::BGSKeyword*> restrictKeywords;
+		};
+
+		bool lookupArmorType(const std::string& a_lower, RE::BIPED_MODEL::ArmorType& a_out)
+		{
+			if (a_lower == "light") {
+				a_out = RE::BIPED_MODEL::ArmorType::kLightArmor;
+				return true;
+			}
+			if (a_lower == "heavy") {
+				a_out = RE::BIPED_MODEL::ArmorType::kHeavyArmor;
+				return true;
+			}
+			if (a_lower == "clothing") {
+				a_out = RE::BIPED_MODEL::ArmorType::kClothing;
+				return true;
+			}
+			return false;
+		}
+
+		std::vector<RE::BIPED_MODEL::ArmorType> resolveArmorTypes(const std::vector<std::string>& a_in)
+		{
+			std::vector<RE::BIPED_MODEL::ArmorType> out;
+			out.reserve(a_in.size());
+			for (const auto& s : a_in) {
+				RE::BIPED_MODEL::ArmorType t{};
+				if (lookupArmorType(toLowerCase(s), t)) {
+					out.push_back(t);
+				}
+			}
+			return out;
+		}
+
+		std::vector<RE::BIPED_MODEL::BipedObjectSlot> resolveSlots(const std::vector<std::string>& a_in)
+		{
+			std::vector<RE::BIPED_MODEL::BipedObjectSlot> out;
+			out.reserve(a_in.size());
+			for (const auto& s : a_in) {
+				// std::stoi's throw behaviour is preserved, only hoisted: it now
+				// throws before the form loop rather than on the first form the
+				// loop reaches. Both terminate the process; nothing catches it.
+				out.push_back(getBipedObjectSlot(std::stoi(s)));
+			}
+			return out;
+		}
+
+		ResolvedArmorFilters resolveArmorFilters(const patch_instruction_armor& line)
+		{
+			ResolvedArmorFilters a;
+
+			a.nameContains = formfilter::toLowerAll(line.filterByNameContains);
+			a.nameContainsOr = formfilter::toLowerAll(line.filterByNameContainsOr);
+			a.nameContainsExcluded = formfilter::toLowerAll(line.filterByNameContainsExcluded);
+
+			a.armorTypes = resolveArmorTypes(line.filterByArmorType);
+			a.armorTypesExcluded = resolveArmorTypes(line.filterByArmorTypeExcluded);
+
+			a.bipedSlot = resolveSlots(line.bipedSlot);
+			a.bipedSlotOr = resolveSlots(line.bipedSlotOr);
+			a.bipedSlotExcluded = resolveSlots(line.bipedSlotExcluded);
+			a.restrictSlots = resolveSlots(line.restrictSlots);
+
+			a.armorAddons = formfilter::resolveFormIDsKeepingHoles(line.filterByArmorAddons, RE::FormType::Armature);
+			a.armorAddonsOr = formfilter::resolveFormIDs(line.filterByArmorAddonsOr, RE::FormType::Armature);
+			a.armorAddonsExcluded = formfilter::resolveFormIDs(line.filterByArmorAddonsExcluded, RE::FormType::Armature);
+
+			for (auto* form : formfilter::resolveForms(line.restrictKeywords, RE::FormType::Keyword)) {
+				a.restrictKeywords.push_back(static_cast<RE::BGSKeyword*>(form));
+			}
+
+			return a;
+		}
+	}
 
 	struct patch_instruction_armor create_patch_instruction_armor(const std::string& line)
 	{
@@ -133,21 +241,22 @@ namespace ARMOR
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, armor) pair.
+			// PHASE 1: one RESOLVED filter set per rule, not per (rule, armor) pair.
 			const formfilter::CommonFilterView view{
 				line.modNames, line.hasPlugin, line.hasPluginOr,
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
 				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
 				line.filterByEditorIdContainsExcluded, line.objectExcluded
 			};
+			const formfilter::ResolvedCommonFilters common =
+				formfilter::resolve(view, RE::FormType::Armor);
 
 			// hasPlugin / hasPluginOr consult no form at all.
-			if (!line.hasPlugin.empty() && !formfilter::hasAllPlugins(line.hasPlugin)) {
+			if (!common.allPluginsInstalled || !common.anyPluginInstalled) {
 				continue;
 			}
-			if (!line.hasPluginOr.empty() && !formfilter::hasAnyPlugin(line.hasPluginOr)) {
-				continue;
-			}
+
+			const ResolvedArmorFilters af = resolveArmorFilters(line);
 
 			for (const auto& curobj : ArmorArray) {
 				bool found = false;
@@ -166,19 +275,19 @@ namespace ARMOR
 					continue;
 				}
 
-				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+				if (!line.modNames.empty() && !formfilter::matchesModName(common, curobj)) {
 					continue;
 				}
 
 				if (!found && !line.filterByEditorIdContains.empty()) {
-					contains = formfilter::matchesEditorIdAnd(view, curobj);
+					contains = formfilter::matchesEditorIdAnd(common, curobj);
 				} else {
 					contains = true;
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty()) {
 					//logger::info("keywords not empty");
-					containsOr = formfilter::matchesEditorIdOr(view, curobj);
+					containsOr = formfilter::matchesEditorIdOr(common, curobj);
 				} else {
 					containsOr = true;
 				}
@@ -189,9 +298,17 @@ namespace ARMOR
 				}
 
 				//++++++++++++++++++++++++++++//
+				// The needles are pre-lowered; the form's own name is lowered
+				// ONCE per pair instead of once per needle, and only when a name
+				// filter is actually present.
+				std::string lowerFullName;
+				if (!af.nameContains.empty() || !af.nameContainsOr.empty() || !af.nameContainsExcluded.empty()) {
+					lowerFullName = toLowerCase(curobj->fullName.c_str());
+				}
+
 				if (!found && !line.filterByNameContains.empty()) {
-					for (const auto& editorString : line.filterByNameContains) {
-						if (toLowerCase(curobj->fullName.c_str()).find(toLowerCase(editorString)) != std::string::npos) {
+					for (const auto& editorString : af.nameContains) {
+						if (lowerFullName.find(editorString) != std::string::npos) {
 							namecontains = true;
 						} else {
 							namecontains = false;
@@ -204,8 +321,8 @@ namespace ARMOR
 
 				if (!found && !line.filterByNameContainsOr.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& editorString : line.filterByNameContainsOr) {
-						if (toLowerCase(curobj->fullName.c_str()).find(toLowerCase(editorString)) != std::string::npos) {
+					for (const auto& editorString : af.nameContainsOr) {
+						if (lowerFullName.find(editorString) != std::string::npos) {
 							namecontainsOr = true;
 							break;
 						}
@@ -220,30 +337,17 @@ namespace ARMOR
 				}
 				//++++++++++++++++++++++++++++//
 
-				if (!line.filterByArmorType.empty()) {
-					//logger::info("npc not empty");
-					for (const auto& armorstring : line.filterByArmorType) {
-						if (toLowerCase(armorstring) == "light" && curobj->bipedModelData.armorType & RE::BIPED_MODEL::ArmorType::kLightArmor) {
-							found = true;
-							//logger::info("NPC found.");
-							break;
-						} else if (toLowerCase(armorstring) == "heavy" && curobj->bipedModelData.armorType & RE::BIPED_MODEL::ArmorType::kHeavyArmor) {
-							found = true;
-							//logger::info("NPC found.");
-							break;
-						} else if (toLowerCase(armorstring) == "clothing" && curobj->bipedModelData.armorType & RE::BIPED_MODEL::ArmorType::kClothing) {
-							found = true;
-							//logger::info("NPC found.");
-							break;
-						}
+				//logger::info("npc not empty");
+				for (const RE::BIPED_MODEL::ArmorType t : af.armorTypes) {
+					if (curobj->bipedModelData.armorType & t) {
+						found = true;
+						break;
 					}
 				}
 
 				if (!line.bipedSlot.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& bipedSlot : line.bipedSlot) {
-						int  iSlot = std::stoi(bipedSlot);
-						auto slot = getBipedObjectSlot(iSlot);
+					for (const auto slot : af.bipedSlot) {
 						if (curobj->bipedModelData.bipedObjectSlots & slot) {
 							bipedSlotAnd = true;
 						} else {
@@ -258,10 +362,7 @@ namespace ARMOR
 
 				if (!line.bipedSlotOr.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& bipedSlot : line.bipedSlotOr) {
-						int iSlot = std::stoi(bipedSlot);
-
-						auto slot = getBipedObjectSlot(iSlot);
+					for (const auto slot : af.bipedSlotOr) {
 						if (curobj->bipedModelData.bipedObjectSlots & slot) {
 							bipedSlotOr = true;
 							break;
@@ -276,14 +377,14 @@ namespace ARMOR
 
 				if (!line.keywords.empty()) {
 					//logger::info("keywords not empty");
-					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
+					keywordAnd = formfilter::matchesKeywordsAnd(common, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
 					//logger::info("keywords not empty");
-					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
+					keywordOr = formfilter::matchesKeywordsOr(common, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
@@ -301,18 +402,18 @@ namespace ARMOR
 
 				if (!line.filterByArmorAddons.empty()) {
 					bool foundInList = false;
-					for (const auto& mgefstring : line.filterByArmorAddons) {
+					// `af.armorAddons` keeps one slot per input identifier, with 0
+					// for one that did not resolve to an Armature -- because
+					// `foundInList` is reset at the top of EVERY iteration, a
+					// non-resolving entry is observable here (it leaves
+					// foundInList false without breaking), unlike in every other
+					// AND-loop in this codebase.
+					for (const RE::FormID addonID : af.armorAddons) {
 						foundInList = false;
 						//logger::debug(FMT_STRING("mgefAnd set foundInList False."));
-						RE::TESForm*       currentform = nullptr;
-						RE::TESObjectARMA* keyword = nullptr;
-
-						std::string string_form = mgefstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Armature) {
-							keyword = (RE::TESObjectARMA*)currentform;
+						if (addonID) {
 							for (const auto& addon : curobj->armorAddons) {
-								if (addon->formID == keyword->formID) {
+								if (addon->formID == addonID) {
 									foundInList = true;
 									//logger::debug(FMT_STRING("mgefAnd found in list."));
 									break;
@@ -333,22 +434,13 @@ namespace ARMOR
 					mgefAnd = true;
 				}
 				if (!line.filterByArmorAddonsOr.empty()) {
-					for (const auto& mgefstring : line.filterByArmorAddonsOr) {
-						RE::TESForm*       currentform = nullptr;
-						RE::TESObjectARMA* keyword = nullptr;
-
-						std::string string_form = mgefstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Armature ) {
-							keyword = (RE::TESObjectARMA*)currentform;
-
-							for (const auto& addon : curobj->armorAddons) {
-								if (addon->formID == keyword->formID) {
-									mgefOr = true;
-									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-									//logger::info("Keyword found.");
-									break;
-								}
+					for (const RE::FormID addonID : af.armorAddonsOr) {
+						for (const auto& addon : curobj->armorAddons) {
+							if (addon->formID == addonID) {
+								mgefOr = true;
+								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
+								//logger::info("Keyword found.");
+								break;
 							}
 						}
 						if (mgefOr) {
@@ -372,16 +464,14 @@ namespace ARMOR
 
 				if (!line.keywordsExcluded.empty() && found) {
 					//logger::info("keywords not empty");
-					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
+					if (formfilter::hasExcludedKeyword(common, curobj, nullptr)) {
 						found = false;
 					}
 				}
 
 				if (!line.bipedSlotExcluded.empty() && found) {
 					//logger::info("keywords not empty");
-					for (const auto& bipedSlot : line.bipedSlotExcluded) {
-						int  iSlot = std::stoi(bipedSlot);
-						auto slot = getBipedObjectSlot(iSlot);
+					for (const auto slot : af.bipedSlotExcluded) {
 						if (curobj->bipedModelData.bipedObjectSlots & slot) {
 							found = false;
 							logger::debug(FMT_STRING("Armor Excluded has bipedSlot. {:08X} {}"), curobj->formID, curobj->fullName);
@@ -393,15 +483,15 @@ namespace ARMOR
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
 					//logger::info("factions not empty");
-					if (formfilter::hasExcludedEditorId(view, curobj)) {
+					if (formfilter::hasExcludedEditorId(common, curobj)) {
 						found = false;
 					}
 				}
 
 				if (!line.filterByNameContainsExcluded.empty() && found) {
 					//logger::info("factions not empty");
-					for (const auto& editorString : line.filterByNameContainsExcluded) {
-						if (toLowerCase(curobj->fullName.c_str()).find(toLowerCase(editorString)) != std::string::npos) {
+					for (const auto& editorString : af.nameContainsExcluded) {
+						if (lowerFullName.find(editorString) != std::string::npos) {
 							found = false;
 							break;
 						}
@@ -410,21 +500,13 @@ namespace ARMOR
 
 				if (!line.filterByArmorAddonsExcluded.empty() && found) {
 					//logger::info("mgefs not empty");
-					for (const auto& mgefstring : line.filterByArmorAddonsExcluded) {
-						RE::TESForm*       currentform = nullptr;
-						RE::TESObjectARMA* keyword = nullptr;
-
-						std::string string_form = mgefstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Armature) {
-							keyword = (RE::TESObjectARMA*)currentform;
-							for (const auto& addon : curobj->armorAddons) {
-								if (addon && addon->formID == keyword->formID) {
-									found = false;
-									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-									//logger::info("Keyword found.");
-									break;
-								}
+					for (const RE::FormID addonID : af.armorAddonsExcluded) {
+						for (const auto& addon : curobj->armorAddons) {
+							if (addon && addon->formID == addonID) {
+								found = false;
+								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
+								//logger::info("Keyword found.");
+								break;
 							}
 						}
 					}
@@ -432,45 +514,25 @@ namespace ARMOR
 
 				if (!line.objectExcluded.empty() && found) {
 					//logger::info("npc not empty");
-					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Armor)) {
+					if (formfilter::isObjectExcluded(common, curobj)) {
 						found = false;
 					}
 				}
 
-				if (!line.filterByArmorTypeExcluded.empty()) {
-					//logger::info("npc not empty");
-					for (const auto& armorstring : line.filterByArmorTypeExcluded) {
-						if (toLowerCase(armorstring) == "light" && curobj->bipedModelData.armorType & RE::BIPED_MODEL::ArmorType::kLightArmor) {
-							found = false;
-							//logger::info("NPC found.");
-							break;
-						}
-						else if (toLowerCase(armorstring) == "heavy" && curobj->bipedModelData.armorType & RE::BIPED_MODEL::ArmorType::kHeavyArmor) {
-							found = false;
-							//logger::info("NPC found.");
-							break;
-						}
-						else if (toLowerCase(armorstring) == "clothing" && curobj->bipedModelData.armorType & RE::BIPED_MODEL::ArmorType::kClothing) {
-							found = false;
-							//logger::info("NPC found.");
-							break;
-						}
+				//logger::info("npc not empty");
+				for (const RE::BIPED_MODEL::ArmorType t : af.armorTypesExcluded) {
+					if (curobj->bipedModelData.armorType & t) {
+						found = false;
+						break;
 					}
 				}
 
 				if (found && !line.restrictKeywords.empty()) {
 					bool hasObject = false;
-					for (const auto& restrictObject : line.restrictKeywords) {
-						RE::TESForm*        currentform = nullptr;
-						RE::BGSKeyword*		tempForm = nullptr;
-						std::string         string_form = restrictObject;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							tempForm = (RE::BGSKeyword*)currentform;
-							if (curobj->HasKeyword(tempForm)) {
-								hasObject = true;
-								break;
-							}
+					for (auto* tempForm : af.restrictKeywords) {
+						if (curobj->HasKeyword(tempForm)) {
+							hasObject = true;
+							break;
 						}
 					}
 					if (!hasObject) {
@@ -480,9 +542,7 @@ namespace ARMOR
 
 				if (found && !line.restrictSlots.empty()) {
 					bool hasObject = false;
-					for (const auto& restrictObject : line.restrictSlots) {
-						int  iSlot = std::stoi(restrictObject);
-						auto slot = getBipedObjectSlot(iSlot);
+					for (const auto slot : af.restrictSlots) {
 						if (curobj->bipedModelData.bipedObjectSlots & slot) {
 							hasObject = true;
 							break;

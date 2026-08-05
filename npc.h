@@ -218,6 +218,57 @@ namespace NPC
 		std::string              baseObject;
 	};
 
+	// =====================================================================
+	// PHASE 1 -- every filter value a rule carries, interpreted once per RULE
+	// instead of once per (NPC, rule) pair.
+	//
+	// This struct is built by makeFilterView() in process_patch_instructions,
+	// never by create_patch_instruction: parsing must stay free of CommonLib
+	// singletons (golden_dump runs with no game behind it), and
+	// patch_instruction's own layout must not change, because the golden
+	// snapshots serialize it member by member.
+	// =====================================================================
+	struct ResolvedNpcFilters
+	{
+		formfilter::ResolvedCommonFilters common;
+
+		// Identifiers resolved to the FormType each test demands. Identifiers
+		// that do not resolve are dropped -- in every one of these loops a
+		// non-resolving entry is a pure no-op upstream (no AND accumulator is
+		// reset at the top of an iteration).
+		std::vector<RE::TESRace*>    races;                  // filterByRaces (pointer identity)
+		std::vector<RE::FormID>      outfits;                // filterByDefaultOutfits
+		std::vector<RE::FormID>      classes;                // filterByClass
+		std::vector<RE::FormID>      combatStyles;           // filterByCombatStyle
+		std::vector<RE::TESFaction*> factions;               // filterByFactions
+		std::vector<RE::TESFaction*> factionsOr;             // filterByFactionsOr
+		std::vector<RE::TESFaction*> factionsExcluded;       // filterByFactionsExcluded
+		std::vector<RE::FormID>      classesExcluded;        // filterByClassExclude
+		std::vector<RE::FormID>      restrictToCombatStyle;
+		std::vector<RE::FormID>      restrictToRaces;
+		std::vector<RE::FormID>      restrictToVoiceType;
+		std::vector<RE::BGSKeyword*> restrictToKeyword;
+
+		// Scalars that were lowercased on every pair despite being fixed at
+		// load. The `empty()` / `!= "none"` guards still read the raw member.
+		std::string filterPCMult;
+		std::string filterAutoCalc;
+		std::string filterEssential;
+		std::string filterProtected;
+		std::string isFemale;
+		std::string restrictGender;
+
+		// Lists that were lowercased (and, for the model filter, trimmed and
+		// path-normalised) on every pair.
+		std::vector<std::string> restrictToTemplateFlags;
+		std::vector<std::string> restrictToFlags;
+		std::vector<std::string> restrictToMaleModelContains;
+		// One lowered skill NAME per skillRestrict entry. The two std::stoi
+		// bounds are deliberately left per-pair: hoisting them would move where
+		// a malformed bound throws, and they are cheap next to the name match.
+		std::vector<std::string> skillRestrictNames;
+	};
+
 	struct patch_instruction create_patch_instruction(const std::string& line);
 	//void                     process_patch_instructions(const patch_instruction& line);
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
@@ -227,11 +278,12 @@ namespace NPC
 	void*     patchActor(NPC::patch_instruction line, RE::Character* curActObj);
 	void      setbEnableSetLevelDirectlyByPCMult();
 	bool      findObject(const patch_instruction& line, RE::TESNPC* curobj);
-	// PROTOTYPE (proto/common-filters): the view is built once per RULE, outside
-	// the form loop. The two-argument overload above builds one per call and
-	// forwards, so existing callers (and the benchmark) are unaffected.
-	bool      findObject(const patch_instruction& line, const formfilter::CommonFilterView& view, RE::TESNPC* curobj);
-	formfilter::CommonFilterView makeFilterView(const patch_instruction& line);
+	// The resolved filter set is built once per RULE, outside the form loop.
+	// The two-argument overload above builds one per call and forwards; it is
+	// for callers that have no rule loop of their own, and is NOT what
+	// process_patch_instructions uses.
+	bool      findObject(const patch_instruction& line, const ResolvedNpcFilters& view, RE::TESNPC* curobj);
+	ResolvedNpcFilters makeFilterView(const patch_instruction& line);
 	void*     readConfigHook(const std::string& folder);
 }
 

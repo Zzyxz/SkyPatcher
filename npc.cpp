@@ -389,8 +389,9 @@ namespace NPC
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, NPC) pair.
-			const formfilter::CommonFilterView view = makeFilterView(line);
+			// PHASE 1: every filter value this rule carries is resolved ONCE,
+			// here, not once per (rule, NPC) pair.
+			const ResolvedNpcFilters view = makeFilterView(line);
 
 			for (const auto& curobj : NPCArray) {
 				if (!curobj) {
@@ -402,7 +403,7 @@ namespace NPC
 					continue;
 				}
 
-				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+				if (!line.modNames.empty() && !formfilter::matchesModName(view.common, curobj)) {
 					continue;
 				}
 
@@ -2365,13 +2366,13 @@ namespace NPC
 		//return;
 	}
 
-	// PROTOTYPE (proto/common-filters): binds patch_instruction's filter vectors
-	// by reference. The struct itself is untouched, so the golden snapshots are
+	// PHASE 1: resolve every filter value this rule carries, ONCE. The
+	// patch_instruction struct itself is untouched, so the golden snapshots are
 	// unaffected. NPC has no hasPlugin/hasPluginOr keys, so those bind to the
-	// shared empty vector.
-	formfilter::CommonFilterView makeFilterView(const patch_instruction& line)
+	// shared empty vector and their resolved bools are both true.
+	ResolvedNpcFilters makeFilterView(const patch_instruction& line)
 	{
-		return formfilter::CommonFilterView{
+		const formfilter::CommonFilterView refs{
 			line.modNames,
 			formfilter::noStrings(),
 			formfilter::noStrings(),
@@ -2383,6 +2384,56 @@ namespace NPC
 			line.filterByEditorIdContainsExcluded,
 			line.objectExcluded
 		};
+
+		ResolvedNpcFilters v;
+		v.common = formfilter::resolve(refs, RE::FormType::NPC);
+
+		for (auto* form : formfilter::resolveForms(line.races, RE::FormType::Race)) {
+			v.races.push_back(static_cast<RE::TESRace*>(form));
+		}
+		v.outfits = formfilter::resolveFormIDs(line.filterByOutfit, RE::FormType::Outfit);
+		v.classes = formfilter::resolveFormIDs(line.filterClass, RE::FormType::Class);
+		v.combatStyles = formfilter::resolveFormIDs(line.filterCombatStyle, RE::FormType::CombatStyle);
+		for (auto* form : formfilter::resolveForms(line.filterFactions, RE::FormType::Faction)) {
+			v.factions.push_back(static_cast<RE::TESFaction*>(form));
+		}
+		for (auto* form : formfilter::resolveForms(line.filterFactionsOr, RE::FormType::Faction)) {
+			v.factionsOr.push_back(static_cast<RE::TESFaction*>(form));
+		}
+		for (auto* form : formfilter::resolveForms(line.filterFactionsExcluded, RE::FormType::Faction)) {
+			v.factionsExcluded.push_back(static_cast<RE::TESFaction*>(form));
+		}
+		v.classesExcluded = formfilter::resolveFormIDs(line.filterClassExclude, RE::FormType::Class);
+		v.restrictToCombatStyle = formfilter::resolveFormIDs(line.restrictToCombatStyle, RE::FormType::CombatStyle);
+		v.restrictToRaces = formfilter::resolveFormIDs(line.restrictToRaces, RE::FormType::Race);
+		v.restrictToVoiceType = formfilter::resolveFormIDs(line.restrictToVoiceType, RE::FormType::VoiceType);
+		for (auto* form : formfilter::resolveForms(line.restrictToKeyword, RE::FormType::Keyword)) {
+			v.restrictToKeyword.push_back(static_cast<RE::BGSKeyword*>(form));
+		}
+
+		v.filterPCMult = toLowerCase(line.filterPCMult);
+		v.filterAutoCalc = toLowerCase(line.filterAutoCalc);
+		v.filterEssential = toLowerCase(line.filterEssential);
+		v.filterProtected = toLowerCase(line.filterProtected);
+		// Upstream lowered these two with an inline std::transform + std::tolower;
+		// toLowerCase is that exact lambda, so this is the same string.
+		v.isFemale = toLowerCase(line.isFemale);
+		v.restrictGender = toLowerCase(line.restrictGender);
+
+		v.restrictToTemplateFlags = formfilter::toLowerAll(line.restrictToTemplateFlags);
+		v.restrictToFlags = formfilter::toLowerAll(line.restrictToFlags);
+
+		v.restrictToMaleModelContains.reserve(line.restrictToMaleModelContains.size());
+		for (const auto& s : line.restrictToMaleModelContains) {
+			v.restrictToMaleModelContains.push_back(normalizePath(trim(toLowerCase(s))));
+		}
+
+		v.skillRestrictNames.reserve(line.skillRestrict.size());
+		for (const auto& skillArr : line.skillRestrict) {
+			v.skillRestrictNames.push_back(toLowerCase(skillArr[0]));
+		}
+
+		return v;
 	}
 
 	bool findObject(const patch_instruction& line, RE::TESNPC* curobj)
@@ -2390,7 +2441,7 @@ namespace NPC
 		return findObject(line, makeFilterView(line), curobj);
 	}
 
-	bool findObject(const patch_instruction& line, const formfilter::CommonFilterView& view, RE::TESNPC* curobj)
+	bool findObject(const patch_instruction& line, const ResolvedNpcFilters& view, RE::TESNPC* curobj)
 	{
 		bool found = false;
 		bool keywordAnd = false;
@@ -2405,14 +2456,14 @@ namespace NPC
 		const RE::BGSKeywordForm* raceKeywords = static_cast<const RE::BGSKeywordForm*>(curobj->race);
 
 		if (!found && !line.keywords.empty() && curobj->formID != 0x000007) {
-			keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, raceKeywords);
+			keywordAnd = formfilter::matchesKeywordsAnd(view.common, curobj, raceKeywords);
 		}
 		else if (curobj->formID != 0x000007) {
 			keywordAnd = true;
 		}
 
 		if (!found && !line.keywordsOr.empty() && curobj->formID != 0x000007) {
-			keywordOr = formfilter::matchesKeywordsOr(view, curobj, raceKeywords);
+			keywordOr = formfilter::matchesKeywordsOr(view.common, curobj, raceKeywords);
 		}
 		else if (curobj->formID != 0x000007) {
 			//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
@@ -2428,41 +2479,25 @@ namespace NPC
 
 		if (!found && !line.races.empty() && curobj->formID != 0x000007) {
 			//logger::info("race not empty");
-			for (const auto& racestring : line.races) {
-				RE::TESForm* currentform = nullptr;
-				RE::TESRace* race = nullptr;
+			for (auto* race : view.races) {
+				if (curobj->race && curobj->race == race) {
+					found = true;
 
-				currentform = GetFormFromIdentifier(racestring);
-				if (currentform && currentform->formType == RE::FormType::Race) {
-					race = (RE::TESRace*)currentform;
-
-					if (curobj->race && curobj->race == race) {
-						found = true;
-
-						break;
-					}
-					else if (!curobj->race) {
-						logger::debug(FMT_STRING("npc has no race id({:08X} )."), curobj->formID);
-					}
+					break;
+				}
+				else if (!curobj->race) {
+					logger::debug(FMT_STRING("npc has no race id({:08X} )."), curobj->formID);
 				}
 			}
 		}
 
 		if (!found && !line.filterByOutfit.empty()) {
 			//logger::info("npc not empty");
-			for (const auto& npcstring : line.filterByOutfit) {
-				RE::TESForm* currentform = nullptr;
-				RE::BGSOutfit* npc = nullptr;
-
-				currentform = GetFormFromIdentifier(npcstring);
-				if (currentform && currentform->formType == RE::FormType::Outfit) {
-					npc = (RE::BGSOutfit*)currentform;
-
-					if (curobj->defaultOutfit && curobj->defaultOutfit->formID == npc->formID) {
-						found = true;
-						//logger::info("NPC found.");
-						break;
-					}
+			for (const RE::FormID outfitID : view.outfits) {
+				if (curobj->defaultOutfit && curobj->defaultOutfit->formID == outfitID) {
+					found = true;
+					//logger::info("NPC found.");
+					break;
 				}
 			}
 		}
@@ -2471,44 +2506,28 @@ namespace NPC
 
 		if (!found && !line.filterClass.empty()) {
 			//logger::info("npc not empty");
-			for (const auto& npcstring : line.filterClass) {
-				RE::TESForm* currentform = nullptr;
-				RE::TESClass* npc = nullptr;
-
-				currentform = GetFormFromIdentifier(npcstring);
-				if (currentform && currentform->formType == RE::FormType::Class) {
-					npc = (RE::TESClass*)currentform;
-
-					if (curobj->npcClass && curobj->npcClass->formID == npc->formID) {
-						found = true;
-						//logger::info("NPC found.");
-						break;
-					}
+			for (const RE::FormID classID : view.classes) {
+				if (curobj->npcClass && curobj->npcClass->formID == classID) {
+					found = true;
+					//logger::info("NPC found.");
+					break;
 				}
 			}
 		}
 
 		if (!found && !line.filterCombatStyle.empty()) {
 			//logger::info("npc not empty");
-			for (const auto& npcstring : line.filterCombatStyle) {
-				RE::TESForm* currentform = nullptr;
-				RE::TESCombatStyle* npc = nullptr;
-
-				currentform = GetFormFromIdentifier(npcstring);
-				if (currentform && currentform->formType == RE::FormType::CombatStyle) {
-					npc = (RE::TESCombatStyle*)currentform;
-
-					if (curobj->combatStyle && curobj->combatStyle->formID == npc->formID) {
-						found = true;
-						//logger::info("NPC found.");
-						break;
-					}
+			for (const RE::FormID csID : view.combatStyles) {
+				if (curobj->combatStyle && curobj->combatStyle->formID == csID) {
+					found = true;
+					//logger::info("NPC found.");
+					break;
 				}
 			}
 		}
 
 		if (!line.filterPCMult.empty() && line.filterPCMult != "none") {
-			std::string check = toLowerCase(line.filterPCMult);
+			const std::string& check = view.filterPCMult;
 
 			if ((check == "true")) {
 				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kPCLevelMult) {
@@ -2529,7 +2548,7 @@ namespace NPC
 		}
 
 		if (!line.filterAutoCalc.empty() && line.filterAutoCalc != "none") {
-			std::string check = toLowerCase(line.filterAutoCalc);
+			const std::string& check = view.filterAutoCalc;
 			if ((check == "true")) {
 				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats) {
 					found = true;
@@ -2549,7 +2568,7 @@ namespace NPC
 		}
 
 		if (!line.filterEssential.empty() && line.filterEssential != "none") {
-			std::string check = toLowerCase(line.filterEssential);
+			const std::string& check = view.filterEssential;
 			if ((check == "true")) {
 				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kEssential) {
 					found = true;
@@ -2568,7 +2587,7 @@ namespace NPC
 			}
 		}
 		if (!line.filterProtected.empty() && line.filterProtected != "none") {
-			std::string check = toLowerCase(line.filterProtected);
+			const std::string& check = view.filterProtected;
 			if ((check == "true")) {
 				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kProtected) {
 					found = true;
@@ -2590,24 +2609,16 @@ namespace NPC
 
 		if (!found && !line.filterFactions.empty() && curobj->formID != 0x000007) {
 			//logger::info("filterByFaction not empty");
-			for (const auto& filterByFactiontring : line.filterFactions) {
-				RE::TESForm* currentform = nullptr;
-				RE::TESFaction* keyword = nullptr;
-
-				currentform = GetFormFromIdentifier(filterByFactiontring);
-				if (currentform && currentform->formType == RE::FormType::Faction) {
-					keyword = (RE::TESFaction*)currentform;
-
-					if (curobj->HasFaction(keyword)) {
-						factionAnd = true;
-					}
-					else {
-						factionAnd = false;
-						//logger::debug(FMT_STRING("KeywordAnd npc does not have all filterByFaction"));
-						break;
-					}
-					//logger::debug(FMT_STRING("KeywordAnd npc true"));
+			for (auto* keyword : view.factions) {
+				if (curobj->HasFaction(keyword)) {
+					factionAnd = true;
 				}
+				else {
+					factionAnd = false;
+					//logger::debug(FMT_STRING("KeywordAnd npc does not have all filterByFaction"));
+					break;
+				}
+				//logger::debug(FMT_STRING("KeywordAnd npc true"));
 			}
 		}
 		else if (curobj->formID != 0x000007) {
@@ -2617,20 +2628,12 @@ namespace NPC
 
 		if (!found && !line.filterFactionsOr.empty() && curobj->formID != 0x000007) {
 			//logger::info("keywords not empty");
-			for (const auto& keywordstring : line.filterFactionsOr) {
-				RE::TESForm* currentform = nullptr;
-				RE::TESFaction* keyword = nullptr;
-
-				currentform = GetFormFromIdentifier(keywordstring);
-				if (currentform && currentform->formType == RE::FormType::Faction) {
-					keyword = (RE::TESFaction*)currentform;
-
-					if (curobj->HasFaction(keyword)) {
-						factionOr = true;
-						//logger::debug(FMT_STRING("NPC has faction {:08X}"), curobj->formID, curobj->fullName);
-						//logger::info("Keyword found.");
-						break;
-					}
+			for (auto* keyword : view.factionsOr) {
+				if (curobj->HasFaction(keyword)) {
+					factionOr = true;
+					//logger::debug(FMT_STRING("NPC has faction {:08X}"), curobj->formID, curobj->fullName);
+					//logger::info("Keyword found.");
+					break;
 				}
 			}
 		}
@@ -2640,7 +2643,7 @@ namespace NPC
 		}
 
 		if (!found && !line.filterByEditorIdContains.empty() && curobj->formID != 0x000007) {
-			contains = formfilter::matchesEditorIdAnd(view, curobj);
+			contains = formfilter::matchesEditorIdAnd(view.common, curobj);
 		}
 		else if (curobj->formID != 0x000007) {
 			contains = true;
@@ -2648,7 +2651,7 @@ namespace NPC
 
 		if (!found && !line.filterByEditorIdContainsOr.empty() && curobj->formID != 0x000007) {
 			//logger::info("keywords not empty");
-			containsOr = formfilter::matchesEditorIdOr(view, curobj);
+			containsOr = formfilter::matchesEditorIdOr(view.common, curobj);
 		}
 		else if (curobj->formID != 0x000007) {
 			containsOr = true;
@@ -2670,8 +2673,7 @@ namespace NPC
 		}
 
 		if (!line.isFemale.empty() && found && line.isFemale != "none") {
-			std::string lowercaseIsFemale = line.isFemale;
-			std::transform(lowercaseIsFemale.begin(), lowercaseIsFemale.end(), lowercaseIsFemale.begin(), [](unsigned char c) { return std::tolower(c); });
+			const std::string& lowercaseIsFemale = view.isFemale;
 
 			if ((lowercaseIsFemale == "female")) {
 				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kFemale) {
@@ -2697,34 +2699,26 @@ namespace NPC
 
 		if (!line.keywordsExcluded.empty() && found && curobj->formID != 0x000007) {
 			//logger::info("keywords not empty")
-			if (formfilter::hasExcludedKeyword(view, curobj, raceKeywords)) {
+			if (formfilter::hasExcludedKeyword(view.common, curobj, raceKeywords)) {
 				found = false;
 			}
 		}
 
 		if (!line.filterFactionsExcluded.empty() && found && curobj->formID != 0x000007) {
 			//logger::info("factions not empty");
-			for (const auto& factionstring : line.filterFactionsExcluded) {
-				RE::TESForm* currentform = nullptr;
-				RE::TESFaction* keyword = nullptr;
-
-				currentform = GetFormFromIdentifier(factionstring);
-				if (currentform && currentform->formType == RE::FormType::Faction) {
-					keyword = (RE::TESFaction*)currentform;
-
-					if (curobj->HasFaction(keyword)) {
-						found = false;
-						//logger::debug(FMT_STRING("KeywordExcluded has a keyword that is excluded.{:08X}"), keyword->formID);
-						//logger::info("Keyword found.");
-						break;
-					}
+			for (auto* keyword : view.factionsExcluded) {
+				if (curobj->HasFaction(keyword)) {
+					found = false;
+					//logger::debug(FMT_STRING("KeywordExcluded has a keyword that is excluded.{:08X}"), keyword->formID);
+					//logger::info("Keyword found.");
+					break;
 				}
 			}
 		}
 
 		if (!line.filterByEditorIdContainsExcluded.empty() && found && curobj->formID != 0x000007) {
 			//logger::info("factions not empty");
-			if (formfilter::hasExcludedEditorId(view, curobj)) {
+			if (formfilter::hasExcludedEditorId(view.common, curobj)) {
 				found = false;
 			}
 		}
@@ -2732,26 +2726,20 @@ namespace NPC
 
 		if (!line.filterClassExclude.empty() && found) {
 			//logger::info("npc not empty");
-			for (const auto& npcstring : line.filterClassExclude) {
-				RE::TESForm* currentform = nullptr;
-				RE::TESClass* npc = nullptr;
-
-				currentform = GetFormFromIdentifier(npcstring);
-				if (currentform && currentform->formType == RE::FormType::Class) {
-					npc = (RE::TESClass*)currentform;
-
-					if (curobj->npcClass->formID == npc->formID) {
-						found = false;
-						//logger::info("NPC found.");
-						break;
-					}
+			// npcClass is dereferenced without a null check here, exactly as
+			// upstream does -- preserved, not fixed.
+			for (const RE::FormID classID : view.classesExcluded) {
+				if (curobj->npcClass->formID == classID) {
+					found = false;
+					//logger::info("NPC found.");
+					break;
 				}
 			}
 		}
 
 		if (!line.objectExcluded.empty() && found) {
 			//logger::info("npc not empty");
-			if (formfilter::isObjectExcluded(view, curobj, RE::FormType::NPC)) {
+			if (formfilter::isObjectExcluded(view.common, curobj)) {
 				found = false;
 			}
 		}
@@ -2759,13 +2747,16 @@ namespace NPC
 		if (!line.skillRestrict.empty()) {
 			for (size_t i = 0; i < line.skillRestrict.size(); i++) {
 				const auto& skillArr = line.skillRestrict[i];
-				std::string skill = skillArr[0];
 				int         value = -99;
 				int         value1 = -99;
 				int         value2 = -99;
+				// The two bounds stay per-pair on purpose: std::stoi throws on a
+				// malformed bound and hoisting it would move where that throw
+				// happens. The skill NAME, which drove a toLowerCase plus up to
+				// 18 string compares per pair, is lowered once per rule.
 				value1 = std::stoi(skillArr[1]);
 				value2 = std::stoi(skillArr[2]);
-				const std::string lower = toLowerCase(skill);
+				const std::string& lower = view.skillRestrictNames[i];
 
 				if (lower == "onehanded") {
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kOneHanded];
@@ -2842,10 +2833,15 @@ namespace NPC
 
 		if (found && !line.restrictToMaleModelContains.empty()) {
 
-			for (const auto& modelString : line.restrictToMaleModelContains) {
+			// The needle is normalised once per RULE (see makeFilterView); the
+			// haystack is form data, so it stays per pair -- but it is now
+			// computed once per pair instead of once per needle.
+			const std::string maleModel = curobj->race
+				? normalizePath(trim(toLowerCase(curobj->race->skeletonModels[RE::SEXES::kMale].model.c_str())))
+				: std::string{};
+
+			for (const auto& searchModel : view.restrictToMaleModelContains) {
 				if (curobj->race) {
-					std::string maleModel = normalizePath(trim(toLowerCase(curobj->race->skeletonModels[RE::SEXES::kMale].model.c_str())));
-					std::string searchModel = normalizePath(trim(toLowerCase(modelString)));
 
 					if (maleModel.find(searchModel) != std::string::npos) {
 
@@ -2860,8 +2856,7 @@ namespace NPC
 		}
 
 		if (!line.restrictGender.empty() && found && line.restrictGender != "none") {
-			std::string lowercaseIsFemale = line.restrictGender;
-			std::transform(lowercaseIsFemale.begin(), lowercaseIsFemale.end(), lowercaseIsFemale.begin(), [](unsigned char c) { return std::tolower(c); });
+			const std::string& lowercaseIsFemale = view.restrictGender;
 
 			if ((lowercaseIsFemale == "female")) {
 				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kFemale) {
@@ -2886,9 +2881,7 @@ namespace NPC
 		}
 
 		if (!line.restrictToTemplateFlags.empty() && found) {
-			for (const auto& setFlag : line.restrictToTemplateFlags) {
-				std::string lowerFlag = toLowerCase(setFlag);
-
+			for (const auto& lowerFlag : view.restrictToTemplateFlags) {
 				static const std::unordered_map<std::string, RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG> flagMap = {
 					{"traits", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kTraits},
 					{"stats", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kStats},
@@ -2925,9 +2918,7 @@ namespace NPC
 
 
 		if (!line.restrictToFlags.empty() && found) {
-			for (const auto& setFlag : line.restrictToFlags) {
-				std::string lowerFlag = toLowerCase(setFlag);
-
+			for (const auto& lowerFlag : view.restrictToFlags) {
 				static const std::unordered_map<std::string, RE::ACTOR_BASE_DATA::Flag> flagMap = {
 					{"female", RE::ACTOR_BASE_DATA::Flag::kFemale},
 					{"essential", RE::ACTOR_BASE_DATA::Flag::kEssential},
@@ -2972,17 +2963,10 @@ namespace NPC
 
 		if (found && !line.restrictToCombatStyle.empty()) {
 			bool hasObject = false;
-			for (const auto& restrictObject : line.restrictToCombatStyle) {
-				RE::TESForm* currentform = nullptr;
-				RE::TESCombatStyle* tempForm = nullptr;
-
-				currentform = GetFormFromIdentifier(restrictObject);
-				if (currentform && currentform->formType == RE::FormType::CombatStyle) {
-					tempForm = (RE::TESCombatStyle*)currentform;
-					if (curobj->combatStyle && curobj->combatStyle->formID == tempForm->formID) {
-						hasObject = true;
-						break;
-					}
+			for (const RE::FormID csID : view.restrictToCombatStyle) {
+				if (curobj->combatStyle && curobj->combatStyle->formID == csID) {
+					hasObject = true;
+					break;
 				}
 			}
 			if (!hasObject) {
@@ -2992,17 +2976,10 @@ namespace NPC
 
 		if (found && !line.restrictToRaces.empty()) {
 			bool hasObject = false;
-			for (const auto& restrictObject : line.restrictToRaces) {
-				RE::TESForm* currentform = nullptr;
-				RE::TESRace* tempForm = nullptr;
-
-				currentform = GetFormFromIdentifier(restrictObject);
-				if (currentform && currentform->formType == RE::FormType::Race) {
-					tempForm = (RE::TESRace*)currentform;
-					if (curobj->race && curobj->race->formID == tempForm->formID) {
-						hasObject = true;
-						break;
-					}
+			for (const RE::FormID raceID : view.restrictToRaces) {
+				if (curobj->race && curobj->race->formID == raceID) {
+					hasObject = true;
+					break;
 				}
 			}
 			if (!hasObject) {
@@ -3012,17 +2989,10 @@ namespace NPC
 
 		if (found && !line.restrictToVoiceType.empty()) {
 			bool hasObject = false;
-			for (const auto& restrictObject : line.restrictToVoiceType) {
-				RE::TESForm* currentform = nullptr;
-				RE::BGSVoiceType* tempForm = nullptr;
-
-				currentform = GetFormFromIdentifier(restrictObject);
-				if (currentform && currentform->formType == RE::FormType::VoiceType) {
-					tempForm = (RE::BGSVoiceType*)currentform;
-					if (curobj->voiceType && curobj->voiceType->formID == tempForm->formID) {
-						hasObject = true;
-						break;
-					}
+			for (const RE::FormID voiceID : view.restrictToVoiceType) {
+				if (curobj->voiceType && curobj->voiceType->formID == voiceID) {
+					hasObject = true;
+					break;
 				}
 			}
 			if (!hasObject) {
@@ -3034,16 +3004,10 @@ namespace NPC
 
 		if (found && !line.restrictToKeyword.empty()) {
 			bool hasObject = false;
-			for (const auto& restrictObject : line.restrictToKeyword) {
-				RE::TESForm* currentform = nullptr;
-				RE::BGSKeyword* tempForm = nullptr;
-				currentform = GetFormFromIdentifier(restrictObject);
-				if (currentform && currentform->formType == RE::FormType::Keyword) {
-					tempForm = (RE::BGSKeyword*)currentform;
-					if (tempForm && curobj->HasKeyword(tempForm) || curobj->race && curobj->race->HasKeyword(tempForm)) {
-						hasObject = true;
-						break;
-					}
+			for (auto* tempForm : view.restrictToKeyword) {
+				if (tempForm && curobj->HasKeyword(tempForm) || curobj->race && curobj->race->HasKeyword(tempForm)) {
+					hasObject = true;
+					break;
 				}
 			}
 			if (!hasObject) {
