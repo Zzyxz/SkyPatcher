@@ -359,7 +359,7 @@ namespace NPC
 		const auto start_time{ std::chrono::system_clock::now() };
 		logger::debug("processing patch instructions");
 		const auto                dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESNPC*> NPCArray = dataHandler->GetFormArray<RE::TESNPC>();
+		auto& NPCArray = dataHandler->GetFormArray<RE::TESNPC>();
 
 		logger::debug("NPC count: {}", NPCArray.size());
 
@@ -422,7 +422,7 @@ namespace NPC
 	}
 
 
-	void* patch(NPC::patch_instruction line, RE::TESNPC* curobj)
+	void* patch(const NPC::patch_instruction& line, RE::TESNPC* curobj)
 	{
 
 
@@ -2393,7 +2393,7 @@ namespace NPC
 		//return;
 	}
 
-	bool findObject(patch_instruction line, RE::TESNPC* curobj)
+	bool findObject(const patch_instruction& line, RE::TESNPC* curobj)
 	{
 		bool found = false;
 		bool keywordAnd = false;
