@@ -24,7 +24,9 @@
 // allocation, and it is meant to be built ONCE PER RULE, outside the form loop.
 
 #include "PCH.h"
+#include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace formfilter
@@ -167,6 +169,123 @@ namespace formfilter
 	bool hasExcludedEditorId(const ResolvedCommonFilters& a_r, const RE::TESForm* a_form);
 
 	bool isObjectExcluded(const ResolvedCommonFilters& a_r, const RE::TESForm* a_form);
+
+	// =====================================================================
+	// PHASE 3 -- the rule index.
+	//
+	// process_patch_instructions is O(rules x forms): every rule walks the
+	// whole form array. At the ~20,000 rules a heavy modlist ships that is
+	// ~10^9 (form, rule) pairs, and Phase 1 only made each pair cheaper.
+	//
+	// Almost every scanning rule can only ever match a form that carries one
+	// specific thing -- a keyword, a race, a class, a combat style, an outfit,
+	// a faction, an armor addon, a biped slot, a weapon animation type. Those
+	// are all small integers (a FormID, or an enum value). So the forms are
+	// indexed ONCE by every such "signal" they carry, and a rule is then
+	// evaluated only against the forms that carry at least one of the signals
+	// its filters name.
+	//
+	// The nesting is deliberately NOT inverted. Keeping the rule loop on the
+	// outside means the order in which rules are applied -- to each form and
+	// globally, including the `object` loop that patches explicitly named
+	// forms before the scan -- is byte-for-byte the upstream order. The only
+	// thing that changes is that pairs which provably cannot match are never
+	// visited. Inverting to form-outer would have moved every direct `object`
+	// patch relative to every scan patch, which is observable whenever a form
+	// is named by one rule and scan-matched by another.
+	//
+	// SOUNDNESS. For each rule the caller derives a key set K such that
+	// `matches(rule, form)` implies `form carries some k in K`. K is the union
+	// over the rule's positive (found = true) disjuncts of a NECESSARY signal
+	// for that disjunct -- for an AND-list, any one of its members; for an
+	// OR-list, all of them. A rule that carries a positive disjunct which is
+	// not expressible this way (an EditorID/name substring test, a filter that
+	// sets `found` with no `!found` guard, or the "no filters at all" catch-all
+	// that matches everything) is NOT keyed and still scans every form. A rule
+	// whose every positive disjunct resolved to nothing yields an EMPTY K,
+	// which is correct: it can never match, so it visits no forms at all.
+	// =====================================================================
+
+	// A signal key is a 64-bit value: the low 32 bits are the value, the high
+	// 32 bits a tag that keeps the value spaces apart. Tag 0 is reserved for
+	// RE::FormID, which is globally unique across form types, so keywords,
+	// races, classes, outfits, factions and armor addons all share it.
+	inline constexpr std::uint64_t sigForm(RE::FormID a_id)
+	{
+		return static_cast<std::uint64_t>(a_id);
+	}
+	inline constexpr std::uint64_t sigTagged(std::uint32_t a_tag, std::uint32_t a_value)
+	{
+		return (static_cast<std::uint64_t>(a_tag) << 32) | static_cast<std::uint64_t>(a_value);
+	}
+
+	// Appends one key per SET BIT of a_mask. Used for the tests written as
+	// `form.mask & filter.mask`, which is true iff the two share a bit -- so
+	// the bits, not the mask, are the indexable unit. A zero mask contributes
+	// nothing, which is right: `x & 0` is never true.
+	void appendMaskBits(std::vector<std::uint64_t>& a_out, std::uint32_t a_tag, std::uint32_t a_mask);
+
+	// Where each rule landed, and how many (form, rule) pairs each bucket cost.
+	// Six counters incremented once per rule (and twice per rule for the visit
+	// totals), i.e. nothing measurable; they exist so the bucket distribution
+	// of a real config is a measurement rather than an assumption.
+	struct IndexStats
+	{
+		std::uint64_t rulesKeyed = 0;      // restricted to a candidate list
+		std::uint64_t rulesScanned = 0;    // a filter with no finite key set
+		std::uint64_t rulesStale = 0;      // keyable, but an earlier rule's patch() invalidated the index
+		std::uint64_t candidateVisits = 0; // forms visited by keyed rules
+		std::uint64_t scanVisits = 0;      // forms visited by scanning rules
+		std::uint64_t indexBuilds = 0;
+	};
+	IndexStats& stats();
+
+	// form signal -> ascending indices into the form array.
+	class FormSignalIndex
+	{
+	public:
+		// a_formIdx must be non-decreasing across calls, which is what lets the
+		// duplicate check be a single comparison against the bucket's back().
+		void add(std::uint64_t a_key, std::uint32_t a_formIdx);
+
+		// Ascending, unique form indices carrying at least one of a_keys.
+		// a_out is cleared first. An empty a_keys yields an empty a_out.
+		void gather(const std::vector<std::uint64_t>& a_keys, std::vector<std::uint32_t>& a_out) const;
+
+		std::size_t signals() const { return m_buckets.size(); }
+
+	private:
+		std::unordered_map<std::uint64_t, std::vector<std::uint32_t>> m_buckets;
+	};
+
+	// Every keyword a form (or, for NPC, its race) holds. Reproduces the base
+	// RE::BGSKeywordForm::HasKeyword, which is a linear scan over this array --
+	// none of TESNPC, TESRace, TESObjectWEAP or TESObjectARMO overrides slot 04.
+	void addKeywordSignals(FormSignalIndex& a_index, const RE::BGSKeywordForm* a_kf, std::uint32_t a_formIdx);
+
+	// The two shapes every AND/OR filter pair in this codebase has:
+	//   found |= (!andList.empty() || !orList.empty()) && andHolds && orHolds
+	// `andHolds` needs EVERY resolved AND entry, so any one of them is a
+	// necessary signal; `orHolds` needs ANY resolved OR entry, so all of them
+	// are. An AND list that resolved to nothing can never hold, so it
+	// contributes no signal and the disjunct can never fire.
+	template <class T, class KeyFn>
+	void appendAndOrSignals(std::vector<std::uint64_t>& a_out, bool a_andPresent,
+		const std::vector<T>& a_andResolved, bool a_orPresent, const std::vector<T>& a_orResolved,
+		KeyFn a_key)
+	{
+		if (a_andPresent) {
+			if (!a_andResolved.empty()) {
+				a_key(a_out, a_andResolved.front());
+			}
+			return;
+		}
+		if (a_orPresent) {
+			for (const auto& v : a_orResolved) {
+				a_key(a_out, v);
+			}
+		}
+	}
 }
 
 #endif

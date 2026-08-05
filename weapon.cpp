@@ -110,6 +110,97 @@ namespace WEAPON
 
 			return w;
 		}
+
+		// ==================================================================
+		// PHASE 3 -- the rule index for WEAPON. See formfilter.h for the
+		// general argument.
+		//
+		// process_patch_instructions sets `found = true` at exactly these
+		// places: filterByAnimationTypeOr, filterByFirstPersonModelOr,
+		// filterBySkills (embeddedAVs), the EditorID-substring pair, the
+		// keyword pair, and the "no filter at all" catch-all. Everything else
+		// (keywordsExcluded, objectExcluded, filterByEditorIdContainsExcluded,
+		// restrictToFlags, restrictToSkills) is guarded by `found` or only
+		// writes `found = false`.
+		// ==================================================================
+		constexpr std::uint32_t kTagAnimationType = 1;
+		constexpr std::uint32_t kTagSkill = 2;
+
+		bool weaponRuleSignals(const patch_instruction& line, const formfilter::ResolvedCommonFilters& common,
+			const ResolvedWeaponFilters& wf, std::vector<std::uint64_t>& a_keys)
+		{
+			a_keys.clear();
+
+			if (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) {
+				return false;
+			}
+			// weapon.cpp's catch-all: with all of these empty every weapon matches.
+			if (line.object.empty() && line.keywords.empty() && line.filterByFirstPersonModelOr.empty() &&
+				line.keywordsOr.empty() && line.embeddedAVs.empty() && line.filterAnimationTypeOr.empty()) {
+				return false;
+			}
+
+			const auto keyKeyword = [](std::vector<std::uint64_t>& out, RE::BGSKeyword* const& kw) {
+				if (kw) {
+					out.push_back(formfilter::sigForm(kw->formID));
+				}
+			};
+			formfilter::appendAndOrSignals(a_keys, !line.keywords.empty(), common.keywords,
+				!line.keywordsOr.empty(), common.keywordsOr, keyKeyword);
+
+			for (const RE::WEAPON_TYPE t : wf.animationTypeOr) {
+				a_keys.push_back(formfilter::sigTagged(kTagAnimationType, static_cast<std::uint32_t>(t)));
+			}
+			for (const RE::FormID id : wf.firstPersonModelOr) {
+				a_keys.push_back(formfilter::sigForm(id));
+			}
+			for (const RE::ActorValue av : wf.embeddedAVs) {
+				a_keys.push_back(formfilter::sigTagged(kTagSkill, static_cast<std::uint32_t>(av)));
+			}
+			return true;
+		}
+
+		// patch() writes indexed attributes, so a rule applied earlier can
+		// change whether a later rule matches. Every write site in
+		// WEAPON::patch to the keyword array, weaponData.animationType,
+		// weaponData.skill or firstPersonModelObject is guarded by one of:
+		//   keywordsToAdd / keywordsToRemove, mirrorWeapon, templateWeapon,
+		//   modelFirstPerson, animationType (setAnimationType),
+		//   skillType (setSkillType).
+		// From the first such rule on, the index is stale and every rule scans
+		// in full. Applied before the rule is classified, because the rule's
+		// own `object` loop patches before its scan.
+		bool weaponRuleInvalidatesIndex(const patch_instruction& line)
+		{
+			// mirrorWeapon / templateWeapon / modelFirstPerson come from
+			// extractValueString, which writes the literal "none" when the key
+			// is ABSENT -- so they are never empty, and the test has to be the
+			// same `!empty() && != "none"` guard their patch() sites use.
+			const auto live = [](const std::string& v) { return !v.empty() && v != "none"; };
+			return !line.keywordsToAdd.empty() || !line.keywordsToRemove.empty() ||
+				live(line.mirrorWeapon) || live(line.templateWeapon) ||
+				live(line.modelFirstPerson) || !line.setAnimationType.empty() ||
+				!line.setSkillType.empty();
+		}
+
+		void buildWeaponIndex(const RE::BSTArray<RE::TESObjectWEAP*>& a_array, formfilter::FormSignalIndex& a_index)
+		{
+			const std::uint32_t n = static_cast<std::uint32_t>(a_array.size());
+			for (std::uint32_t i = 0; i < n; ++i) {
+				RE::TESObjectWEAP* w = a_array[i];
+				if (!w) {
+					continue;
+				}
+				formfilter::addKeywordSignals(a_index, static_cast<const RE::BGSKeywordForm*>(w), i);
+				a_index.add(formfilter::sigTagged(kTagAnimationType,
+					static_cast<std::uint32_t>(w->weaponData.animationType.underlying())), i);
+				a_index.add(formfilter::sigTagged(kTagSkill,
+					static_cast<std::uint32_t>(w->weaponData.skill.underlying())), i);
+				if (w->firstPersonModelObject) {
+					a_index.add(formfilter::sigForm(w->firstPersonModelObject->formID), i);
+				}
+			}
+		}
 	}
 
 	struct patch_instruction create_patch_instructions(const std::string& line)
@@ -217,7 +308,17 @@ namespace WEAPON
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectWEAP>();
 
+		// PHASE 3: built on first use, so a config of nothing but explicitly
+		// named weapons never pays for it.
+		formfilter::FormSignalIndex index;
+		bool                        indexBuilt = false;
+		bool                        indexStale = false;
+		std::vector<std::uint64_t>  keys;
+		std::vector<std::uint32_t>  candidates;
+
 		for (const auto& line : tokens) {
+			indexStale = indexStale || weaponRuleInvalidatesIndex(line);
+
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -258,7 +359,33 @@ namespace WEAPON
 
 			const ResolvedWeaponFilters wf = resolveWeaponFilters(line);
 
-			for (const auto& curobj : ObjectArray) {
+			// PHASE 3: restrict the scan to the weapons carrying at least one
+			// of the signals this rule names.
+			const bool keyed = !indexStale && weaponRuleSignals(line, common, wf, keys);
+			if (keyed) {
+				if (!indexBuilt) {
+					buildWeaponIndex(ObjectArray, index);
+					indexBuilt = true;
+					++formfilter::stats().indexBuilds;
+				}
+				index.gather(keys, candidates);
+			}
+			const std::uint32_t scanCount =
+				static_cast<std::uint32_t>(keyed ? candidates.size() : ObjectArray.size());
+			// Diagnostics only; see formfilter::IndexStats.
+			if (keyed) {
+				++formfilter::stats().rulesKeyed;
+				formfilter::stats().candidateVisits += scanCount;
+			} else {
+				if (indexStale) {
+					++formfilter::stats().rulesStale;
+				}
+				++formfilter::stats().rulesScanned;
+				formfilter::stats().scanVisits += scanCount;
+			}
+
+			for (std::uint32_t scanIdx = 0; scanIdx < scanCount; ++scanIdx) {
+				const auto& curobj = ObjectArray[keyed ? candidates[scanIdx] : scanIdx];
 				//logger::info("processing npc");
 				bool found = false;
 				bool keywordAnd = false;

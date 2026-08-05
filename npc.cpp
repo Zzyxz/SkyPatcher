@@ -354,6 +354,162 @@ namespace NPC
 		return l;
 	}
 
+	// ======================================================================
+	// PHASE 3 -- the rule index for NPC. See formfilter.h for the general
+	// argument; what follows is the NPC-specific reading of findObject.
+	//
+	// findObject sets `found = true` at exactly these places:
+	//   * the keyword pair            (keywords AND / keywordsOr OR)
+	//   * filterByRaces               (OR over view.races)
+	//   * filterByDefaultOutfits      (OR over view.outfits)
+	//   * filterByClass               (OR over view.classes)
+	//   * filterByCombatStyle         (OR over view.combatStyles)
+	//   * filterByPCLevelMult / filterByAutoCalc / filterByEssential /
+	//     filterByProtected -- each of which sets `found` with NO `!found`
+	//     guard, so it can turn a non-match into a match on its own
+	//   * the faction pair            (filterFactions AND / filterFactionsOr OR)
+	//   * the EditorID-substring pair
+	//   * the "no identifying filter at all" catch-all at npc.cpp:2670
+	// Everything after that point (isFemale, every keywordsExcluded /
+	// factionsExcluded / classExclude / objectExcluded / skillRestrict /
+	// restrictTo* block) is guarded by `found` or only ever writes
+	// `found = false`, so none of it can add a match.
+	// ======================================================================
+	namespace
+	{
+		// A scalar filter whose block actually runs: upstream guards each of
+		// them with `!empty() && != "none"`.
+		bool liveScalarFilter(const std::string& a_value)
+		{
+			return !a_value.empty() && a_value != "none";
+		}
+
+		// Returns true if the rule may be restricted to the forms carrying one
+		// of a_keys; false if it has to see every NPC.
+		bool npcRuleSignals(const patch_instruction& line, const ResolvedNpcFilters& view,
+			std::vector<std::uint64_t>& a_keys)
+		{
+			a_keys.clear();
+
+			// The four unguarded flag filters. Any of them can set found=true
+			// on a form no other filter selected, so the rule is not keyable.
+			if (liveScalarFilter(line.filterPCMult) || liveScalarFilter(line.filterAutoCalc) ||
+				liveScalarFilter(line.filterEssential) || liveScalarFilter(line.filterProtected)) {
+				return false;
+			}
+
+			// A substring over the EditorID has no finite key set.
+			if (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) {
+				return false;
+			}
+
+			// npc.cpp:2670 -- with every identifying filter empty the rule
+			// matches every NPC but the player. (The two EditorID members of
+			// that condition are already known empty here.)
+			if (line.object.empty() && line.races.empty() && line.keywords.empty() &&
+				line.keywordsOr.empty() && line.filterClass.empty() && line.filterCombatStyle.empty() &&
+				line.filterFactions.empty() && line.filterFactionsOr.empty() && line.filterByOutfit.empty()) {
+				return false;
+			}
+
+			const auto keyKeyword = [](std::vector<std::uint64_t>& out, RE::BGSKeyword* const& kw) {
+				if (kw) {
+					out.push_back(formfilter::sigForm(kw->formID));
+				}
+			};
+			const auto keyFaction = [](std::vector<std::uint64_t>& out, RE::TESFaction* const& f) {
+				if (f) {
+					out.push_back(formfilter::sigForm(f->formID));
+				}
+			};
+
+			formfilter::appendAndOrSignals(a_keys, !line.keywords.empty(), view.common.keywords,
+				!line.keywordsOr.empty(), view.common.keywordsOr, keyKeyword);
+			formfilter::appendAndOrSignals(a_keys, !line.filterFactions.empty(), view.factions,
+				!line.filterFactionsOr.empty(), view.factionsOr, keyFaction);
+
+			// The plain OR lists. Iterating the RESOLVED list is what makes a
+			// filter whose identifiers all failed to resolve contribute nothing:
+			// upstream that loop never fires either.
+			for (auto* race : view.races) {
+				if (race) {
+					a_keys.push_back(formfilter::sigForm(race->formID));
+				}
+			}
+			for (const RE::FormID id : view.outfits) {
+				a_keys.push_back(formfilter::sigForm(id));
+			}
+			for (const RE::FormID id : view.classes) {
+				a_keys.push_back(formfilter::sigForm(id));
+			}
+			for (const RE::FormID id : view.combatStyles) {
+				a_keys.push_back(formfilter::sigForm(id));
+			}
+			return true;
+		}
+
+		// patch() writes the very attributes the index is keyed on, and a rule
+		// applied earlier in the list can therefore change whether a LATER rule
+		// matches a form. Every write site in NPC::patch to an indexed
+		// attribute -- race, npcClass, defaultOutfit, the keyword array, the
+		// faction array -- is guarded by one of these setters:
+		//
+		//   keywordsToAdd / keywordsToRemove   -> AddKeyword / RemoveKeyword
+		//   factionsToAdd / factionsToRemove   -> factions.push_back / erase
+		//   outfitDefault                      -> curobj->defaultOutfit =
+		//   race                               -> curobj->race =
+		//   Class / clearClassFromAttributes   -> curobj->npcClass =
+		//
+		// (combatStyle is never written by patch; copyVisualStyle touches only
+		// head/tint/body data.) Once such a rule has been seen the index is
+		// stale, so every rule from that point on scans in full. The rule's own
+		// `object` loop patches before its scan, so the mark is applied BEFORE
+		// the rule is classified, not after.
+		bool npcRuleInvalidatesIndex(const patch_instruction& line)
+		{
+			// The scalars come from extractValueString, which writes the literal
+			// "none" when the key is ABSENT -- so `!empty()` is true for every
+			// rule ever parsed, and the test has to be the same
+			// `!empty() && != "none"` guard the patch() sites use.
+			return !line.keywordsToAdd.empty() || !line.keywordsToRemove.empty() ||
+				!line.factionsToAdd.empty() || !line.factionsToRemove.empty() ||
+				liveScalarFilter(line.outfitDefault) || liveScalarFilter(line.race) ||
+				liveScalarFilter(line.Class) || liveScalarFilter(line.clearClassFromAttributes);
+		}
+
+		void buildNpcIndex(const RE::BSTArray<RE::TESNPC*>& a_array, formfilter::FormSignalIndex& a_index)
+		{
+			const std::uint32_t n = static_cast<std::uint32_t>(a_array.size());
+			for (std::uint32_t i = 0; i < n; ++i) {
+				RE::TESNPC* npc = a_array[i];
+				if (!npc) {
+					continue;
+				}
+				formfilter::addKeywordSignals(a_index, static_cast<const RE::BGSKeywordForm*>(npc), i);
+				if (npc->race) {
+					// The race is both a filterByRaces target and, for the
+					// keyword test, a second keyword holder.
+					a_index.add(formfilter::sigForm(npc->race->formID), i);
+					formfilter::addKeywordSignals(a_index, static_cast<const RE::BGSKeywordForm*>(npc->race), i);
+				}
+				if (npc->npcClass) {
+					a_index.add(formfilter::sigForm(npc->npcClass->formID), i);
+				}
+				if (npc->combatStyle) {
+					a_index.add(formfilter::sigForm(npc->combatStyle->formID), i);
+				}
+				if (npc->defaultOutfit) {
+					a_index.add(formfilter::sigForm(npc->defaultOutfit->formID), i);
+				}
+				for (const auto& rank : npc->factions) {
+					if (rank.faction) {
+						a_index.add(formfilter::sigForm(rank.faction->formID), i);
+					}
+				}
+			}
+		}
+	}
+
 	//void process_patch_instructions(const patch_instruction& line)
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
@@ -364,7 +520,20 @@ namespace NPC
 
 		logger::debug("NPC count: {}", NPCArray.size());
 
+		// Built on first use: a config made up entirely of rules that name an
+		// explicit NPC and nothing else never reaches the form loop at all, and
+		// must not pay for an index.
+		formfilter::FormSignalIndex index;
+		bool                        indexBuilt = false;
+		bool                        indexStale = false;
+		std::vector<std::uint64_t>  keys;
+		std::vector<std::uint32_t>  candidates;
+
 		for (const auto& line : tokens) {
+			// Applied before this rule is classified: its own `object` loop
+			// patches before its scan runs.
+			indexStale = indexStale || npcRuleInvalidatesIndex(line);
+
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm* currentform = nullptr;
@@ -393,7 +562,35 @@ namespace NPC
 			// here, not once per (rule, NPC) pair.
 			const ResolvedNpcFilters view = makeFilterView(line);
 
-			for (const auto& curobj : NPCArray) {
+			// PHASE 3: restrict the scan to the NPCs that carry at least one of
+			// the signals this rule's filters name. `keyed == false` means the
+			// rule has a filter with no finite key set and still scans
+			// everything; an empty candidate list means the rule's filters all
+			// resolved to nothing and it can never match.
+			const bool keyed = !indexStale && npcRuleSignals(line, view, keys);
+			if (keyed) {
+				if (!indexBuilt) {
+					buildNpcIndex(NPCArray, index);
+					indexBuilt = true;
+					++formfilter::stats().indexBuilds;
+				}
+				index.gather(keys, candidates);
+			}
+			const std::uint32_t scanCount = static_cast<std::uint32_t>(keyed ? candidates.size() : NPCArray.size());
+			// Diagnostics only; see formfilter::IndexStats.
+			if (keyed) {
+				++formfilter::stats().rulesKeyed;
+				formfilter::stats().candidateVisits += scanCount;
+			} else {
+				if (indexStale) {
+					++formfilter::stats().rulesStale;
+				}
+				++formfilter::stats().rulesScanned;
+				formfilter::stats().scanVisits += scanCount;
+			}
+
+			for (std::uint32_t scanIdx = 0; scanIdx < scanCount; ++scanIdx) {
+				const auto& curobj = NPCArray[keyed ? candidates[scanIdx] : scanIdx];
 				if (!curobj) {
 					logger::debug("Skipping nullptr NPC in NPCArray.");
 					continue;

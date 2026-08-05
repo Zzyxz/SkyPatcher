@@ -111,6 +111,133 @@ namespace ARMOR
 
 			return a;
 		}
+
+		// ==================================================================
+		// PHASE 3 -- the rule index for ARMOR. See formfilter.h for the
+		// general argument.
+		//
+		// process_patch_instructions_armor sets `found = true` at exactly
+		// these places: the EditorID-substring pair, the fullName-substring
+		// pair, filterByArmorTypes, the bipedSlot pair, the keyword pair, the
+		// armorAddon pair, and the "no filter at all" catch-all. Everything
+		// after that is guarded by `found` or only writes `found = false`.
+		// ==================================================================
+		constexpr std::uint32_t kTagArmorType = 1;
+		constexpr std::uint32_t kTagBipedSlot = 2;
+
+		bool armorRuleSignals(const patch_instruction_armor& line, const formfilter::ResolvedCommonFilters& common,
+			const ResolvedArmorFilters& af, std::vector<std::uint64_t>& a_keys)
+		{
+			a_keys.clear();
+
+			// Two substring tests, neither of which has a finite key set.
+			if (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty() ||
+				!line.filterByNameContains.empty() || !line.filterByNameContainsOr.empty()) {
+				return false;
+			}
+			// armor.cpp's catch-all.
+			if (line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() &&
+				line.bipedSlot.empty() && line.bipedSlotOr.empty() && line.filterByArmorType.empty() &&
+				line.filterByArmorAddons.empty() && line.filterByArmorAddonsOr.empty()) {
+				return false;
+			}
+
+			const auto keyKeyword = [](std::vector<std::uint64_t>& out, RE::BGSKeyword* const& kw) {
+				if (kw) {
+					out.push_back(formfilter::sigForm(kw->formID));
+				}
+			};
+			formfilter::appendAndOrSignals(a_keys, !line.keywords.empty(), common.keywords,
+				!line.keywordsOr.empty(), common.keywordsOr, keyKeyword);
+
+			// `bipedModelData.armorType & t` and `bipedObjectSlots & slot` are
+			// both bit tests, so the SET BITS are the indexable unit.
+			for (const RE::BIPED_MODEL::ArmorType t : af.armorTypes) {
+				formfilter::appendMaskBits(a_keys, kTagArmorType, static_cast<std::uint32_t>(t));
+			}
+			if (!line.bipedSlot.empty()) {
+				// The AND list needs every slot, so its first entry is a
+				// necessary signal. An AND list that resolved to nothing leaves
+				// bipedSlotAnd false, so it contributes no signal at all.
+				if (!af.bipedSlot.empty()) {
+					formfilter::appendMaskBits(a_keys, kTagBipedSlot, static_cast<std::uint32_t>(af.bipedSlot.front()));
+				}
+			} else if (!line.bipedSlotOr.empty()) {
+				for (const auto slot : af.bipedSlotOr) {
+					formfilter::appendMaskBits(a_keys, kTagBipedSlot, static_cast<std::uint32_t>(slot));
+				}
+			}
+
+			if (!line.filterByArmorAddons.empty()) {
+				// af.armorAddons keeps a 0 slot for an identifier that did not
+				// resolve; a 0 entry is skipped by the upstream AND loop, so the
+				// first NON-ZERO entry is the necessary signal. All-holes means
+				// the test can never pass and no signal is emitted.
+				for (const RE::FormID id : af.armorAddons) {
+					if (id) {
+						a_keys.push_back(formfilter::sigForm(id));
+						break;
+					}
+				}
+			} else if (!line.filterByArmorAddonsOr.empty()) {
+				for (const RE::FormID id : af.armorAddonsOr) {
+					a_keys.push_back(formfilter::sigForm(id));
+				}
+			}
+			return true;
+		}
+
+		// patch() writes indexed attributes, so a rule applied earlier can
+		// change whether a later rule matches. Every write site in
+		// ARMOR::patch to the keyword array, bipedModelData.armorType,
+		// bipedModelData.bipedObjectSlots or armorAddons is guarded by one of:
+		//   keywordsToAdd / keywordsToRemove, mirrorArmor, templateArmor,
+		//   bipedSlotsToAdd (setBipedSlot), bipedSlotsToRemove
+		//   (removeBipedSlot), armorType, clearArmorAddons,
+		//   armorAddonsToAdd (armorAddonToAdd), armorAddonsToRemove
+		//   (armorAddonToRemove).
+		// From the first such rule on, the index is stale.
+		bool armorRuleInvalidatesIndex(const patch_instruction_armor& line)
+		{
+			// mirrorArmor / templateArmor / armorType / clearArmorAddons come
+			// from extractValueString, which writes the literal "none" when the
+			// key is ABSENT -- so they are never empty, and the test has to be
+			// the same `!empty() && != "none"` guard their patch() sites use.
+			const auto live = [](const std::string& v) { return !v.empty() && v != "none"; };
+			return !line.keywordsToAdd.empty() || !line.keywordsToRemove.empty() ||
+				live(line.mirrorArmor) || live(line.templateArmor) ||
+				!line.setBipedSlot.empty() || !line.removeBipedSlot.empty() ||
+				live(line.armorType) || live(line.clearArmorAddons) ||
+				!line.armorAddonToAdd.empty() || !line.armorAddonToRemove.empty();
+		}
+
+		void buildArmorIndex(const RE::BSTArray<RE::TESObjectARMO*>& a_array, formfilter::FormSignalIndex& a_index)
+		{
+			const std::uint32_t n = static_cast<std::uint32_t>(a_array.size());
+			std::vector<std::uint64_t> bits;
+			for (std::uint32_t i = 0; i < n; ++i) {
+				RE::TESObjectARMO* armor = a_array[i];
+				if (!armor) {
+					continue;
+				}
+				formfilter::addKeywordSignals(a_index, static_cast<const RE::BGSKeywordForm*>(armor), i);
+
+				bits.clear();
+				formfilter::appendMaskBits(bits, kTagArmorType,
+					static_cast<std::uint32_t>(armor->bipedModelData.armorType.underlying()));
+				formfilter::appendMaskBits(bits, kTagBipedSlot,
+					static_cast<std::uint32_t>(armor->bipedModelData.bipedObjectSlots.underlying()));
+				for (const std::uint64_t key : bits) {
+					a_index.add(key, i);
+				}
+
+				for (const auto& addon : armor->armorAddons) {
+					if (addon) {
+						a_index.add(formfilter::sigForm(addon->formID), i);
+					}
+				}
+			}
+		}
 	}
 
 	struct patch_instruction_armor create_patch_instruction_armor(const std::string& line)
@@ -220,7 +347,17 @@ namespace ARMOR
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
 		auto& ArmorArray = dataHandler->GetFormArray<RE::TESObjectARMO>();
+
+		// PHASE 3: built on first use.
+		formfilter::FormSignalIndex index;
+		bool                        indexBuilt = false;
+		bool                        indexStale = false;
+		std::vector<std::uint64_t>  keys;
+		std::vector<std::uint32_t>  candidates;
+
 		for (const auto& line : tokens) {
+			indexStale = indexStale || armorRuleInvalidatesIndex(line);
+
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -258,7 +395,33 @@ namespace ARMOR
 
 			const ResolvedArmorFilters af = resolveArmorFilters(line);
 
-			for (const auto& curobj : ArmorArray) {
+			// PHASE 3: restrict the scan to the armors carrying at least one of
+			// the signals this rule names.
+			const bool keyed = !indexStale && armorRuleSignals(line, common, af, keys);
+			if (keyed) {
+				if (!indexBuilt) {
+					buildArmorIndex(ArmorArray, index);
+					indexBuilt = true;
+					++formfilter::stats().indexBuilds;
+				}
+				index.gather(keys, candidates);
+			}
+			const std::uint32_t scanCount =
+				static_cast<std::uint32_t>(keyed ? candidates.size() : ArmorArray.size());
+			// Diagnostics only; see formfilter::IndexStats.
+			if (keyed) {
+				++formfilter::stats().rulesKeyed;
+				formfilter::stats().candidateVisits += scanCount;
+			} else {
+				if (indexStale) {
+					++formfilter::stats().rulesStale;
+				}
+				++formfilter::stats().rulesScanned;
+				formfilter::stats().scanVisits += scanCount;
+			}
+
+			for (std::uint32_t scanIdx = 0; scanIdx < scanCount; ++scanIdx) {
+				const auto& curobj = ArmorArray[keyed ? candidates[scanIdx] : scanIdx];
 				bool found = false;
 				bool keywordAnd = false;
 				bool keywordOr = false;

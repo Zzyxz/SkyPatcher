@@ -16,6 +16,8 @@
 #include "formfilter.h"
 #include "utility.h"
 
+#include <algorithm>
+
 namespace formfilter
 {
 	const std::vector<std::string>& noStrings()
@@ -374,5 +376,75 @@ namespace formfilter
 			}
 		}
 		return false;
+	}
+
+	// =====================================================================
+	// PHASE 3 -- the rule index. See formfilter.h for the soundness argument.
+	// =====================================================================
+
+	IndexStats& stats()
+	{
+		static IndexStats s;
+		return s;
+	}
+
+	void appendMaskBits(std::vector<std::uint64_t>& a_out, std::uint32_t a_tag, std::uint32_t a_mask)
+	{
+		while (a_mask) {
+			const std::uint32_t bit = a_mask & (~a_mask + 1u);  // lowest set bit
+			a_out.push_back(sigTagged(a_tag, bit));
+			a_mask &= ~bit;
+		}
+	}
+
+	void FormSignalIndex::add(std::uint64_t a_key, std::uint32_t a_formIdx)
+	{
+		auto& bucket = m_buckets[a_key];
+		// Forms are indexed in ascending order, so a form that carries the same
+		// signal twice (the same keyword listed twice, a race whose keyword the
+		// NPC also carries) only ever collides with the last entry.
+		if (bucket.empty() || bucket.back() != a_formIdx) {
+			bucket.push_back(a_formIdx);
+		}
+	}
+
+	void FormSignalIndex::gather(const std::vector<std::uint64_t>& a_keys, std::vector<std::uint32_t>& a_out) const
+	{
+		a_out.clear();
+		if (a_keys.empty()) {
+			return;
+		}
+		// The overwhelmingly common case: a rule names exactly one signal, so
+		// the bucket IS the candidate list and is already ascending and unique.
+		if (a_keys.size() == 1) {
+			const auto it = m_buckets.find(a_keys.front());
+			if (it != m_buckets.end()) {
+				a_out = it->second;
+			}
+			return;
+		}
+		for (const std::uint64_t key : a_keys) {
+			const auto it = m_buckets.find(key);
+			if (it != m_buckets.end()) {
+				a_out.insert(a_out.end(), it->second.begin(), it->second.end());
+			}
+		}
+		// Sorting restores the form array's own order, which is what makes the
+		// candidate walk visit forms in exactly the sequence the full scan did.
+		std::sort(a_out.begin(), a_out.end());
+		a_out.erase(std::unique(a_out.begin(), a_out.end()), a_out.end());
+	}
+
+	void addKeywordSignals(FormSignalIndex& a_index, const RE::BGSKeywordForm* a_kf, std::uint32_t a_formIdx)
+	{
+		if (!a_kf || !a_kf->keywords) {
+			return;
+		}
+		const std::uint32_t n = a_kf->numKeywords;
+		for (std::uint32_t i = 0; i < n; ++i) {
+			if (a_kf->keywords[i]) {
+				a_index.add(sigForm(a_kf->keywords[i]->formID), a_formIdx);
+			}
+		}
 	}
 }
