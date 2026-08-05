@@ -265,10 +265,10 @@ RE::FormID BuildFormIDFromIdentifier(const std::string& identifier)
 
 std::string toLowerCase(std::string pString)
 {
-	std::string lowercasepString = pString;
-	std::transform(lowercasepString.begin(), lowercasepString.end(), lowercasepString.begin(), [](unsigned char c) { return std::tolower(c); });
+	std::transform(pString.begin(), pString.end(), pString.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-	return lowercasepString;
+	return pString;
 }
 
 // Function to convert string to hexadecimal representation
@@ -357,7 +357,7 @@ void extractDataStrings(const std::string& line, const std::string& pattern, std
 	std::smatch match;
 	std::regex_search(line, match, regex_pattern);
 
-	std::shared_ptr<std::vector<std::string>> data = std::make_shared<std::vector<std::string>>();
+	std::vector<std::string> data;
 	if (!match.empty() && !match[1].str().empty()) {
 		std::string          data_str = match[1];
 		static const std::regex list_regex("[^,]+", std::regex::icase);
@@ -370,13 +370,13 @@ void extractDataStrings(const std::string& line, const std::string& pattern, std
 			tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
 
 			if (tempVar != "none") {
-				(*data).push_back(tempVar);
+				data.push_back(tempVar);
 			}
 			++iterator;
 		}
 	}
 
-	destination = (*data);
+	destination = std::move(data);
 }
 
 void extractMultiDataString(const std::string& line, const std::string& pattern, std::vector<std::string>& pcMultFlag,
@@ -525,22 +525,21 @@ void extractToArr2D(const std::string& line, const std::string& regex_pattern_st
 
 		std::vector<std::vector<std::string>> arr2D(arr.size());
 
-		for (int i = 0; i < arr.size(); i++) {
+		for (size_t i = 0; i < arr.size(); i++) {
 			std::vector<std::string> splitArr;
-			size_t                   innerPos = 0;
-			std::string              innerToken;
-			while ((innerPos = arr[i].find("~")) != std::string::npos) {
-				innerToken = arr[i].substr(0, innerPos);
-				innerToken = trim(innerToken);
-				splitArr.push_back(innerToken);
-				arr[i].erase(0, innerPos + 1);
+			size_t                   start = 0;
+			while (start <= arr[i].size()) {
+				const size_t innerPos = arr[i].find('~', start);
+				const size_t end = (innerPos == std::string::npos) ? arr[i].size() : innerPos;
+				splitArr.push_back(trim(arr[i].substr(start, end - start)));
+				if (innerPos == std::string::npos) {
+					break;
+				}
+				start = innerPos + 1;
 			}
-			innerToken = arr[i];
-			innerToken = trim(innerToken);
-			splitArr.push_back(innerToken);
-			arr2D[i] = splitArr;
+			arr2D[i] = std::move(splitArr);
 		}
-		target_value = arr2D;
+		target_value = std::move(arr2D);
 	}
 }
 
