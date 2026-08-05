@@ -29,6 +29,90 @@ const std::regex& cached_regex(const std::string& pattern, std::regex::flag_type
 	}
 	return it->second;
 }
+
+// ---------------------------------------------------------------------------
+// modName -> load-order entry memo.
+//
+// RE::TESDataHandler::LookupModByName (CommonLibSSE-NG, TESDataHandler.cpp:187) walks the
+// load order as a singly-linked BSSimpleList, calling strlen() on every node before it can
+// even try _strnicmp. GetFormFromIdentifier used to trigger that walk TWICE per identifier:
+// once directly for the IsLight() test, and once again inside LookupForm -> LookupFormID.
+// On a ~2000-plugin modlist (ESLs push the count well past the 255 regular-plugin cap) that
+// is ~4000 strlen+compare steps for every single form reference in every config line.
+//
+// Lifetime / threading assumption -- the same shape as cached_regex above, and stated here
+// for the same reason: config parsing and patching both run single-threaded at kDataLoaded,
+// and the load order is fixed for the session (the game does not add or remove a TESFile
+// after kDataLoaded). If either ever stops being true this becomes a data race and/or a
+// stale cache, and would need a lock plus an invalidation hook.
+//
+// The key is deliberately COMPLETE: it is (data handler, ASCII-folded modName) -- every
+// input LookupModByName actually consumes. cached_regex above keys on the pattern text while
+// its call sites pass differing flags, which is a latent footgun; that shape is not repeated
+// here. The handler pointer is stored next to the map and the map is cleared if it ever
+// changes, so one handler's answers can never be served for another's.
+//
+// Case folding: LookupModByName compares with _strnicmp, so an un-folded key would make
+// "Skyrim.esm" and "skyrim.esm" two separate entries (a wasted walk, not a wrong answer).
+// The fold here is ASCII-only. That is deliberately no LOOSER than _strnicmp under any
+// locale: SkyPatcher never calls setlocale, so in the "C" locale the two agree exactly, and
+// under any other locale ASCII folding can only distinguish MORE strings than _strnicmp
+// would. Over-partitioning costs at worst one redundant walk; under-partitioning would hand
+// back a different plugin's TESFile*, and this fold cannot do that.
+//
+// Negative results are cached too, and that is the point rather than an afterthought: a
+// modName that is NOT in the load order is LookupModByName's worst case -- it walks every
+// node and returns nullptr -- and a real config referencing a plugin the user has not
+// installed pays that once per identifier occurrence. Here `file == nullptr` is a cached
+// answer, not a cache miss.
+struct ModLookupEntry
+{
+	const RE::TESFile* file = nullptr;  // exactly what LookupModByName returned (may be null)
+	RE::FormID         prefix = 0;      // LookupFormID(0, modName) -- see below
+	bool               usable = false;  // false <=> LookupFormID returns 0 for every local ID
+};
+
+// `prefix` is obtained by asking LookupFormID itself for the zero-local-ID case rather than
+// by re-deriving its arithmetic here, so the equivalence below does not depend on this file
+// tracking CommonLibSSE's runtime-specific branches. Writing L for the local FormID:
+//
+//   LookupFormID(L, m) = 0                                  if !file || compileIndex == 0xFF
+//                      = (L & 0xFFFFFF) | (ci << 24)        VR without a compiled-file collection
+//                      = (ci << 24) + (small << 12) + L     otherwise
+//
+// and therefore prefix = LookupFormID(0, m) = 0 / (ci << 24) / ((ci << 24) + (small << 12)).
+// Every caller below masks L to 0xFFFFFF or 0xFFF, so 0 <= L <= 0xFFFFFF, which makes
+// (L & 0xFFFFFF) == L and makes L's bits disjoint from (ci << 24) -- so `|` and `+` agree.
+// In both live branches LookupFormID(L, m) == prefix + L exactly, for regular plugins
+// (ci <= 0xFD, small == 0) and for light ones (ci == 0xFE, small == the ESL index) alike.
+const ModLookupEntry& cached_mod_lookup(RE::TESDataHandler* dataHandler, std::string_view modName)
+{
+	static RE::TESDataHandler*                            owner = nullptr;
+	static std::unordered_map<std::string, ModLookupEntry> cache;
+	static std::string                                    key;  // reused: no allocation per call
+
+	if (owner != dataHandler) {
+		cache.clear();
+		owner = dataHandler;
+	}
+
+	key.assign(modName);
+	for (auto& c : key) {
+		if (c >= 'A' && c <= 'Z') {
+			c = static_cast<char>(c - 'A' + 'a');
+		}
+	}
+
+	auto it = cache.find(key);
+	if (it == cache.end()) {
+		ModLookupEntry entry;
+		entry.file = dataHandler->LookupModByName(modName);
+		entry.prefix = dataHandler->LookupFormID(0, modName);
+		entry.usable = entry.file && entry.file->GetCompileIndex() != 0xFF;
+		it = cache.emplace(key, entry).first;
+	}
+	return it->second;
+}
 }  // namespace
 
 RE::BIPED_MODEL::BipedObjectSlot getBipedObjectSlot(int slot)
@@ -170,13 +254,30 @@ RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
 	auto delimiter = identifier.find('|');
 	if (delimiter != std::string::npos) {
 		// Handle the case when '|' is present in the identifier
-		std::string modName = identifier.substr(0, delimiter);
-		std::string modForm = identifier.substr(delimiter + 1);
-		uint32_t    formID = std::stoul(modForm, nullptr, 16) & 0xFFFFFF;
-		auto*       mod = dataHandler->LookupModByName(modName.c_str());
-		if (mod && mod->IsLight())
-			formID = std::stoul(modForm, nullptr, 16) & 0xFFF;
-		return dataHandler->LookupForm(formID, modName.c_str());
+		const std::string_view modName{ identifier.data(), delimiter };
+		const std::string      modForm = identifier.substr(delimiter + 1);
+
+		// std::stoul used to be called twice on the identical string (once for the regular
+		// mask, once for the light mask). Same argument, same result -- and the same throw
+		// behaviour, because it was always the first call that would have thrown.
+		const uint32_t rawFormID = static_cast<uint32_t>(std::stoul(modForm, nullptr, 16));
+
+		// One load-order walk per DISTINCT modName for the whole session, instead of two per
+		// identifier occurrence. See cached_mod_lookup above for the equivalence argument.
+		const ModLookupEntry& mod = cached_mod_lookup(dataHandler, modName);
+
+		uint32_t formID = rawFormID & 0xFFFFFF;
+		if (mod.file && mod.file->IsLight())
+			formID = rawFormID & 0xFFF;
+
+		// Was: return dataHandler->LookupForm(formID, modName), i.e.
+		//      id = LookupFormID(formID, modName); return id ? LookupByID(id) : nullptr;
+		// !usable reproduces LookupFormID's `!file || compileIndex == 0xFF` early-out, which
+		// yields 0 and hence a null return.
+		if (!mod.usable)
+			return nullptr;
+		const RE::FormID fullFormID = mod.prefix + formID;
+		return fullFormID ? RE::TESForm::LookupByID(fullFormID) : nullptr;
 	} else {
 		return RE::TESForm::LookupByEditorID(identifier);
 	}
