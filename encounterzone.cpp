@@ -1,4 +1,5 @@
 #include "encounterzone.h"
+#include "formfilter.h"
 #include <utility.h>
 
 namespace ENCOUNTERZONE
@@ -56,6 +57,16 @@ namespace ENCOUNTERZONE
 				continue;
 			}
 
+			// PROTOTYPE: one view per rule, not per (rule, encounterzone)
+			// pair. encounterzone.cpp has no keywords/hasPlugin fields at
+			// all, so only modNames, editorId*, and objectExcluded are real.
+			const formfilter::CommonFilterView view{
+				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
+				formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
+				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
+				line.filterByEditorIdContainsExcluded, line.objectExcluded
+			};
+
 			for (const auto& curobj : ObjectArray) {
 				//logger::debug("{:08X} editorID {}", curobj->formID, clib_util::editorID::get_editorID(curobj));
 				//logger::debug("{:08X} editorID {}", RE::TESForm::LookupByEditorID("Saw01")->formID, "Saw01");
@@ -70,40 +81,19 @@ namespace ENCOUNTERZONE
 					continue;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
-				
 				if (!found && !line.filterByEditorIdContains.empty() ) {
-					for (const auto& editorString : line.filterByEditorIdContains) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							contains = true;
-						} else {
-							contains = false;
-							break;
-						}
-					}
+					contains = formfilter::matchesEditorIdAnd(view, curobj);
 				} else {
 					contains = true;
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty() ) {
 					//logger::info("keywords not empty");
-					for (const auto& editorString : line.filterByEditorIdContainsOr) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							containsOr = true;
-							break;
-						}
-					}
+					containsOr = formfilter::matchesEditorIdOr(view, curobj);
 				} else {
 					containsOr = true;
 				}
@@ -121,32 +111,20 @@ namespace ENCOUNTERZONE
 
 
 
+				// PROTOTYPE: preserved verbatim -- missing `&& found` that
+				// its siblings (e.g. filterByEditorIdContainsExcluded right
+				// below) have; not added here.
 				if (!line.objectExcluded.empty()) {
 					//logger::info("npc not empty");
-					for (const auto& npcstring : line.objectExcluded) {
-						RE::TESForm*       currentform = nullptr;
-						RE::BGSEncounterZone* npc = nullptr;
-
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::EncounterZone) {
-							npc = (RE::BGSEncounterZone*)currentform;
-
-							if (curobj->formID == npc->formID) {
-								found = false;
-								break;
-							}
-						}
+					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::EncounterZone)) {
+						found = false;
 					}
 				}
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found ) {
 					//logger::info("factions not empty");
-					for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							found = false;
-							break;
-						}
+					if (formfilter::hasExcludedEditorId(view, curobj)) {
+						found = false;
 					}
 				}
 

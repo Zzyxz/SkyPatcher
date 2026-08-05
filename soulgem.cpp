@@ -1,4 +1,5 @@
 #include "soulgem.h"
+#include "formfilter.h"
 #include <utility.h>
 
 namespace SOULGEM
@@ -113,6 +114,16 @@ namespace SOULGEM
 				continue;
 			}
 
+			// PROTOTYPE: one view per rule, not per (rule, soulgem) pair.
+			// This struct has no hasPlugin/hasPluginOr/filterByEditorIdContains*
+			// members, so those view slots are bound to formfilter::noStrings().
+			const formfilter::CommonFilterView view{
+				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
+				line.keywords, line.keywordsOr, line.keywordsExcluded,
+				formfilter::noStrings(), formfilter::noStrings(),
+				formfilter::noStrings(), line.objectExcluded
+			};
+
 			for (const auto& curobj : ObjectArray) {
 				//logger::info("processing npc");
 				bool found = false;
@@ -123,19 +134,11 @@ namespace SOULGEM
 					continue;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
-				
+
 				if (!line.alternateTexturesFind.empty()) {
 					for (const auto& textureString : line.alternateTexturesFind) {
 						RE::TESForm* currentform = nullptr;
@@ -154,48 +157,14 @@ namespace SOULGEM
 
 				if (!line.keywords.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywords) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordAnd = true;
-							} else {
-								keywordAnd = false;
-								//logger::debug(FMT_STRING("KeywordAnd Weapon does not have all keywords"));
-								break;
-							}
-							//logger::debug(FMT_STRING("KeywordAnd Weapon true"));
-						}
-					}
+					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsOr) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordOr = true;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
-					}
+					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
@@ -212,21 +181,9 @@ namespace SOULGEM
 
 				if (!line.objectExcluded.empty() && found) {
 					//logger::info("npc not empty");
-					for (const auto& npcstring : line.objectExcluded) {
-						RE::TESForm*       currentform = nullptr;
-						RE::TESSoulGem* npc = nullptr;
-
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::SoulGem) {
-							npc = (RE::TESSoulGem*)currentform;
-
-							if (curobj->formID == npc->formID) {
-								found = false;
-								logger::info("soulgem Excluded.");
-								break;
-							}
-						}
+					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::SoulGem)) {
+						found = false;
+						logger::info("soulgem Excluded.");
 					}
 				}
 

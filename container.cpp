@@ -1,4 +1,5 @@
 #include "container.h"
+#include "formfilter.h"
 namespace CONTAINER
 {
 
@@ -98,7 +99,15 @@ namespace CONTAINER
 				continue;
 			}
 
-
+			// PROTOTYPE: one view per rule, not per (rule, container) pair.
+			// container.cpp has no keywords/objectExcluded/hasPlugin fields at
+			// all, so only modNames and editorId* are real.
+			const formfilter::CommonFilterView view{
+				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
+				formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
+				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
+				line.filterByEditorIdContainsExcluded, formfilter::noStrings()
+			};
 
 			for (const auto& curobj : ObjectArray) {
 				//logger::info("processing npc");
@@ -108,19 +117,11 @@ namespace CONTAINER
 					continue;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
-				if (line.containerObjects.empty() && findObject(line, curobj)) {
+				if (line.containerObjects.empty() && findObject(line, view, curobj)) {
 					patchContainer(line, curobj);
 				}
 
@@ -416,25 +417,14 @@ namespace CONTAINER
 	}
 
 
-	bool findObject(const line_content& line, RE::TESObjectCONT* curobj)
+	bool findObject(const line_content& line, const formfilter::CommonFilterView& view, RE::TESObjectCONT* curobj)
 	{
 		bool found = false;
-		bool keywordAnd = false;
-		bool keywordOr = false;
 		bool contains = false;
 		bool containsOr = false;
 
-
 		if (!found && !line.filterByEditorIdContains.empty()) {
-			for (const auto& editorString : line.filterByEditorIdContains) {
-				if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-					contains = true;
-				}
-				else {
-					contains = false;
-					break;
-				}
-			}
+			contains = formfilter::matchesEditorIdAnd(view, curobj);
 		}
 		else {
 			contains = true;
@@ -442,12 +432,7 @@ namespace CONTAINER
 
 		if (!found && !line.filterByEditorIdContainsOr.empty()) {
 			//logger::info("keywords not empty");
-			for (const auto& editorString : line.filterByEditorIdContainsOr) {
-				if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-					containsOr = true;
-					break;
-				}
-			}
+			containsOr = formfilter::matchesEditorIdOr(view, curobj);
 		}
 		else {
 			containsOr = true;
@@ -464,15 +449,10 @@ namespace CONTAINER
 
 		if (!line.filterByEditorIdContainsExcluded.empty() && found) {
 			//logger::info("factions not empty");
-			for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
-				if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-					found = false;
-					break;
-				}
+			if (formfilter::hasExcludedEditorId(view, curobj)) {
+				found = false;
 			}
 		}
-
-
 
 		return found;
 
@@ -499,16 +479,18 @@ namespace CONTAINER
 					return result;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const& modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				// PROTOTYPE: one view per rule; the hook already processes a
+				// single curobj per invocation, so this is not rebuilt per
+				// (rule, container) pair here either.
+				const formfilter::CommonFilterView view{
+					line.modNames, formfilter::noStrings(), formfilter::noStrings(),
+					formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
+					line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
+					line.filterByEditorIdContainsExcluded, formfilter::noStrings()
+				};
+
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
 				//logger::info("looking up npc {:08X} {} {}", curobj->formID, clib_util::editorID::get_editorID(curobj), string_form);
@@ -530,7 +512,7 @@ namespace CONTAINER
 
 				//logger::debug("CONT {:08X} {} {} -> patching {}", curobj->formID, curobj->fullName, curobj->GetFormEditorID(), found);
 
-				if (found || findObject(line, curobj))
+				if (found || findObject(line, view, curobj))
 					patchContainer(line, curobj);
 			}
 

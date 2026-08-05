@@ -1,4 +1,5 @@
 #include "cell.h"
+#include "formfilter.h"
 #include <utility.h>
 
 namespace CELL
@@ -291,6 +292,16 @@ namespace CELL
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectCELL>();
 
 		for (const auto& line : tokens) {
+			// PROTOTYPE: one view per rule, not per (rule, cell) pair. cell.cpp
+			// has no modNames/keywords/editorId/hasPlugin filters, so only
+			// objectExcluded is real; every other member binds noStrings().
+			const formfilter::CommonFilterView view{
+				formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
+				formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
+				formfilter::noStrings(), formfilter::noStrings(),
+				formfilter::noStrings(), line.objectExcluded
+			};
+
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -331,20 +342,7 @@ namespace CELL
 							}
 						}
 
-						bool excluded = false;
-						if (!line.objectExcluded.empty()) {
-							for (const auto& excludedString : line.objectExcluded) {
-								RE::TESForm* excludedForm = GetFormFromIdentifier(excludedString);
-								if (excludedForm && excludedForm->formType == RE::FormType::Cell) {
-									if (curobj->formID == excludedForm->formID) {
-										excluded = true;
-										break;
-									}
-								}
-							}
-						}
-
-						if (excluded) {
+						if (!line.objectExcluded.empty() && formfilter::isObjectExcluded(view, curobj, RE::FormType::Cell)) {
 							continue;
 						}
 
@@ -458,21 +456,9 @@ namespace CELL
 
 				if (found && !line.objectExcluded.empty()) {
 					//logger::info("npc not empty");
-					for (const auto& npcstring : line.objectExcluded) {
-						RE::TESForm*       currentform = nullptr;
-						RE::TESObjectCELL* npc = nullptr;
-
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Cell) {
-							npc = (RE::TESObjectCELL*)currentform;
-
-							if (curobj->formID == npc->formID) {
-								found = false;
-								//logger::info("Cell Excluded.");
-								break;
-							}
-						}
+					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Cell)) {
+						found = false;
+						//logger::info("Cell Excluded.");
 					}
 				}
 				////Flags

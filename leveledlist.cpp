@@ -1,4 +1,5 @@
 #include "leveledlist.h"
+#include "formfilter.h"
 namespace LEVELEDLIST
 {
 
@@ -308,6 +309,14 @@ namespace LEVELEDLIST
 			}
 
 			if (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty() || !line.filterByEditorIdContainsExcluded.empty()) {
+				// PROTOTYPE: one view per rule, not per (rule, leveled list) pair.
+				const formfilter::CommonFilterView view{
+					formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
+					formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
+					line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
+					line.filterByEditorIdContainsExcluded, formfilter::noStrings()
+				};
+
 				auto& objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
 				for (const auto& curobj : objectArray) {
 
@@ -320,16 +329,12 @@ namespace LEVELEDLIST
 						continue;
 					}
 
+					// DRIFT (preserved, not fixed): upstream is missing the
+					// "!found &&" guard siblings have on this and the next
+					// two checks. Inert here since `found` is still false at
+					// this point regardless. See task report.
 					if (!line.filterByEditorIdContains.empty()) {
-						for (const auto& editorString : line.filterByEditorIdContains) {
-							if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-								contains = true;
-							}
-							else {
-								contains = false;
-								break;
-							}
-						}
+						contains = formfilter::matchesEditorIdAnd(view, curobj);
 					}
 					else {
 						contains = true;
@@ -337,12 +342,7 @@ namespace LEVELEDLIST
 
 					if (!line.filterByEditorIdContainsOr.empty()) {
 						//logger::info("keywords not empty");
-						for (const auto& editorString : line.filterByEditorIdContainsOr) {
-							if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-								containsOr = true;
-								break;
-							}
-						}
+						containsOr = formfilter::matchesEditorIdOr(view, curobj);
 					}
 					else {
 						containsOr = true;
@@ -355,11 +355,8 @@ namespace LEVELEDLIST
 
 					if (!line.filterByEditorIdContainsExcluded.empty() && found) {
 						//logger::info("factions not empty");
-						for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
-							if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-								found = false;
-								break;
-							}
+						if (formfilter::hasExcludedEditorId(view, curobj)) {
+							found = false;
 						}
 					}
 

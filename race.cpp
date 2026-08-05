@@ -1,4 +1,5 @@
 #include "race.h"
+#include "formfilter.h"
 
 namespace RACE
 {
@@ -390,6 +391,14 @@ namespace RACE
 			}
 
 			//logger::info("processing config line");
+			// PROTOTYPE: one view per rule, not per (rule, race) pair.
+			const formfilter::CommonFilterView view{
+				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
+				line.keywords, line.keywordsOr, line.keywordsExcluded,
+				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
+				line.filterByEditorIdContainsExcluded, line.objectExcluded
+			};
+
 			for (const auto& curobj : RaceArray) {
 				//logger::info("processing npc");
 				bool found = false;
@@ -402,16 +411,8 @@ namespace RACE
 					continue;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
 				if (!line.object.empty()) {
@@ -524,48 +525,14 @@ namespace RACE
 
 				if (!line.keywords.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywords) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordAnd = true;
-							} else {
-								keywordAnd = false;
-								//logger::debug(FMT_STRING("KeywordAnd race does not have all keywords"));
-								break;
-							}
-							//logger::debug(FMT_STRING("KeywordAnd race true"));
-						}
-					}
+					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsOr) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordOr = true;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X}"), curobj->formID);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
-					}
+					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
@@ -601,22 +568,8 @@ namespace RACE
 
 				if (!line.keywordsExcluded.empty() && found) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsExcluded) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								found = false;
-								//logger::debug(FMT_STRING("KeywordExcluded has a keyword that is excluded.{:08X}"), keyword->formID);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
+					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
+						found = false;
 					}
 				}
 
@@ -624,31 +577,19 @@ namespace RACE
 
 				if (!line.objectExcluded.empty() && found) {
 					//logger::info("npc not empty");
-					for (const auto& npcstring : line.objectExcluded) {
-						RE::TESForm* currentform = nullptr;
-						RE::TESRace* npc = nullptr;
-
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							npc = (RE::TESRace*)currentform;
-
-							if (curobj->formID == npc->formID) {
-								found = false;
-								//logger::info("NPC found.");
-								break;
-							}
-						}
+					// Migration fix: was previously RE::FormType::Keyword (copy-paste
+					// bug), which made this exclusion never match any race. The hook
+					// path's copy of this same filter (below) always used the correct
+					// RE::FormType::Race.
+					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Race)) {
+						found = false;
 					}
 				}
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
 					//logger::info("factions not empty");
-					for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							found = false;
-							break;
-						}
+					if (formfilter::hasExcludedEditorId(view, curobj)) {
+						found = false;
 					}
 				}
 
@@ -1643,16 +1584,18 @@ namespace RACE
 					return result;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const& modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				// PROTOTYPE: one view per rule (curobj is already fixed for this
+				// hook invocation, so there is no separate per-form loop to hoist
+				// the view out of).
+				const formfilter::CommonFilterView view{
+					line.modNames, formfilter::noStrings(), formfilter::noStrings(),
+					line.keywords, line.keywordsOr, line.keywordsExcluded,
+					line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
+					line.filterByEditorIdContainsExcluded, line.objectExcluded
+				};
+
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
 				if (!line.object.empty()) {
@@ -1702,48 +1645,14 @@ namespace RACE
 				//}
 				if (!line.keywords.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywords) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordAnd = true;
-							} else {
-								keywordAnd = false;
-								//logger::debug(FMT_STRING("KeywordAnd race does not have all keywords"));
-								break;
-							}
-							//logger::debug(FMT_STRING("KeywordAnd race true"));
-						}
-					}
+					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsOr) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordOr = true;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X}"), curobj->formID);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
-					}
+					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
@@ -1762,42 +1671,17 @@ namespace RACE
 
 				if (!line.keywordsExcluded.empty() && found) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsExcluded) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								found = false;
-								//logger::debug(FMT_STRING("KeywordExcluded has a keyword that is excluded.{:08X}"), keyword->formID);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
+					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
+						found = false;
 					}
 				}
 
 				if (!line.objectExcluded.empty() && found) {
 					//logger::info("npc not empty");
-					for (const auto& npcstring : line.objectExcluded) {
-						RE::TESForm* currentform = nullptr;
-						RE::TESRace* npc = nullptr;
-
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Race) {
-							npc = (RE::TESRace*)currentform;
-
-							if (curobj->formID == npc->formID) {
-								found = false;
-								//logger::info("NPC found.");
-								break;
-							}
-						}
+					// Already used the correct RE::FormType::Race here (unlike the
+					// main path's copy of this filter, fixed above).
+					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Race)) {
+						found = false;
 					}
 				}
 

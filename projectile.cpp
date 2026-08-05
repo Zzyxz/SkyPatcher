@@ -1,4 +1,5 @@
 #include "projectile.h"
+#include "formfilter.h"
 #include <utility.h>
 
 namespace PROJECTILE
@@ -118,6 +119,16 @@ namespace PROJECTILE
 				continue;
 			}
 
+			// PROTOTYPE: one view per rule, not per (rule, projectile) pair.
+			// This struct has no hasPlugin/hasPluginOr members, so those two
+			// view slots are bound to noStrings().
+			const formfilter::CommonFilterView view{
+				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
+				line.keywords, line.keywordsOr, line.keywordsExcluded,
+				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
+				line.filterByEditorIdContainsExcluded, line.objectExcluded
+			};
+
 			for (const auto& curobj : ObjectArray) {
 				//logger::info("processing npc");
 				bool found = false;
@@ -130,39 +141,19 @@ namespace PROJECTILE
 					continue;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
 				if (!found && !line.filterByEditorIdContains.empty()) {
-					for (const auto& editorString : line.filterByEditorIdContains) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							contains = true;
-						} else {
-							contains = false;
-							break;
-						}
-					}
+					contains = formfilter::matchesEditorIdAnd(view, curobj);
 				} else {
 					contains = true;
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& editorString : line.filterByEditorIdContainsOr) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							containsOr = true;
-							break;
-						}
-					}
+					containsOr = formfilter::matchesEditorIdOr(view, curobj);
 				} else {
 					containsOr = true;
 				}
@@ -179,31 +170,15 @@ namespace PROJECTILE
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
 					//logger::info("factions not empty");
-					for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							found = false;
-							break;
-						}
+					if (formfilter::hasExcludedEditorId(view, curobj)) {
+						found = false;
 					}
 				}
 
 				if (!line.objectExcluded.empty() && found) {
 					//logger::info("npc not empty");
-					for (const auto& npcstring : line.objectExcluded) {
-						RE::TESForm*       currentform = nullptr;
-						RE::BGSProjectile* npc = nullptr;
-
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Projectile) {
-							npc = (RE::BGSProjectile*)currentform;
-
-							if (curobj->formID == npc->formID) {
-								found = false;
-								logger::info("Projectile Excluded.");
-								break;
-							}
-						}
+					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Projectile)) {
+						found = false;
 					}
 				}
 

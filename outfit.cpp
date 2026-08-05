@@ -1,4 +1,5 @@
 #include "outfit.h"
+#include "formfilter.h"
 #include <utility.h>
 
 namespace OUTFIT
@@ -70,6 +71,18 @@ namespace OUTFIT
 				continue;
 			}
 
+			// PROTOTYPE: one view per rule, not per (rule, outfit) pair.
+			// outfit's struct has no hasPlugin/keywords/editorIdContains/objectExcluded
+			// fields -- formAnd/formOr/formExcluded are bespoke outfitItems-list
+			// matching, not the shared keyword/objectExcluded vocabulary -- so only
+			// modNames is bound to real storage here.
+			const formfilter::CommonFilterView view{
+				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
+				formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
+				formfilter::noStrings(), formfilter::noStrings(),
+				formfilter::noStrings(), formfilter::noStrings()
+			};
+
 			for (const auto& curobj : ObjectArray) {
 				//logger::info("processing npc");
 				bool found = false;
@@ -80,16 +93,8 @@ namespace OUTFIT
 					continue;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
 				if (!line.formAnd.empty()) {

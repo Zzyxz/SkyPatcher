@@ -1,4 +1,5 @@
 #include "alch.h"
+#include "formfilter.h"
 namespace ALCH
 {
 
@@ -95,7 +96,15 @@ namespace ALCH
 			if (!line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.mgefs.empty() && line.mgefsOr.empty() && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
 				continue;
 			}
-			
+
+			// PROTOTYPE: one view per rule, not per (rule, ingestible) pair.
+			const formfilter::CommonFilterView view{
+				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
+				line.keywords, line.keywordsOr, line.keywordsExcluded,
+				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
+				line.filterByEditorIdContainsExcluded, line.objectExcluded
+			};
+
 			for (const auto& curobj : objectArray) {
 				bool found = false;
 				bool keywordAnd = false;
@@ -110,19 +119,11 @@ namespace ALCH
 				}
 
 				//logger::debug("Changed by {} file {}", curobj->GetFile()->createdBy.c_str(), curobj->GetFile()->fileName);
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (const auto& modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
-				
+
 				if (!line.alternateTexturesFind.empty()) {
 					for (const auto& textureString : line.alternateTexturesFind) {
 						RE::TESForm* currentform = nullptr;
@@ -139,26 +140,14 @@ namespace ALCH
 				}
 
 				if (!found && !line.filterByEditorIdContains.empty() ) {
-					for (const auto& editorString : line.filterByEditorIdContains) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							contains = true;
-						} else {
-							contains = false;
-							break;
-						}
-					}
+					contains = formfilter::matchesEditorIdAnd(view, curobj);
 				} else if (curobj->formID != 0x000007) {
 					contains = true;
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& editorString : line.filterByEditorIdContainsOr) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							containsOr = true;
-							break;
-						}
-					}
+					containsOr = formfilter::matchesEditorIdOr(view, curobj);
 				} else if (curobj->formID != 0x000007) {
 					containsOr = true;
 				}
@@ -170,48 +159,14 @@ namespace ALCH
 
 				if (!line.keywords.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywords) {
-						RE::TESForm* currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordAnd = true;
-							} else {
-								keywordAnd = false;
-								//logger::debug(FMT_STRING("KeywordAnd Weapon does not have all keywords"));
-								break;
-							}
-							//logger::debug(FMT_STRING("KeywordAnd Weapon true"));
-						}
-					}
+					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsOr) {
-						RE::TESForm* currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordOr = true;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
-					}
+					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
@@ -291,22 +246,8 @@ namespace ALCH
 
 				if (!line.keywordsExcluded.empty() && found) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsExcluded) {
-						RE::TESForm* currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								found = false;
-								//logger::debug(FMT_STRING("KeywordExcluded has a keyword that is excluded.{:08X}"),keyword->formID);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
+					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
+						found = false;
 					}
 				}
 
@@ -334,31 +275,16 @@ namespace ALCH
 
 				if (!line.objectExcluded.empty() && found) {
 					//logger::info("npc not empty");
-					for (const auto& npcstring : line.objectExcluded) {
-						RE::TESForm* currentform = nullptr;
-						RE::AlchemyItem* npc = nullptr;
-
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::AlchemyItem) {
-							npc = (RE::AlchemyItem*)currentform;
-
-							if (curobj->formID == npc->formID) {
-								found = false;
-								logger::debug(FMT_STRING("ingestible {:08X} {} excluded."), curobj->formID, curobj->fullName);
-								break;
-							}
-						}
+					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::AlchemyItem)) {
+						found = false;
+						logger::debug(FMT_STRING("ingestible {:08X} {} excluded."), curobj->formID, curobj->fullName);
 					}
 				}
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found ) {
 					//logger::info("factions not empty");
-					for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							found = false;
-							break;
-						}
+					if (formfilter::hasExcludedEditorId(view, curobj)) {
+						found = false;
 					}
 				}
 

@@ -1,4 +1,5 @@
 #include "faction.h"
+#include "formfilter.h"
 #include <utility.h>
 
 namespace FACTION
@@ -101,6 +102,14 @@ namespace FACTION
 				continue;
 			}
 
+			// PROTOTYPE: one view per rule, not per (rule, faction) pair.
+			const formfilter::CommonFilterView view{
+				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
+				line.keywords, line.keywordsOr, line.keywordsExcluded,
+				formfilter::noStrings(), formfilter::noStrings(),
+				formfilter::noStrings(), line.objectExcluded
+			};
+
 			for (const auto& curobj : ObjectArray) {
 				//logger::info("processing npc");
 				bool found = false;
@@ -113,16 +122,8 @@ namespace FACTION
 					continue;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
 
@@ -135,28 +136,16 @@ namespace FACTION
 
 				if (!line.objectExcluded.empty() && found) {
 					//logger::info("npc not empty");
-					for (const auto& npcstring : line.objectExcluded) {
-						RE::TESForm*       currentform = nullptr;
-						RE::TESObjectWEAP* npc = nullptr;
-
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Faction) {
-							npc = (RE::TESObjectWEAP*)currentform;
-
-							if (curobj->formID == npc->formID) {
-								found = false;
-								logger::info("Projectile Excluded.");
-								break;
-							}
-						}
+					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Faction)) {
+						found = false;
+						logger::info("Projectile Excluded.");
 					}
 				}
-			
-				
 
 
-				
+
+
+
 
 				if (found) {
 					patch(line, curobj);

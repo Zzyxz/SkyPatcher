@@ -1,4 +1,5 @@
 #include "ingredient.h"
+#include "formfilter.h"
 namespace INGR
 {
 
@@ -78,7 +79,15 @@ namespace INGR
 			if (!line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.mgefs.empty() && line.mgefsOr.empty() && line.alternateTexturesFind.empty()) {
 				continue;
 			}
-			
+
+			// PROTOTYPE: one view per rule, not per (rule, ingredient) pair.
+			const formfilter::CommonFilterView view{
+				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
+				line.keywords, line.keywordsOr, line.keywordsExcluded,
+				formfilter::noStrings(), formfilter::noStrings(),
+				formfilter::noStrings(), line.objectExcluded
+			};
+
 			for (const auto& curobj : objectIngredientArray) {
 				bool found = false;
 				bool keywordAnd = false;
@@ -90,19 +99,11 @@ namespace INGR
 					continue;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
-				
+
 				if (!line.alternateTexturesFind.empty()) {
 					for (const auto& textureString : line.alternateTexturesFind) {
 						RE::TESForm* currentform = nullptr;
@@ -121,48 +122,14 @@ namespace INGR
 
 				if (!line.keywords.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywords) {
-						RE::TESForm* currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordAnd = true;
-							} else {
-								keywordAnd = false;
-								//logger::debug(FMT_STRING("KeywordAnd Weapon does not have all keywords"));
-								break;
-							}
-							//logger::debug(FMT_STRING("KeywordAnd Weapon true"));
-						}
-					}
+					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsOr) {
-						RE::TESForm* currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordOr = true;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
-					}
+					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
@@ -242,22 +209,8 @@ namespace INGR
 
 				if (!line.keywordsExcluded.empty() && found) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsExcluded) {
-						RE::TESForm* currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								found = false;
-								//logger::debug(FMT_STRING("KeywordExcluded has a keyword that is excluded.{:08X}"),keyword->formID);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
+					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
+						found = false;
 					}
 				}
 
@@ -285,21 +238,9 @@ namespace INGR
 
 				if (!line.objectExcluded.empty() && found) {
 					//logger::info("npc not empty");
-					for (const auto& npcstring : line.objectExcluded) {
-						RE::TESForm* currentform = nullptr;
-						RE::IngredientItem* npc = nullptr;
-
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Ingredient) {
-							npc = (RE::IngredientItem*)currentform;
-
-							if (curobj->formID == npc->formID) {
-								found = false;
-								logger::debug(FMT_STRING("ingredient {:08X} {} excluded."), curobj->formID, curobj->fullName);
-								break;
-							}
-						}
+					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Ingredient)) {
+						found = false;
+						logger::debug(FMT_STRING("ingredient {:08X} {} excluded."), curobj->formID, curobj->fullName);
 					}
 				}
 

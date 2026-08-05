@@ -5,6 +5,7 @@ using namespace std;
 
 #include "PCH.h"
 #include "dirent.h"
+#include "formfilter.h"
 #include "utility.h"
 #include <fstream>
 #include <iostream>
@@ -69,7 +70,7 @@ namespace CONTAINER
 	void                process_patch_instructions(const std::list<line_content>& tokens);
 	//void                patch(CONTAINER::line_content line, RE::TESLevItem* curobj);
 	void                patchContainer(const CONTAINER::line_content& line, RE::TESObjectCONT* curobj);
-	bool findObject(const line_content& line, RE::TESObjectCONT* curobj);
+	bool findObject(const line_content& line, const formfilter::CommonFilterView& view, RE::TESObjectCONT* curobj);
 	void*               readConfigHook(const std::string& folder);
 }
 

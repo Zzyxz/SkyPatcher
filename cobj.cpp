@@ -1,4 +1,5 @@
 #include "cobj.h"
+#include "formfilter.h"
 #include <utility.h>
 
 namespace COBJ
@@ -75,6 +76,22 @@ namespace COBJ
 				continue;
 			}
 
+			// PROTOTYPE: one view per rule, not per (rule, cobj) pair.
+			// NOTE: cobj's `filterByKeywords` maps to l.keywordsNew (tested
+			// against curobj->createdItem), not l.keywords -- l.keywords is
+			// `filterByIngredients` and tests container contents, a
+			// different semantic the shared helpers do not cover. The view
+			// below intentionally binds keywords/keywordsOr/keywordsExcluded
+			// to the "New" fields; l.keywords/keywordsOr/
+			// filterByRecipeIngredientsExcluded stay on their own inline
+			// container-contents code path further down.
+			const formfilter::CommonFilterView view{
+				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
+				line.keywordsNew, line.keywordsNewOr, line.keywordsNewExcluded,
+				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
+				line.filterByEditorIdContainsExcluded, line.objectExcluded
+			};
+
 			for (const auto& curobj : ObjectArray) {
 				bool found = false;
 				bool keywordAnd = false;
@@ -88,62 +105,22 @@ namespace COBJ
 					continue;
 				}
 
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
+				if (!line.modNames.empty() && !formfilter::matchesModName(view, curobj)) {
+					continue;
 				}
 
-				if (!line.keywordsNew.empty() && curobj->createdItem && curobj->createdItem->As<RE::BGSKeywordForm>()) {
+				RE::BGSKeywordForm* createdItemKw = curobj->createdItem ? curobj->createdItem->As<RE::BGSKeywordForm>() : nullptr;
+
+				if (!line.keywordsNew.empty() && createdItemKw) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsNew) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->createdItem->As<RE::BGSKeywordForm>()->HasKeyword(keyword)) {
-								keywordNewAnd = true;
-							} else {
-								keywordNewAnd = false;
-								//logger::debug(FMT_STRING("KeywordAnd armor does not have all keywords"));
-								break;
-							}
-							//logger::debug(FMT_STRING("KeywordAnd armor true"));
-						}
-					}
+					keywordNewAnd = formfilter::matchesKeywordsAnd(view, createdItemKw, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordNewAnd = true;
 				}
-				if (!line.keywordsNewOr.empty() && curobj->createdItem && curobj->createdItem->As<RE::BGSKeywordForm>()) {
+				if (!line.keywordsNewOr.empty() && createdItemKw) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsNewOr) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->createdItem->As<RE::BGSKeywordForm>()->HasKeyword(keyword)) {
-								keywordNewOr = true;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X}"), curobj->formID);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
-					}
+					keywordNewOr = formfilter::matchesKeywordsOr(view, createdItemKw, nullptr);
 				} else {
 					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordNewOr = true;
@@ -233,26 +210,14 @@ namespace COBJ
 				}
 
 				if (!found && !line.filterByEditorIdContains.empty()) {
-					for (const auto& editorString : line.filterByEditorIdContains) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							contains = true;
-						} else {
-							contains = false;
-							break;
-						}
-					}
+					contains = formfilter::matchesEditorIdAnd(view, curobj);
 				} else {
 					contains = true;
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty()) {
 					//logger::info("keywords not empty");
-					for (const auto& editorString : line.filterByEditorIdContainsOr) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							containsOr = true;
-							break;
-						}
-					}
+					containsOr = formfilter::matchesEditorIdOr(view, curobj);
 				} else {
 					containsOr = true;
 				}
@@ -289,32 +254,15 @@ namespace COBJ
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
 					//logger::info("factions not empty");
-					for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							found = false;
-							break;
-						}
+					if (formfilter::hasExcludedEditorId(view, curobj)) {
+						found = false;
 					}
 				}
 
-				if (!line.keywordsNewExcluded.empty() && curobj->createdItem && curobj->createdItem->As<RE::BGSKeywordForm>() && found) {
+				if (!line.keywordsNewExcluded.empty() && createdItemKw && found) {
 					//logger::info("keywords not empty");
-					for (const auto& keywordstring : line.keywordsNewExcluded) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->createdItem->As<RE::BGSKeywordForm>()->HasKeyword(keyword)) {
-								found = false;
-								//logger::debug(FMT_STRING("KeywordExcluded has a keyword that is excluded.{:08X}"), keyword->formID);
-								//logger::info("Keyword found.");
-								break;
-							}
-						}
+					if (formfilter::hasExcludedKeyword(view, createdItemKw, nullptr)) {
+						found = false;
 					}
 				}
 
@@ -356,18 +304,8 @@ namespace COBJ
 				}
 
 				if (!line.objectExcluded.empty() && found) {
-					for (const auto& npcstring : line.objectExcluded) {
-						RE::TESForm*       currentform = nullptr;
-						RE::BGSConstructibleObject* npc = nullptr;
-						std::string        string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::ConstructibleObject) {
-							npc = (RE::BGSConstructibleObject*)currentform;
-							if (curobj->formID == npc->formID) {
-								found = false;
-								break;
-							}
-						}
+					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::ConstructibleObject)) {
+						found = false;
 					}
 				}
 
