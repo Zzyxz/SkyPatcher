@@ -276,7 +276,6 @@ namespace NPC
 				for (const auto& npcstring : line.object) {
 					RE::TESForm* currentform = nullptr;
 					RE::TESNPC* curobj = nullptr;
-					RE::Character* curActObj = nullptr;
 					
 
 					std::string string_form = npcstring;
@@ -795,7 +794,6 @@ namespace NPC
 
 				if (line.addRandomVisualStyle[0].size() > 1) {
 					logger::debug(FMT_STRING("NPC {:08X} {} will get random visual style from {:08X} with a chance of {}%  (added random visual styles {})"), curobj->formID, curobj->fullName, currentform->formID, line.addRandomVisualStyle[0][1], added);
-					auto tempkywd = (RE::BGSKeyword*)GetFormFromIdentifier(line.addRandomVisualStyle[0][1]);
 					aData.npcData[curobj->formID].styleChance = std::stoi(line.addRandomVisualStyle[0][1]);
 				}
 				else {
@@ -908,7 +906,6 @@ namespace NPC
 			//logger::info("found! patching values");
 			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.avifs.size(); i++) {
-				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.avifs[i];
 				const std::string lowerAvif = toLowerCase(string_form);
 
@@ -2108,7 +2105,6 @@ namespace NPC
 							size_t      pos = fileName.find(extension);
 							if (pos != std::string::npos) {
 								fileName = fileName.substr(0, pos);
-								const char* modname = fileName.c_str();
 								logger::info("************************************************************");
 								logger::info(FMT_STRING("Processing config file {}... "), fullPath.c_str());
 								logger::info("************************************************************");
@@ -2487,8 +2483,6 @@ namespace NPC
 		return formfilter::runProgram(program, t, scratch);
 	}
 
-
-	REL::Relocation<decltype(&LoadRaceDataHook::Hook_Load)> func;
 
 	void LoadRaceDataHook::InstallHook()
 	{

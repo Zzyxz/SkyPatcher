@@ -70,7 +70,6 @@ namespace INGR
 	{
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
-		//RE::BSTArray<RE::AlchemyItem*> objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
 		auto& objectIngredientArray = dataHandler->GetFormArray<RE::IngredientItem>();
 		for (const auto& line : tokens) {
 			

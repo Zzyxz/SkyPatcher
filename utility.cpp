@@ -1,6 +1,4 @@
 #include "utility.h"
-#include <cmath>
-#include <iostream>
 #include <regex>
 #include <unordered_map>
 
@@ -226,12 +224,6 @@ bool IsPluginInstalled(const char* name)
 	return false;
 }
 
-template <typename T>
-T GetOffset(const void* baseObject, int offset)
-{
-	return *reinterpret_cast<T*>((uintptr_t)baseObject + offset);
-}
-
 //RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
 //{
 //	auto dataHandler = RE::TESDataHandler::GetSingleton();
@@ -284,46 +276,6 @@ RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
 	return nullptr;
 }
 
-RE::TESForm* GetRefrFormFromIdentifier(const std::string& identifier)
-{
-	auto* dataHandler = RE::TESDataHandler::GetSingleton();
-	if (!dataHandler)
-		return nullptr;
-
-	auto delimiter = identifier.find('|');
-	if (delimiter == std::string::npos) {
-		logger::warn("Invalid identifier format: {}", identifier);
-		return nullptr;
-	}
-
-	std::string modName = identifier.substr(0, delimiter);
-	std::string modForm = identifier.substr(delimiter + 1);
-	std::uint32_t rawFormID = std::stoul(modForm, nullptr, 16);
-
-	auto* mod = dataHandler->LookupModByName(modName.c_str());
-	if (!mod) {
-		logger::warn("Mod not found: {}", modName);
-		return nullptr;
-	}
-
-	std::uint32_t fullFormID = 0;
-
-	if (mod->IsLight()) {
-		fullFormID = 0xFE000000 | (mod->GetCompileIndex() << 12) | (rawFormID & 0xFFF);
-	}
-	else {
-		fullFormID = (mod->GetCompileIndex() << 24) | (rawFormID & 0xFFFFFF);
-	}
-
-	logger::debug("Looking up REFR FormID {:08X} from {}", fullFormID, modName);
-
-	auto* form = RE::TESForm::LookupByID(fullFormID);
-	if (!form) {
-		logger::warn("No form found for FormID: {:08X}", fullFormID);
-	}
-	return form;
-}
-
 RE::FormID BuildFormIDFromIdentifier(const std::string& identifier)
 {
 	auto* dataHandler = RE::TESDataHandler::GetSingleton();
@@ -372,17 +324,6 @@ std::string toLowerCase(std::string pString)
 	return pString;
 }
 
-// Function to convert string to hexadecimal representation
-std::string toHex(const std::string& str)
-{
-	std::stringstream hexStream;
-	hexStream << std::hex << std::setfill('0');
-	for (const auto& ch : str) {
-		hexStream << std::setw(2) << static_cast<int>(static_cast<unsigned char>(ch));
-	}
-	return hexStream.str();
-}
-
 // Function to replace backslashes with forward slashes
 std::string normalizePath(const std::string& path)
 {
@@ -424,160 +365,6 @@ std::vector<std::string> splitRelationNumber(const std::string& input)
 }
 
 //extract functions
-// Function to extract data from a line using a regex pattern
-void extractData(const std::string& line, const std::string& pattern, std::vector<std::string>& destination)
-{
-	const std::regex& regex_pattern = cached_regex(pattern, std::regex::icase);
-	std::smatch match;
-
-	// Find all matches in the input line
-	std::regex_search(line, match, regex_pattern);
-
-	if (!match.empty() && !match[1].str().empty()) {
-		std::string data_str = match[1];
-
-		// Check if data_str contains "|"
-		static const std::regex list_regex("[^,]+", std::regex::icase);
-		std::sregex_iterator iterator(data_str.begin(), data_str.end(), list_regex);
-		std::sregex_iterator end;
-
-		while (iterator != end) {
-			std::string tempVar = (*iterator)[0].str();
-			tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-			tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-
-			if (tempVar != "none") {
-				destination.push_back(tempVar);
-			}
-			++iterator;
-		}
-	}
-}
-
-void extractDataStrings(const std::string& line, const std::string& pattern, std::vector<std::string>& destination)
-{
-	const std::regex& regex_pattern = cached_regex(pattern, std::regex::icase);
-	std::smatch match;
-	std::regex_search(line, match, regex_pattern);
-
-	std::vector<std::string> data;
-	if (!match.empty() && !match[1].str().empty()) {
-		std::string          data_str = match[1];
-		static const std::regex list_regex("[^,]+", std::regex::icase);
-		std::sregex_iterator iterator(data_str.begin(), data_str.end(), list_regex);
-		std::sregex_iterator end;
-
-		while (iterator != end) {
-			std::string tempVar = (*iterator)[0].str();
-			tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-			tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-
-			if (tempVar != "none") {
-				data.push_back(tempVar);
-			}
-			++iterator;
-		}
-	}
-
-	destination = std::move(data);
-}
-
-void extractMultiDataString(const std::string& line, const std::string& pattern, std::vector<std::string>& pcMultFlag,
-	std::vector<std::string>& pcMultFlag_min_values, std::vector<std::string>& pcMultFlag_max_values)
-{
-	const std::regex& pcMultFlag_regex = cached_regex(pattern, std::regex::icase);
-	std::smatch pcMultFlag_match;
-	std::regex_search(line, pcMultFlag_match, pcMultFlag_regex);
-
-	if (!pcMultFlag_match.empty() && !pcMultFlag_match[1].str().empty()) {
-		std::string pcMultFlag_str = pcMultFlag_match[1];
-		static const std::regex pcMultFlag_list_regex("(\\w+)\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", std::regex::icase);
-
-		std::sregex_iterator pcMultFlag_iterator(pcMultFlag_str.begin(), pcMultFlag_str.end(), pcMultFlag_list_regex);
-		std::sregex_iterator pcMultFlag_end;
-
-		while (pcMultFlag_iterator != pcMultFlag_end) {
-			std::string avif = (*pcMultFlag_iterator)[1].str();
-			avif.erase(avif.begin(), std::find_if_not(avif.begin(), avif.end(), ::isspace));
-			avif.erase(std::find_if_not(avif.rbegin(), avif.rend(), ::isspace).base(), avif.end());
-
-			if (avif == "none") {
-				break;
-			}
-
-			pcMultFlag.push_back(avif);
-			pcMultFlag_min_values.push_back((*pcMultFlag_iterator)[2]);
-			pcMultFlag_max_values.push_back((*pcMultFlag_iterator)[3] != "" ? (*pcMultFlag_iterator)[3] : (*pcMultFlag_iterator)[2]);
-
-			++pcMultFlag_iterator;
-		}
-	}
-}
-
-void extractMultiDataInt(const std::string& line, const std::string& pattern, std::vector<std::string>& pcMultFlag,
-	std::vector<int>& pcMultFlag_min_values, std::vector<int>& pcMultFlag_max_values)
-{
-	const std::regex& pcMultFlag_regex = cached_regex(pattern, std::regex::icase);
-	std::smatch pcMultFlag_match;
-	std::regex_search(line, pcMultFlag_match, pcMultFlag_regex);
-
-	if (!pcMultFlag_match.empty() && !pcMultFlag_match[1].str().empty()) {
-		std::string pcMultFlag_str = pcMultFlag_match[1];
-		static const std::regex pcMultFlag_list_regex("(\\w+)\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", std::regex::icase);
-
-		std::sregex_iterator pcMultFlag_iterator(pcMultFlag_str.begin(), pcMultFlag_str.end(), pcMultFlag_list_regex);
-		std::sregex_iterator pcMultFlag_end;
-
-		while (pcMultFlag_iterator != pcMultFlag_end) {
-			std::string avif = (*pcMultFlag_iterator)[1].str();
-			avif.erase(avif.begin(), std::find_if_not(avif.begin(), avif.end(), ::isspace));
-			avif.erase(std::find_if_not(avif.rbegin(), avif.rend(), ::isspace).base(), avif.end());
-
-			if (avif == "none") {
-				break;
-			}
-
-			pcMultFlag.push_back(avif);
-			pcMultFlag_min_values.push_back(std::stoi((*pcMultFlag_iterator)[2]));
-			pcMultFlag_max_values.push_back((*pcMultFlag_iterator)[3] != "" ? std::stoi((*pcMultFlag_iterator)[3]) : std::stoi((*pcMultFlag_iterator)[2]));
-
-			++pcMultFlag_iterator;
-		}
-	}
-}
-
-void extractMultiDataFloat(const std::string& line, const std::string& pattern, std::vector<std::string>& pcMultFlag,
-	std::vector<float>& pcMultFlag_min_values, std::vector<float>& pcMultFlag_max_values)
-{
-	const std::regex& pcMultFlag_regex = cached_regex(pattern, std::regex::icase);
-	std::smatch pcMultFlag_match;
-	std::regex_search(line, pcMultFlag_match, pcMultFlag_regex);
-
-	if (!pcMultFlag_match.empty() && !pcMultFlag_match[1].str().empty()) {
-		std::string pcMultFlag_str = pcMultFlag_match[1];
-		static const std::regex pcMultFlag_list_regex("(\\w+)\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", std::regex::icase);
-
-		std::sregex_iterator pcMultFlag_iterator(pcMultFlag_str.begin(), pcMultFlag_str.end(), pcMultFlag_list_regex);
-		std::sregex_iterator pcMultFlag_end;
-
-		while (pcMultFlag_iterator != pcMultFlag_end) {
-			std::string avif = (*pcMultFlag_iterator)[1].str();
-			avif.erase(avif.begin(), std::find_if_not(avif.begin(), avif.end(), ::isspace));
-			avif.erase(std::find_if_not(avif.rbegin(), avif.rend(), ::isspace).base(), avif.end());
-
-			if (avif == "none") {
-				break;
-			}
-
-			pcMultFlag.push_back(avif);
-			pcMultFlag_min_values.push_back(std::stof((*pcMultFlag_iterator)[2]));
-			pcMultFlag_max_values.push_back((*pcMultFlag_iterator)[3] != "" ? std::stof((*pcMultFlag_iterator)[3]) : std::stof((*pcMultFlag_iterator)[2]));
-
-			++pcMultFlag_iterator;
-		}
-	}
-}
-
 void extractValueString(const std::string& line, const std::string& regex_pattern_str, std::string& target_value)
 {
 	// No std::regex::icase here — preserved exactly as-is; this is the one extractor
@@ -833,27 +620,6 @@ RE::BGSKeyword* createKeyword()
 	newKeyword->formEditorID = "SkyPatcher_RandomVisualStyleAssigned";
 	//logger::debug("newClass {:08X}",newClass->formID);
 	return newKeyword;
-}
-
-RE::BGSListForm* createListForm()
-{
-
-	auto       factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::BGSListForm>();
-	auto       newKeyword = factory->Create();
-	RE::FormID newForm = newKeyword->GetFormID();
-	newKeyword->formID = newForm;
-	//newKeyword->formEditorID = "SkyPatcher_RandomVisualStyleAssigned";
-	//logger::debug("newClass {:08X}",newClass->formID);
-	return newKeyword;
-}
-
-RE::TESObjectREFR* createREFR()
-{
-	auto       factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::TESObjectREFR>();
-	auto       newRefr = factory->Create();
-	RE::FormID newForm = newRefr->GetFormID();
-	newRefr->formID = newForm;
-	return newRefr;
 }
 
  RE::ActorValue StringToActorValue(const std::string& valueString) {

@@ -85,8 +85,6 @@ namespace ENCOUNTERZONE
 				//logger::debug("{:08X} editorID {}", RE::TESForm::LookupByEditorID("Saw01")->formID, "Saw01");
 				//logger::info("processing npc");
 				bool found = false;
-				bool keywordAnd = false;
-				bool keywordOr = false;
 				bool contains = false;
 				bool containsOr = false;
 

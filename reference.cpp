@@ -41,8 +41,6 @@ namespace REFERENCE
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
 		logger::debug("processing patch instructions");
-		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		//RE::BSTArray<RE::TESObjectWEAP*> ObjectArray = dataHandler->GetFormArray<RE::TESObjectREFR>();
 
 		for (const auto& line : tokens) {
 			//logger::debug("REFR 1 ");
@@ -50,7 +48,6 @@ namespace REFERENCE
 				//logger::debug("REFR 2 ");
 				for (const auto& npcstring : line.objects) {
 					//logger::debug("REFR 3 ");
-					RE::TESForm*       currentform = nullptr;
 					//RE::FormID curobj = nullptr;
 
 					std::string string_form = npcstring;

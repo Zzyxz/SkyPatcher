@@ -242,7 +242,6 @@ namespace SCROLL
 	{
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
-		//RE::BSTArray<RE::AlchemyItem*> objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
 		auto& objectSpellArray = dataHandler->GetFormArray<RE::ScrollItem>();
 		for (const auto& line : tokens) {
 			

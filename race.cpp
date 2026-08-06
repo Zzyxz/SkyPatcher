@@ -759,7 +759,6 @@ namespace RACE
 			//logger::info("found! patching values");
 			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.avifs.size(); i++) {
-				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.avifs[i];
 
 				//logger::info("avif valid!");
@@ -1343,7 +1342,6 @@ namespace RACE
 							size_t      pos = fileName.find(extension);
 							if (pos != std::string::npos) {
 								fileName = fileName.substr(0, pos);
-								const char* modname = fileName.c_str();
 								logger::info("************************************************************");
 								logger::info(FMT_STRING("Processing config file {}... "), fullPath.c_str());
 								logger::info("************************************************************");
@@ -1374,8 +1372,6 @@ namespace RACE
 			}
 		}
 	}
-
-	REL::Relocation<decltype(&LoadRaceDataHook::Hook_InitItemImpl)> func;
 
 	void LoadRaceDataHook::InstallHook()
 	{

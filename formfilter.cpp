@@ -878,8 +878,9 @@ namespace formfilter
 			const Disjunct& d = *dp;
 			// A conjunction needs ALL of its predicates, so ANY ONE of them
 			// supplies a necessary signal. Prefer an And predicate (one key)
-			// over an Or (one key per operand); that is exactly what Phase 3's
-			// appendAndOrSignals did.
+			// over an Or (one key per operand). An And list that resolved to
+			// nothing can never hold, so it contributes no signal and the
+			// disjunct can never fire.
 			const Predicate* chosen = nullptr;
 			for (std::uint16_t i = 0; i < d.count; ++i) {
 				const Predicate& p = a_prog.preds[d.first + i];

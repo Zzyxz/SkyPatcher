@@ -224,7 +224,6 @@ namespace NPC
 
 	ActorData readConfig(const std::string& folder);
 	void*     patch(const NPC::patch_instruction& line, RE::TESNPC* curobj);
-	void*     patchActor(NPC::patch_instruction line, RE::Character* curActObj);
 	void      setbEnableSetLevelDirectlyByPCMult();
 	bool      findObject(const patch_instruction& line, RE::TESNPC* curobj);
 	// PHASE 2: the rule is COMPILED once, outside the form loop, into a flat

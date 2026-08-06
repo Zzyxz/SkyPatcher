@@ -265,30 +265,6 @@ namespace formfilter
 	// none of TESNPC, TESRace, TESObjectWEAP or TESObjectARMO overrides slot 04.
 	void addKeywordSignals(FormSignalIndex& a_index, const RE::BGSKeywordForm* a_kf, std::uint32_t a_formIdx);
 
-	// The two shapes every AND/OR filter pair in this codebase has:
-	//   found |= (!andList.empty() || !orList.empty()) && andHolds && orHolds
-	// `andHolds` needs EVERY resolved AND entry, so any one of them is a
-	// necessary signal; `orHolds` needs ANY resolved OR entry, so all of them
-	// are. An AND list that resolved to nothing can never hold, so it
-	// contributes no signal and the disjunct can never fire.
-	template <class T, class KeyFn>
-	void appendAndOrSignals(std::vector<std::uint64_t>& a_out, bool a_andPresent,
-		const std::vector<T>& a_andResolved, bool a_orPresent, const std::vector<T>& a_orResolved,
-		KeyFn a_key)
-	{
-		if (a_andPresent) {
-			if (!a_andResolved.empty()) {
-				a_key(a_out, a_andResolved.front());
-			}
-			return;
-		}
-		if (a_orPresent) {
-			for (const auto& v : a_orResolved) {
-				a_key(a_out, v);
-			}
-		}
-	}
-
 	// =====================================================================
 	// PHASE 2 -- the predicate opcode table.
 	//

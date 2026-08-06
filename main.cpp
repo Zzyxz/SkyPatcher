@@ -139,15 +139,6 @@ void Enable(RE::TESObjectREFR* obref, bool abFadeIn)
 	return func(vm, frame, obref, abFadeIn);
 }
 
-bool read_formID(SKSE::SerializationInterface* a_intfc, RE::FormID& a_formID)
-{
-	a_intfc->ReadRecordData(a_formID);
-	if (a_formID != 0) {
-		return a_intfc->ResolveFormID(a_formID, a_formID);
-	}
-	return true;
-}
-
 class UpdateClass
 {
 public:
@@ -205,16 +196,6 @@ public:
 		}
 	}
 
-	void updateREFRAndDisable(RE::TESObjectREFR* a_this)
-	{
-		//while (!a_this->Get3D(false))  // After enabling an actor their 3D model isn't accessible immediately (?). A hook would do the same job but would be more complex
-		//std::this_thread::sleep_for(std::chrono::milliseconds(500));
-		if (a_this) {
-			a_this->Disable();
-
-		}
-	}
-
 	void updateNPCVisualsController(RE::Actor* a_this)
 	{
 		std::future<void> futureA = std::async(std::launch::deferred, &UpdateClass::updateNPCVisuals, this, a_this);
@@ -227,27 +208,11 @@ public:
 		futureA.get();
 	}
 
-	void disableREFR(RE::TESObjectREFR* a_this)
-	{
-		std::future<void> futureA = std::async(std::launch::deferred, &UpdateClass::updateREFRAndDisable, this, a_this);
-		futureA.get();
-	}
-
 	void startUpdate(RE::Actor* a_this)
 	{
 		SKSE::GetTaskInterface()->AddTask([this, a_this]() {
 			//UpdateClass::updateNPCVisualsController(a_this);
 			std::jthread t(&UpdateClass::updateNPCVisualsController, this, a_this);
-			t.detach();
-			});
-		// No need to call t.detach() as std::jthread will join on destruction
-	}
-
-	void disableAndUpdate(RE::TESObjectREFR* a_this)
-	{
-		SKSE::GetTaskInterface()->AddTask([this, a_this]() {
-			//UpdateClass::updateNPCVisualsController(a_this);
-			std::jthread t(&UpdateClass::disableREFR, this, a_this);
 			t.detach();
 			});
 		// No need to call t.detach() as std::jthread will join on destruction

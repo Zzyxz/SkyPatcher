@@ -54,10 +54,8 @@ namespace LEVELEDLIST
 	struct line_content create_patch_instruction(const std::string& line);
 	void                process_patch_instructions(const std::list<line_content>& tokens);
 	void*               readConfig(const std::string& folder);
-	void                process_patch_instructions(const std::list<line_content>& tokens);
 	template <typename T>
 	void patch(const LEVELEDLIST::line_content& line, T* curobj);
-	void                patchLevChar(const LEVELEDLIST::line_content& line, RE::TESLevCharacter* curobj);
 }
 
 #endif

@@ -15,15 +15,6 @@ using namespace std;
 namespace SPELL
 {
 
-	class LoadRaceDataHook : public RE::SpellItem
-	{
-	public:
-		static void InstallHook();
-		static bool Hook_InitItemImpl(RE::SpellItem* a_race, RE::TESFile* a_mod);
-
-	private:
-		static inline REL::Relocation<decltype(&Hook_InitItemImpl)> func;
-	};
 	struct line_content
 	{
 		std::vector<std::string> objects;

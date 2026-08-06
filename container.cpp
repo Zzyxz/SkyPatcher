@@ -144,7 +144,6 @@ namespace CONTAINER
 							size_t      pos = fileName.find(extension);
 							if (pos != std::string::npos) {
 								fileName = fileName.substr(0, pos);
-								const char* modname = fileName.c_str();
 								logger::info("************************************************************");
 								logger::info(FMT_STRING("Processing config file {}... "), fullPath.c_str());
 								logger::info("************************************************************");
@@ -479,8 +478,6 @@ namespace CONTAINER
 		return found;
 
 	}
-
-	REL::Relocation<decltype(&LoadRaceDataHook::Hook_InitItemImpl)> func;
 
 	void LoadRaceDataHook::InstallHook()
 	{

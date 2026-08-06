@@ -169,7 +169,6 @@ namespace BOOK
 
 				if (!line.filterBySpellKeywordsOr.empty()) {
 					for (const auto& textureString : line.filterBySpellKeywordsOr) {
-						bool foundInList = false;
 						RE::TESForm* currentform = nullptr;
 						currentform = GetFormFromIdentifier(textureString);
 						if (currentform && currentform->formType == RE::FormType::Keyword) {

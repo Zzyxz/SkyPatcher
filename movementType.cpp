@@ -93,8 +93,6 @@ namespace MOVETYPE
 			for (const auto& curobj : ObjectArray) {
 				//logger::info("processing npc");
 				bool found = false;
-				bool keywordAnd = false;
-				bool keywordOr = false;
 
 
 				if (!curobj || curobj->IsDeleted()) {
