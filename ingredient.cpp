@@ -3,19 +3,6 @@
 #include "parsetable.h"
 namespace INGR
 {
-	// ==================================================================
-	// PHASE 2 -- INGREDIENT's key table. One row per upstream extract*()
-	// call, in the same order. See parsetable.h.
-	//
-	// "clear" and "alternateTexturesClear" are not a duplicate-key trap:
-	// they are two DIFFERENT keys where the longer one happens to end in
-	// the shorter one's text. Both are FieldKind::Value (case-sensitive,
-	// since extractValueString never passes regex::icase upstream), and
-	// the "clear" pattern is written lowercase while
-	// "alternateTexturesClear" capitalizes the C -- so upstream's
-	// "clear\s*=" never matches inside "...Clear=", and neither does the
-	// case-sensitive memcmp this table relies on.
-	// ==================================================================
 	namespace
 	{
 #define ING_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
@@ -73,7 +60,6 @@ namespace INGR
 <<<<<<< HEAD
 		auto& objectIngredientArray = dataHandler->GetFormArray<RE::IngredientItem>();
 =======
-		//RE::BSTArray<RE::AlchemyItem*> objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
 		const auto& objectIngredientArray = dataHandler->GetFormArray<RE::IngredientItem>();
 >>>>>>> origin/new-main
 		for (const auto& line : tokens) {
@@ -86,7 +72,6 @@ namespace INGR
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Ingredient) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = (RE::IngredientItem*)currentform;
 						patch(line, curobj);
 					}
@@ -97,7 +82,6 @@ namespace INGR
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, ingredient) pair.
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
@@ -126,9 +110,7 @@ namespace INGR
 						RE::TESForm* currentform = nullptr;
 						currentform = GetFormFromIdentifier(textureString);
 						if (currentform) {
-							//logger::debug("start search");
 							if (findTextureSet(curobj, currentform->As<RE::BGSTextureSet>())) {
-								//logger::debug("Texture found");
 								found = true;
 								break;
 							}
@@ -138,22 +120,17 @@ namespace INGR
 
 
 				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
 					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
 					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
 				}
 
 				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -184,7 +161,6 @@ namespace INGR
 						mgefAnd = true;
 					}
 				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					mgefAnd = true;
 				}
 				if (!line.mgefsOr.empty()) {
@@ -200,8 +176,6 @@ namespace INGR
 							for (const auto& effect : curobj->effects) {
 								if (effect && effect->baseEffect->formID == keyword->formID) {
 									mgefOr = true;
-									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-									//logger::info("Keyword found.");
 									break;
 								}
 							}
@@ -211,12 +185,10 @@ namespace INGR
 						}
 					}
 				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					mgefOr = true;
 				}
 
 				if ((!line.mgefs.empty() || !line.mgefsOr.empty()) && mgefAnd && mgefOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by mgefs. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -225,14 +197,12 @@ namespace INGR
 				}
 
 				if (!line.keywordsExcluded.empty() && found) {
-					//logger::info("keywords not empty");
 					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
 						found = false;
 					}
 				}
 
 				if (!line.mgefsExcluded.empty() && found) {
-					//logger::info("mgefs not empty");
 					for (const auto& mgefstring : line.mgefsExcluded) {
 						RE::TESForm* currentform = nullptr;
 						RE::EffectSetting* keyword = nullptr;
@@ -244,8 +214,6 @@ namespace INGR
 							for (const auto& effect : curobj->effects) {
 								if (effect && effect->baseEffect->formID == keyword->formID) {
 									found = false;
-									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-									//logger::info("Keyword found.");
 									break;
 								}
 							}
@@ -254,7 +222,6 @@ namespace INGR
 				}
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Ingredient)) {
 						found = false;
 						logger::debug(FMT_STRING("ingredient {:08X} {} excluded."), curobj->formID, curobj->fullName);
@@ -423,7 +390,7 @@ namespace INGR
 				objectToAdd.resize(5, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
-				if (addForm) {  // Only proceed if addForm is not null
+				if (addForm) {
 					float magnitude = 0.0f;
 					if (objectToAdd[1] != "null") {
 						magnitude = std::stof(objectToAdd[1]);
@@ -474,7 +441,7 @@ namespace INGR
 				objectToAdd.resize(4, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
-				if (addForm) {  // Only proceed if addForm is not null
+				if (addForm) {
 					float magnitude = 0.0f;
 					if (objectToAdd[1] != "null") {
 						magnitude = std::stof(objectToAdd[1]);

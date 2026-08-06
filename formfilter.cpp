@@ -1,17 +1,3 @@
-// PROTOTYPE (proto/common-filters). See formfilter.h for the rationale.
-//
-// Every loop below is a verbatim transcription of the upstream per-type body,
-// including its quirks, because the only equivalence check available for the
-// apply layer is the benchmark's match_rate. Two deliberate non-changes:
-//
-//   * `std::string string_form = keywordstring;` is kept even though
-//     GetFormFromIdentifier takes a const&. It is a pure waste of one
-//     std::string copy per (form, identifier), but removing it here would
-//     mix a real optimization into a measurement whose whole purpose is to
-//     isolate the cost of the indirection. Left for a follow-up.
-//   * `curobj->GetFile(0)` is dereferenced without a null check, exactly as
-//     all 24 copies do. GetFile(0) returns nullptr for a dynamic form; the
-//     upstream code would crash there and so does this.
 
 #include "formfilter.h"
 #include "utility.h"
@@ -59,8 +45,6 @@ namespace formfilter
 
 	namespace
 	{
-		// The single place the two-holder keyword test lives. a_alt is NPC's
-		// race; nullptr for every other form type.
 		inline bool holdsKeyword(const RE::BGSKeywordForm* a_kf, const RE::BGSKeywordForm* a_alt, RE::BGSKeyword* a_keyword)
 		{
 			return const_cast<RE::BGSKeywordForm*>(a_kf)->HasKeyword(a_keyword) ||
@@ -179,11 +163,6 @@ namespace formfilter
 		return false;
 	}
 
-	// =====================================================================
-	// PHASE 1 -- resolve once per rule. See formfilter.h for the rationale
-	// and for why each equivalence below holds.
-	// =====================================================================
-
 	std::vector<RE::TESForm*> resolveForms(const std::vector<std::string>& a_ids, RE::FormType a_type)
 	{
 		std::vector<RE::TESForm*> out;
@@ -216,8 +195,6 @@ namespace formfilter
 		out.reserve(a_ids.size());
 		for (const auto& id : a_ids) {
 			RE::TESForm* form = GetFormFromIdentifier(id);
-			// 0 is not a valid form ID (LookupByID(0) is null), so it is a safe
-			// "this identifier did not resolve to a_type" marker.
 			out.push_back((form && form->formType == a_type) ? form->formID : 0);
 		}
 		return out;
@@ -264,8 +241,6 @@ namespace formfilter
 
 		r.objectExcluded = resolveFormIDs(a_v.objectExcluded, a_objectExcludedType);
 
-		// Mirrors the call sites' own `!list.empty() && test(list)` guard, so an
-		// empty list yields true and the caller can drop the emptiness test.
 		r.allPluginsInstalled = a_v.hasPlugin.empty() || hasAllPlugins(a_v.hasPlugin);
 		r.anyPluginInstalled = a_v.hasPluginOr.empty() || hasAnyPlugin(a_v.hasPluginOr);
 
@@ -317,11 +292,6 @@ namespace formfilter
 		return false;
 	}
 
-	// The form's own EditorID is lowercased ONCE per call instead of once per
-	// needle -- upstream recomputed toLowerCase(get_editorID(form)) inside the
-	// needle loop. get_editorID is deterministic for a given form, so this is a
-	// pure hoist. The empty-list early-out reproduces upstream's result exactly:
-	// with no needles the loop never ran and the accumulator stayed false.
 	bool matchesEditorIdAnd(const ResolvedCommonFilters& a_r, const RE::TESForm* a_form)
 	{
 		if (a_r.editorIdContains.empty()) {
@@ -378,10 +348,6 @@ namespace formfilter
 		return false;
 	}
 
-	// =====================================================================
-	// PHASE 3 -- the rule index. See formfilter.h for the soundness argument.
-	// =====================================================================
-
 	IndexStats& stats()
 	{
 		static IndexStats s;
@@ -391,7 +357,7 @@ namespace formfilter
 	void appendMaskBits(std::vector<std::uint64_t>& a_out, std::uint32_t a_tag, std::uint32_t a_mask)
 	{
 		while (a_mask) {
-			const std::uint32_t bit = a_mask & (~a_mask + 1u);  // lowest set bit
+			const std::uint32_t bit = a_mask & (~a_mask + 1u);
 			a_out.push_back(sigTagged(a_tag, bit));
 			a_mask &= ~bit;
 		}
@@ -400,9 +366,6 @@ namespace formfilter
 	void FormSignalIndex::add(std::uint64_t a_key, std::uint32_t a_formIdx)
 	{
 		auto& bucket = m_buckets[a_key];
-		// Forms are indexed in ascending order, so a form that carries the same
-		// signal twice (the same keyword listed twice, a race whose keyword the
-		// NPC also carries) only ever collides with the last entry.
 		if (bucket.empty() || bucket.back() != a_formIdx) {
 			bucket.push_back(a_formIdx);
 		}
@@ -414,8 +377,6 @@ namespace formfilter
 		if (a_keys.empty()) {
 			return;
 		}
-		// The overwhelmingly common case: a rule names exactly one signal, so
-		// the bucket IS the candidate list and is already ascending and unique.
 		if (a_keys.size() == 1) {
 			const auto it = m_buckets.find(a_keys.front());
 			if (it != m_buckets.end()) {
@@ -429,8 +390,6 @@ namespace formfilter
 				a_out.insert(a_out.end(), it->second.begin(), it->second.end());
 			}
 		}
-		// Sorting restores the form array's own order, which is what makes the
-		// candidate walk visit forms in exactly the sequence the full scan did.
 		std::sort(a_out.begin(), a_out.end());
 		a_out.erase(std::unique(a_out.begin(), a_out.end()), a_out.end());
 	}
@@ -448,17 +407,8 @@ namespace formfilter
 		}
 	}
 
-	// =====================================================================
-	// PHASE 2 -- the predicate interpreter. See formfilter.h.
-	// =====================================================================
 	namespace
 	{
-		// Static cost, in arbitrary units, of testing ONE operand of an opcode.
-		// Only the ORDER matters. The two substring opcodes are two orders of
-		// magnitude dearer than an integer compare because each one runs
-		// get_editorID (a cross-DLL call), a toLowerCase allocation and a
-		// std::string::find; everything else is a load and a compare, or a
-		// short linear scan over an array the form already owns.
 		std::uint32_t opCost(Op a_op)
 		{
 			switch (a_op) {
@@ -512,8 +462,6 @@ namespace formfilter
 			return holdsKeyword(a_t.kf, a_t.alt, a_kw);
 		}
 
-		// Does operand i of a_p hold for a_t? The single switch the whole
-		// filter chain reduces to.
 		bool operandHolds(const MatchProgram& a_prog, const Predicate& a_p, std::uint16_t a_i,
 			const MatchTarget& a_t, MatchScratch& a_s)
 		{
@@ -530,8 +478,6 @@ namespace formfilter
 				return lowerFullName(a_t, a_s).find(a_prog.strings[static_cast<std::size_t>(ops[a_i])]) != std::string::npos;
 
 			case Op::ModelContains:
-				// Upstream leaves `found` alone for a raceless NPC, i.e. the
-				// test passes vacuously.
 				return !a_t.npc->race ||
 				       maleModelPath(a_t, a_s).find(a_prog.strings[static_cast<std::size_t>(ops[a_i])]) != std::string::npos;
 
@@ -539,10 +485,6 @@ namespace formfilter
 				return a_t.npc->race && a_t.npc->race->formID == static_cast<RE::FormID>(ops[a_i]);
 
 			case Op::NpcClass:
-				// NOTE: upstream's filterByClassExclude dereferences npcClass
-				// with NO null check and would crash on a classless NPC. The
-				// null check here can only change the outcome for a form that
-				// would have crashed.
 				return a_t.npc->npcClass && a_t.npc->npcClass->formID == static_cast<RE::FormID>(ops[a_i]);
 
 			case Op::Outfit:
@@ -588,9 +530,6 @@ namespace formfilter
 				       a_t.weapon->firstPersonModelObject->formID == static_cast<RE::FormID>(ops[a_i]);
 
 			case Op::WeapBound:
-				// restrictToFlags' upstream loop can only leave `found` true if
-				// its FIRST entry is "boundweapon" and the flag is set; every
-				// other entry writes found = false before the break can fire.
 				return ops[0] != 0 &&
 				       a_t.weapon->weaponData.flags2.any(RE::TESObjectWEAP::Data::Flag2::kBoundWeapon);
 
@@ -620,15 +559,10 @@ namespace formfilter
 		{
 			switch (static_cast<Mode>(a_p.mode)) {
 			case Mode::And:
-				// Empty is FALSE: every upstream AND accumulator starts false.
 				if (a_p.count == 0) {
 					return false;
 				}
 				if (static_cast<Op>(a_p.op) == Op::ArmorAddon) {
-					// The one AND loop in this codebase that resets its
-					// accumulator at the TOP of each iteration, which makes a
-					// hole (an identifier that did not resolve to an Armature)
-					// observable. Transcribed rather than reduced.
 					bool foundInList = false;
 					for (std::uint16_t i = 0; i < a_p.count; ++i) {
 						foundInList = false;
@@ -706,9 +640,6 @@ namespace formfilter
 			}
 		}
 
-		// NPC's filterByPCLevelMult / AutoCalc / Essential / Protected: each
-		// ASSIGNS found, with no !found guard, so they run in source order and
-		// after the first positive stage.
 		for (const Predicate& p : a_prog.assigns) {
 			found = predicateHolds(a_prog, p, a_t, a_scratch);
 		}
@@ -856,15 +787,10 @@ namespace formfilter
 				appendMaskBits(a_keys, kTagBipedSlot, static_cast<std::uint32_t>(v));
 				return true;
 			default:
-				// Substring tests and everything else have no finite key set.
 				return false;
 			}
 		};
 
-		// BOTH positive stages: `found` is the OR over all of them, so every
-		// one of them needs a necessary signal. (Missing `positive2` here made
-		// a faction-filtered NPC rule visit only the candidates its OTHER
-		// filters named -- caught by the harness's matched-pair census.)
 		std::vector<const Disjunct*> stages;
 		stages.reserve(a_prog.positive.size() + a_prog.positive2.size());
 		for (const Disjunct& d : a_prog.positive) {
@@ -876,11 +802,6 @@ namespace formfilter
 
 		for (const Disjunct* dp : stages) {
 			const Disjunct& d = *dp;
-			// A conjunction needs ALL of its predicates, so ANY ONE of them
-			// supplies a necessary signal. Prefer an And predicate (one key)
-			// over an Or (one key per operand). An And list that resolved to
-			// nothing can never hold, so it contributes no signal and the
-			// disjunct can never fire.
 			const Predicate* chosen = nullptr;
 			for (std::uint16_t i = 0; i < d.count; ++i) {
 				const Predicate& p = a_prog.preds[d.first + i];
@@ -897,12 +818,9 @@ namespace formfilter
 			}
 			if (static_cast<Mode>(chosen->mode) == Mode::And) {
 				if (chosen->count == 0) {
-					continue;  // can never hold, so the disjunct contributes nothing
+					continue;
 				}
 				if (static_cast<Op>(chosen->op) == Op::ArmorAddon) {
-					// A 0 hole is skipped by the AND loop, so the first NON-ZERO
-					// entry is the necessary signal. An all-holes list can never
-					// pass, so contributing nothing is correct.
 					for (std::uint16_t i = 0; i < chosen->count; ++i) {
 						if (a_prog.pool[chosen->operands + i]) {
 							emit(*chosen, i);
@@ -925,14 +843,8 @@ namespace formfilter
 		return true;
 	}
 
-	// =====================================================================
-	// PHASE 4 -- the action table.
-	// =====================================================================
 	const ActionRow* findAction(const ActionRow* a_rows, std::size_t a_count, const std::string& a_raw)
 	{
-		// ONE lowercase for the whole table, where the ladders did one per
-		// rung. toLowerCase (utility.cpp) is the exact fold the ladders used:
-		// std::tolower over unsigned char, byte by byte.
 		return findActionLowered(a_rows, a_count, toLowerCase(a_raw));
 	}
 
@@ -943,8 +855,6 @@ namespace formfilter
 				return &a_rows[i];
 			}
 		}
-		// Upstream's trailing `else`: the caller decides between "nothing" and
-		// "log a warning". Never a silent default value.
 		return nullptr;
 	}
 }

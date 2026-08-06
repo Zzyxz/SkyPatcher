@@ -7,10 +7,6 @@ namespace REFERENCE
 
 	RefrData rData;
 
-	// ==================================================================
-	// PHASE 2 -- REFERENCE's key table. One row per upstream extract*()
-	// call, in the same order. See parsetable.h.
-	// ==================================================================
 	namespace
 	{
 #define REFR_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -36,40 +32,25 @@ namespace REFERENCE
 		patch_instruction l;
 		referenceKeyTable().parse(line, &l);
 		return l;
-	}  //endStruct
+	}
 
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
 		logger::debug("processing patch instructions");
 <<<<<<< HEAD
 =======
-		//RE::BSTArray<RE::TESObjectWEAP*> ObjectArray = dataHandler->GetFormArray<RE::TESObjectREFR>();
 >>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
-			//logger::debug("REFR 1 ");
 			if (!line.objects.empty()) {
-				//logger::debug("REFR 2 ");
 				for (const auto& npcstring : line.objects) {
-					//logger::debug("REFR 3 ");
-					//RE::FormID curobj = nullptr;
-
 					std::string string_form = npcstring;
 					auto curFormID = BuildFormIDFromIdentifier(string_form);
 					if (curFormID != 0x0) {
-						//logger::debug("REFR {:08X} ", currentform->formID);
-						//curobj = (RE::TESObjectREFR*)currentform;
 						patch(line, curFormID);
 					}
 				}
 			}
-
-			//if (!line.objects.empty()  ) {
-			//	//logger::info("continue");
-			//	continue;
-			//}
-
-			
 		}
 	}
 
@@ -147,14 +128,12 @@ namespace REFERENCE
 	void* patch(const REFERENCE::patch_instruction& line, RE::FormID curobj)
 >>>>>>> origin/new-main
 	{
-		//logger::debug(FMT_STRING("refr 11 formid: {:08X} "), curobj);
 		if (!line.baseobject.empty() && line.baseobject != "none") {
 
 			RE::TESForm* currentform = nullptr;
 			std::string  string_form = line.baseobject;
 			currentform = GetFormFromIdentifier(string_form);
 			if (currentform && currentform->IsBoundObject()) {
-				//curobj->data.objectReference = (RE::TESBoundObject*)currentform;
 				rData.refrDataMap[curobj].replaceWith = (RE::TESBoundObject*)currentform;
 				logger::debug(FMT_STRING("refr formid to replace: {:08X} "), curobj );
 			}

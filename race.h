@@ -93,8 +93,6 @@ namespace RACE
 		std::string weightFemale;
 		std::vector<std::string> modNames;
 		std::vector<std::string> removeAttackData;
-		//attackDataToAdd
-		//attackDataToModify
 
 	};
 

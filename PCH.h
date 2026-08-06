@@ -60,21 +60,18 @@ template <class CharT>
 	using zstring = basic_zstring<char>;
 	using zwstring = basic_zstring<wchar_t>;
 
-	// owning pointer
 	template <
 		class T,
 		class = std::enable_if_t<
 			std::is_pointer_v<T>>>
 	using owner = T;
 
-	// non-owning pointer
 	template <
 		class T,
 		class = std::enable_if_t<
 			std::is_pointer_v<T>>>
 	using observer = T;
 
-	// non-null pointer
 	template <
 		class T,
 		class = std::enable_if_t<
@@ -128,16 +125,15 @@ template <class CharT>
 		string(const CharT (&)[N]) -> string<CharT, N - 1>;
 	}
 
-	template <class EF>                                        //
-		requires(std::invocable<std::remove_reference_t<EF>>)  //
+	template <class EF>
+		requires(std::invocable<std::remove_reference_t<EF>>)
 	class scope_exit
 	{
 	public:
-		// 1)
 		template <class Fn>
-		explicit scope_exit(Fn&& a_fn)  //
+		explicit scope_exit(Fn&& a_fn)
 			noexcept(std::is_nothrow_constructible_v<EF, Fn> ||
-					 std::is_nothrow_constructible_v<EF, Fn&>)  //
+					 std::is_nothrow_constructible_v<EF, Fn&>)
 			requires(!std::is_same_v<std::remove_cvref_t<Fn>, scope_exit> &&
 					 std::is_constructible_v<EF, Fn>)
 		{
@@ -151,10 +147,9 @@ template <class CharT>
 			}
 		}
 
-		// 2)
-		scope_exit(scope_exit&& a_rhs)  //
+		scope_exit(scope_exit&& a_rhs)
 			noexcept(std::is_nothrow_move_constructible_v<EF> ||
-					 std::is_nothrow_copy_constructible_v<EF>)  //
+					 std::is_nothrow_copy_constructible_v<EF>)
 			requires(std::is_nothrow_move_constructible_v<EF> ||
 					 std::is_copy_constructible_v<EF>)
 		{
@@ -171,7 +166,6 @@ template <class CharT>
 			}
 		}
 
-		// 3)
 		scope_exit(const scope_exit&) = delete;
 
 		~scope_exit() noexcept
@@ -210,13 +204,13 @@ template <class CharT>
 
 		constexpr enumeration(enumeration&&) noexcept = default;
 
-		template <class U2>  // NOLINTNEXTLINE(google-explicit-constructor)
+		template <class U2>
 		constexpr enumeration(enumeration<Enum, U2> a_rhs) noexcept :
 			_impl(static_cast<underlying_type>(a_rhs.get()))
 		{}
 
 		template <class... Args>
-		constexpr enumeration(Args... a_values) noexcept  //
+		constexpr enumeration(Args... a_values) noexcept
 			requires(std::same_as<Args, enum_type> && ...)
 			:
 			_impl((static_cast<underlying_type>(a_values) | ...))
@@ -246,7 +240,7 @@ template <class CharT>
 		[[nodiscard]] constexpr underlying_type underlying() const noexcept { return _impl; }
 
 		template <class... Args>
-		constexpr enumeration& set(Args... a_args) noexcept  //
+		constexpr enumeration& set(Args... a_args) noexcept
 			requires(std::same_as<Args, enum_type> && ...)
 		{
 			_impl |= (static_cast<underlying_type>(a_args) | ...);
@@ -254,7 +248,7 @@ template <class CharT>
 		}
 
 		template <class... Args>
-		constexpr enumeration& reset(Args... a_args) noexcept  //
+		constexpr enumeration& reset(Args... a_args) noexcept
 			requires(std::same_as<Args, enum_type> && ...)
 		{
 			_impl &= ~(static_cast<underlying_type>(a_args) | ...);
@@ -262,21 +256,21 @@ template <class CharT>
 		}
 
 		template <class... Args>
-		[[nodiscard]] constexpr bool any(Args... a_args) const noexcept  //
+		[[nodiscard]] constexpr bool any(Args... a_args) const noexcept
 			requires(std::same_as<Args, enum_type> && ...)
 		{
 			return (_impl & (static_cast<underlying_type>(a_args) | ...)) != static_cast<underlying_type>(0);
 		}
 
 		template <class... Args>
-		[[nodiscard]] constexpr bool all(Args... a_args) const noexcept  //
+		[[nodiscard]] constexpr bool all(Args... a_args) const noexcept
 			requires(std::same_as<Args, enum_type> && ...)
 		{
 			return (_impl & (static_cast<underlying_type>(a_args) | ...)) == (static_cast<underlying_type>(a_args) | ...);
 		}
 
 		template <class... Args>
-		[[nodiscard]] constexpr bool none(Args... a_args) const noexcept  //
+		[[nodiscard]] constexpr bool none(Args... a_args) const noexcept
 			requires(std::same_as<Args, enum_type> && ...)
 		{
 			return (_impl & (static_cast<underlying_type>(a_args) | ...)) == static_cast<underlying_type>(0);

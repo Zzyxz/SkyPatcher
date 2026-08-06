@@ -3,24 +3,6 @@
 #include "parsetable.h"
 namespace LEVELEDLIST
 {
-	// ==================================================================
-	// PHASE 2 -- leveledlist's key table. One row per upstream extract*()
-	// call, in the same order. See parsetable.h.
-	//
-	// "addTemplateKeywords" (-> templateKeyword) was originally a hand-rolled
-	// block rather than a literal extractToArr2D(...) call, but it performs
-	// the identical trim/split-on-','-then-'~' algorithm (see
-	// detail::applyArr2D) and already used regex::icase, matching Arr2D's
-	// case-insensitive derivation -- so it converts cleanly too.
-	//
-	// "noFilterLL" and "noFilterLLNPC" are NOT in this table: they are also
-	// hand-rolled extractValueString look-alikes, but each explicitly passes
-	// regex::icase, unlike the real extractValueString (which never does).
-	// FieldKind::Value derives case-sensitivity uniformly from the engine
-	// (case-sensitive), so mapping them to Value would silently flip their
-	// case-sensitivity. They stay on the old hand-written path, run after
-	// the table parse, in create_patch_instruction.
-	// ==================================================================
 	namespace
 	{
 #define LL_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
@@ -55,47 +37,12 @@ namespace LEVELEDLIST
 		}
 	}
 
-	//void __fastcall TESLeveledList::FreeLeveledList(TESLeveledList* this)
-	//{
-	//	int* v2;             // rsi
-	//	int v3;              // ebx
-	//	LEVELED_OBJECT* v4;  // rcx
-	//	void* v5;            // rbp
-	//	v2 = (int*)(*((_QWORD*)NtCurrentTeb()->ThreadLocalStoragePointer + (unsigned int)tls_index) + 2496i64);
-	//	v3 = *v2;
-	//	*v2 = 98;
-	//	v4 = (LEVELED_OBJECT*)*((_QWORD*)this + 3);
-	//	if (v4)
-	//		LEVELED_OBJECT::`vector deleting destructor'(v4, 3); v5 = (void*)*((_QWORD*)this + 4);
-	//	*((_QWORD*)this + 3) = 0i64;
-	//	*((_BYTE*)this + 41) = 0;
-	//	if ( `MemoryManager::Instance '::`2' ::uiinitFence != 2)
-	//		MemoryManager::UpdateInitState(
-	//     `MemoryManager::Instance '::`2' ::cbuffer,
-	//			(unsigned int*)&`MemoryManager::Instance '::`2' ::uiinitFence);
-	//	MemoryManager::Deallocate((MemoryManager*)`MemoryManager::Instance '::`2' ::cbuffer, v5, 0);
-	//	*((_QWORD*)this + 4) = 0i64;
-	//	*((_BYTE*)this + 40) = 0;
-	//	*v2 = v3;
-	//}
-
-	//void FreeLeveledList(RE::TESLeveledList* ll)
-	//{
-	//	using func_t = decltype(&FreeLeveledList);
-	//	const REL::Relocation<func_t> func{ REL::ID(645214) };  //14015BA50
-	//	return func(ll);
-	//}
-
 	void FreeLeveledList(RE::LEVELED_OBJECT* a_lobj, uint32_t arg2 = 0x3)
 	{
 		if (!a_lobj)
 			return;
 
 		RE::free(a_lobj);
-
-		//using func_t = decltype(&FreeLeveledList);
-		//const REL::Relocation<func_t> func{ REL::ID(296092) };
-		//return func(a_lobj, arg2);
 	}
 
 	struct LL_ALLOC
@@ -134,14 +81,12 @@ namespace LEVELEDLIST
 
 			levl->entries.clear();
 			levl->numEntries = 0;
-			//logger::debug("ceateLL size after clear entries numEntries {}", levl->entries.size(), levl->numEntries);
 		}
 
 		if (a_llad.empty())
 			return;
 
 		uint32_t  size = static_cast<uint32_t>(a_llad.size());
-		//logger::debug("ceateLL size {}", size);
 		LL_ALLOC* newLL = reserveNewLevL(size);
 		if (!newLL)
 			return;
@@ -149,26 +94,15 @@ namespace LEVELEDLIST
 		newLL->count = size;
 		for (uint32_t ii = 0; ii < size; ii++) {
 			newLL->ll[ii] = a_llad[ii];
-			//logger::debug("ceateLL size for {}", ii);
 		}
-
-		//logger::debug("ceateLL size before resize entries {} numEntries {}", levl->entries.size(), levl->numEntries);
 
 		levl->entries.resize(newLL->count);
 
-		//logger::debug("ceateLL size newLL->count {}", newLL->count);
-
-		//logger::debug("ceateLL size before set entries {} numEntries {}", levl->entries.size(), levl->numEntries);
-
 		for (int i = 0; i < newLL->count; i++) {
 			levl->entries[i] = newLL->ll[i];
-			//logger::debug("ceateLL size for {}", i);
 		}
 
-		//= nLL->ll;
 		levl->numEntries = static_cast<int8_t>(size);
-		//logger::debug("ceateLL size static_cast<int8_t>(size) {}", static_cast<int8_t>(size));
-		//logger::debug("ceateLL size entries {} numEntries {}", levl->entries.size(), levl->numEntries);
 	}
 
 	void ClearLL(RE::TESLeveledList* levl)
@@ -178,7 +112,6 @@ namespace LEVELEDLIST
 
 		if (!levl->entries.empty()) {
 			memset(levl->entries.data(), 0, levl->numEntries * sizeof(RE::LEVELED_OBJECT));
-			//FreeLeveledList(levl->entries.data());
 
 			levl->entries.clear();
 			levl->numEntries = 0;
@@ -190,9 +123,6 @@ namespace LEVELEDLIST
 		line_content l;
 		leveledListKeyTable().parse(line, &l);
 
-		// --- bespoke blocks the shared engine cannot express, left exactly
-		// as-is and run after the table parse. See the case-sensitivity note
-		// on the key table above for why these two cannot become Value rows.
 		std::regex  noFilterLL_regex("noFilterLL\\s*=([^:]+)", regex::icase);
 		std::smatch noFilterLLmatch;
 		std::regex_search(line, noFilterLLmatch, noFilterLL_regex);
@@ -231,7 +161,6 @@ namespace LEVELEDLIST
 
 
 		for (const auto& line : tokens) {
-			//New
 			if (!line.objects.empty()) {
 				for (const auto& objectstring : line.objects) {
 					RE::TESForm* currentform = nullptr;
@@ -245,7 +174,6 @@ namespace LEVELEDLIST
 							logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), object->formID);
 							continue;
 						}
-						//logger::debug(FMT_STRING("leveled lists {:08X} call patch."), object->formID);
 						patch(line, object);
 					}
 				}
@@ -253,7 +181,6 @@ namespace LEVELEDLIST
 
 
 			if (!line.containerObjects.empty()) {
-				//logger::info("npc not empty");
 				for (const auto& objectstring : line.containerObjects) {
 					RE::TESForm* currentform = nullptr;
 					RE::TESLevCharacter* object = nullptr;
@@ -261,7 +188,6 @@ namespace LEVELEDLIST
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::LeveledNPC) {
 						object = (RE::TESLevCharacter*)currentform;
-						//logger::debug(FMT_STRING("leveled list char"));
 						patch(line, object);
 					}
 				}
@@ -285,7 +211,6 @@ namespace LEVELEDLIST
 
 			if (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty() || !line.filterByEditorIdContainsExcluded.empty()) {
 <<<<<<< HEAD
-				// PROTOTYPE: one view per rule, not per (rule, leveled list) pair.
 				const formfilter::CommonFilterView view{
 					formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
 					formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
@@ -308,10 +233,6 @@ namespace LEVELEDLIST
 						continue;
 					}
 
-					// DRIFT (preserved, not fixed): upstream is missing the
-					// "!found &&" guard siblings have on this and the next
-					// two checks. Inert here since `found` is still false at
-					// this point regardless. See task report.
 					if (!line.filterByEditorIdContains.empty()) {
 						contains = formfilter::matchesEditorIdAnd(view, curobj);
 					}
@@ -320,7 +241,6 @@ namespace LEVELEDLIST
 					}
 
 					if (!line.filterByEditorIdContainsOr.empty()) {
-						//logger::info("keywords not empty");
 						containsOr = formfilter::matchesEditorIdOr(view, curobj);
 					}
 					else {
@@ -328,12 +248,10 @@ namespace LEVELEDLIST
 					}
 
 					if ((!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-						//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 						found = true;
 					}
 
 					if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-						//logger::info("factions not empty");
 						if (formfilter::hasExcludedEditorId(view, curobj)) {
 							found = false;
 						}
@@ -447,13 +365,11 @@ namespace LEVELEDLIST
 			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
 
 			for (const auto& objectToreplace : line.replaceObjects) {
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string formToReplaceString = objectToreplace[0];
 				std::string formToReplaceWithString = objectToreplace[1];
 				int          count = 0;
 				RE::TESForm* formToReplace = GetFormFromIdentifier(formToReplaceString);
 				RE::TESForm* formToReplaceWith = GetFormFromIdentifier(formToReplaceWithString);
-				// Replace logic for the entire vector
 				for (auto& obj : llVec) {
 					if (obj.form->formID == formToReplace->formID) {
 						obj.form = formToReplaceWith;
@@ -629,14 +545,12 @@ namespace LEVELEDLIST
 							logger::debug(FMT_STRING("leveled Lists {:08X} removed item {:08X} with keyword {:08X} {} "), curobj->formID, x.form->formID, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
 							return true;
 						}
-						//logger::debug(FMT_STRING("leveled Lists {:08X} cannot removed item {:08X} not a keyword {:08X} {} "), curobj->formID, x.form->formID, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
 
 						return false;
 						}),
 						llVec.end());
 				}
 			}
-			//if ()
 			if (llVec.size() >= 1) {
 				createLL(curobj, llVec);
 			}
@@ -645,16 +559,6 @@ namespace LEVELEDLIST
 				logger::debug(FMT_STRING("leveled Lists {:08X} is now empty"), curobj->formID);
 			}
 		}
-
-		//if (!line.templateKeyword.empty()) {
-		//	for (const auto& object : line.templateKeyword) {
-		//		RE::BGSKeyword* addForm = (RE::BGSKeyword*)GetFormFromIdentifier(object[0]);
-		//		changeKeyword_TESLevItem(curobj, addForm, std::stoi(object[1]));
-		//		logger::debug(FMT_STRING("leveled Lists formid: {:08X} added/changed {:08X} {} {}"), curobj->formID, addForm->formID, addForm->formEditorID, object[1]);
-		//	}
-
-		//	//curobj->keywordChances
-		//}
 
 		if (!line.clear.empty() && line.clear != "none") {
 			if (line.clear == "yes" || line.clear == "true") {
@@ -698,10 +602,8 @@ namespace LEVELEDLIST
 
 		if (!line.addedObjects.empty()) {
 			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
-			//logger::debug(FMT_STRING("leveled Lists {:08X} size before adding {}"), curobj->formID, line.addedObjects.size());
 			for (const auto& objectToAdd : line.addedObjects) {
 				if (objectToAdd.empty()) { logger::warn("leveled list {:08X}: empty addedObjects entry", curobj->formID); continue; }
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				uint16_t level = 1;
 				uint16_t count = 1;
 
@@ -712,7 +614,6 @@ namespace LEVELEDLIST
 				if (objectToAdd.size() > 2) {
 					count = std::stoi(objectToAdd[2]);
 				}
-				//uint8_t      chanceNone = std::stoi(objectToAdd[3]);
 				RE::TESForm* addForm = GetFormFromIdentifier(addFormStr);
 				if (addForm) {
 					llVec.push_back({ addForm, count, level });
@@ -730,7 +631,6 @@ namespace LEVELEDLIST
 
 		if (!line.addedObjectsOnce.empty()) {
 			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
-			//logger::debug(FMT_STRING("leveled Lists {:08X} size before adding {}"), curobj->formID, line.addedObjectsOnce.size());
 			for (const auto& objectToAdd : line.addedObjectsOnce) {
 				if (objectToAdd.empty()) { logger::warn("leveled list {:08X}: empty addedObjectsOnce entry", curobj->formID); continue; }
 				uint16_t level = 1;
@@ -746,18 +646,15 @@ namespace LEVELEDLIST
 				RE::TESForm* addForm = GetFormFromIdentifier(addFormStr);
 
 				if (addForm) {
-					// Check if addForm already exists in llVec
 					auto it = std::find_if(llVec.begin(), llVec.end(), [addForm](const RE::LEVELED_OBJECT& obj) {
 						return obj.form->formID == addForm->formID;
 						});
 
 					if (it == llVec.end()) {
-						// addForm not found, add it to llVec
 						llVec.push_back({ addForm, count, level });
 						logger::debug(FMT_STRING("leveled Lists {:08X} added once Form {:08X}"), curobj->formID, addForm->formID);
 					}
 					else {
-						// addForm already exists, log a message or handle it accordingly
 						logger::debug(FMT_STRING("leveled Lists {:08X} Form {:08X} already exists"), curobj->formID, addForm->formID);
 					}
 				}
@@ -796,12 +693,10 @@ namespace LEVELEDLIST
 		if (!line.objectMultCount.empty() && curobj->numEntries > 0) {
 			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
 			for (const auto& objectToreplace : line.objectMultCount) {
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string formToReplaceString = objectToreplace[0];
 				float multiplier = std::stof(objectToreplace[1]);
 				int          count = 0;
 				RE::TESForm* formToReplace = GetFormFromIdentifier(formToReplaceString);
-				// Replace logic for the entire vector
 				if (formToReplace  ) {
 					for (auto& obj : llVec) {
 						if (obj.form->formID == formToReplace->formID) {

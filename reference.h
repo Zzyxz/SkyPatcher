@@ -16,7 +16,7 @@ namespace REFERENCE
 
 	struct REFRCommandData
 	{
-		bool disable = false;                       // disable the REFR on load
+		bool disable = false;
 		RE::TESBoundObject* replaceWith = nullptr;
 
 

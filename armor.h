@@ -113,4 +113,4 @@ void*                          patch(const ARMOR::patch_instruction_armor& line,
 
 }
 
-#endif  // PATCH_INSTRUCTION_ARMOR_H
+#endif

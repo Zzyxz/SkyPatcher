@@ -6,21 +6,6 @@
 namespace CELL
 {
 
-	// ======================================================================
-	// PHASE 2 -- CELL's key table. One row per upstream (active) extract*()
-	// call, in the same order. See parsetable.h.
-	//
-	// CAUTION: cell.cpp has NO golden-snapshot coverage (excluded from
-	// golden_dump by a pre-existing RE::ExtraCell* link gap -- see
-	// tools/check_golden.sh), so this conversion has no automated
-	// byte-identical check. It was converted anyway because every key here
-	// fits the plain "KEY\s*=([^:]+)" shape with no bespoke inline regex
-	// block and no anomalous pattern (unlike race.cpp's *Mult trio), so the
-	// table row is a mechanical, structurally exact transcription of each
-	// extractData / extractValueString / extractDataStrings call -- but this
-	// file should get extra manual review before merge, precisely because
-	// nothing here can prove it.
-	// ======================================================================
 	namespace
 	{
 #define CELL_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -41,21 +26,18 @@ namespace CELL
 			{ "fogColorNearRed", sp::FieldKind::Value, CELL_F(fogColorNearRed) },
 			{ "fogColorNearGreen", sp::FieldKind::Value, CELL_F(fogColorNearGreen) },
 			{ "fogColorNearBlue", sp::FieldKind::Value, CELL_F(fogColorNearBlue) },
-			// X
 			{ "directionalAmbientXMinRed", sp::FieldKind::Value, CELL_F(directionalAmbientXMinRed) },
 			{ "directionalAmbientXMinGreen", sp::FieldKind::Value, CELL_F(directionalAmbientXMinGreen) },
 			{ "directionalAmbientXMinBlue", sp::FieldKind::Value, CELL_F(directionalAmbientXMinBlue) },
 			{ "directionalAmbientXMaxRed", sp::FieldKind::Value, CELL_F(directionalAmbientXMaxRed) },
 			{ "directionalAmbientXMaxGreen", sp::FieldKind::Value, CELL_F(directionalAmbientXMaxGreen) },
 			{ "directionalAmbientXMaxBlue", sp::FieldKind::Value, CELL_F(directionalAmbientXMaxBlue) },
-			// Y
 			{ "directionalAmbientYMinRed", sp::FieldKind::Value, CELL_F(directionalAmbientYMinRed) },
 			{ "directionalAmbientYMinGreen", sp::FieldKind::Value, CELL_F(directionalAmbientYMinGreen) },
 			{ "directionalAmbientYMinBlue", sp::FieldKind::Value, CELL_F(directionalAmbientYMinBlue) },
 			{ "directionalAmbientYMaxRed", sp::FieldKind::Value, CELL_F(directionalAmbientYMaxRed) },
 			{ "directionalAmbientYMaxGreen", sp::FieldKind::Value, CELL_F(directionalAmbientYMaxGreen) },
 			{ "directionalAmbientYMaxBlue", sp::FieldKind::Value, CELL_F(directionalAmbientYMaxBlue) },
-			// Z
 			{ "directionalAmbientZMinRed", sp::FieldKind::Value, CELL_F(directionalAmbientZMinRed) },
 			{ "directionalAmbientZMinGreen", sp::FieldKind::Value, CELL_F(directionalAmbientZMinGreen) },
 			{ "directionalAmbientZMinBlue", sp::FieldKind::Value, CELL_F(directionalAmbientZMinBlue) },
@@ -104,31 +86,6 @@ namespace CELL
 		cellKeyTable().parse(line, &l);
 =======
 
-		// extract objects
-		//std::regex  objects_regex("filterByCells\\s*=([^:]+)", regex::icase);
-		//std::smatch objects_match;
-		//std::regex_search(line, objects_match, objects_regex);
-		//std::vector<std::string> objects;
-		//if (objects_match.empty() || objects_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objects_str = objects_match[1];
-		//	std::regex           objects_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objects_iterator(objects_str.begin(), objects_str.end(), objects_list_regex);
-		//	std::sregex_iterator objects_end;
-		//	while (objects_iterator != objects_end) {
-		//		std::string tempVar = (*objects_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Weapon String: {}"), tempVar);
-		//		if (tempVar != "none") {
-		//			objects.push_back(tempVar);
-		//		}
-		//		++objects_iterator;
-		//	}
-		//	l.object = objects;
-		//}
-
 		extractData(line, "filterByCells\\s*=([^:]+)", l.object);
 		extractData(line, "filterByCellsExcluded\\s*=([^:]+)", l.objectExcluded);
 		extractValueString(line, "fogNear\\s*=([^:]+)", l.fogNear);
@@ -148,7 +105,6 @@ namespace CELL
 		extractValueString(line, "fogColorNearGreen\\s*=([^:]+)", l.fogColorNearGreen);
 		extractValueString(line, "fogColorNearBlue\\s*=([^:]+)", l.fogColorNearBlue);
 
-		// X
 		extractValueString(line, "directionalAmbientXMinRed\\s*=([^:]+)", l.directionalAmbientXMinRed);
 		extractValueString(line, "directionalAmbientXMinGreen\\s*=([^:]+)", l.directionalAmbientXMinGreen);
 		extractValueString(line, "directionalAmbientXMinBlue\\s*=([^:]+)", l.directionalAmbientXMinBlue);
@@ -156,7 +112,6 @@ namespace CELL
 		extractValueString(line, "directionalAmbientXMaxGreen\\s*=([^:]+)", l.directionalAmbientXMaxGreen);
 		extractValueString(line, "directionalAmbientXMaxBlue\\s*=([^:]+)", l.directionalAmbientXMaxBlue);
 
-		// Y
 		extractValueString(line, "directionalAmbientYMinRed\\s*=([^:]+)", l.directionalAmbientYMinRed);
 		extractValueString(line, "directionalAmbientYMinGreen\\s*=([^:]+)", l.directionalAmbientYMinGreen);
 		extractValueString(line, "directionalAmbientYMinBlue\\s*=([^:]+)", l.directionalAmbientYMinBlue);
@@ -164,7 +119,6 @@ namespace CELL
 		extractValueString(line, "directionalAmbientYMaxGreen\\s*=([^:]+)", l.directionalAmbientYMaxGreen);
 		extractValueString(line, "directionalAmbientYMaxBlue\\s*=([^:]+)", l.directionalAmbientYMaxBlue);
 
-		// Z
 		extractValueString(line, "directionalAmbientZMinRed\\s*=([^:]+)", l.directionalAmbientZMinRed);
 		extractValueString(line, "directionalAmbientZMinGreen\\s*=([^:]+)", l.directionalAmbientZMinGreen);
 		extractValueString(line, "directionalAmbientZMinBlue\\s*=([^:]+)", l.directionalAmbientZMinBlue);
@@ -207,181 +161,8 @@ namespace CELL
 		extractValueString(line, "directionalZ\\s*=([^:]+)", l.directionalZ);
 >>>>>>> origin/new-main
 
-		//extractValueString(line, "waterEnvMap\\s*=([^:]+)", l.waterEnvMap);
-
-		//// extract skipFlags
-		//std::regex  skipFlagsExcluded_regex("filterByFlagsExcluded\\s*=([^:]+)", regex::icase);
-		//std::smatch skipFlagsExcluded_match;
-		//std::regex_search(line, skipFlagsExcluded_match, skipFlagsExcluded_regex);
-		//std::vector<std::string> skipFlagsExcluded;
-		//if (skipFlagsExcluded_match.empty() || skipFlagsExcluded_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          skipFlagsExcluded_str = skipFlagsExcluded_match[1];
-		//	std::regex           skipFlagsExcluded_list_regex("[^,]+(\\w+)", regex::icase);
-		//	std::sregex_iterator skipFlagsExcluded_iterator(skipFlagsExcluded_str.begin(), skipFlagsExcluded_str.end(), skipFlagsExcluded_list_regex);
-		//	std::sregex_iterator skipFlagsExcluded_end;
-		//	while (skipFlagsExcluded_iterator != skipFlagsExcluded_end) {
-		//		std::string keyword = (*skipFlagsExcluded_iterator)[0].str();
-		//		keyword.erase(keyword.begin(), std::find_if_not(keyword.begin(), keyword.end(), ::isspace));
-		//		keyword.erase(std::find_if_not(keyword.rbegin(), keyword.rend(), ::isspace).base(), keyword.end());
-		//		if (keyword != "none") {
-		//			skipFlagsExcluded.push_back(keyword);
-		//		}
-		//		++skipFlagsExcluded_iterator;
-		//	}
-		//	l.filterByFlagsExclude = skipFlagsExcluded;
-		//}
-
-		//// extract objectsExcluded
-		//std::regex  objectsExcluded_regex("filterByCellsExcluded\\s*=([^:]+)", regex::icase);
-		//std::smatch objectsExcluded_match;
-		//std::regex_search(line, objectsExcluded_match, objectsExcluded_regex);
-		//std::vector<std::string> objectsExcluded;
-		//if (objectsExcluded_match.empty() || objectsExcluded_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objectsExcluded_str = objectsExcluded_match[1];
-		//	std::regex           objectsExcluded_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objectsExcluded_iterator(objectsExcluded_str.begin(), objectsExcluded_str.end(), objectsExcluded_list_regex);
-		//	std::sregex_iterator objectsExcluded_end;
-		//	while (objectsExcluded_iterator != objectsExcluded_end) {
-		//		std::string tempVar = (*objectsExcluded_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Race: {}"), race);
-		//		if (tempVar != "none") {
-		//			objectsExcluded.push_back(tempVar);
-		//		}
-		//		++objectsExcluded_iterator;
-		//	}
-		//	l.objectExcluded = objectsExcluded;
-		//}
-
-		//// extract keywords
-		//std::regex  keywords_regex("filterByKeywords\\s*=([^:]+)", regex::icase);
-		//std::smatch keywords_match;
-		//std::regex_search(line, keywords_match, keywords_regex);
-		//std::vector<std::string> keywords;
-		//if (keywords_match.empty() || keywords_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          keywords_str = keywords_match[1];
-		//	std::regex           keywords_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator keywords_iterator(keywords_str.begin(), keywords_str.end(), keywords_list_regex);
-		//	std::sregex_iterator keywords_end;
-		//	while (keywords_iterator != keywords_end) {
-		//		std::string keyword = (*keywords_iterator)[0].str();
-		//		keyword.erase(keyword.begin(), std::find_if_not(keyword.begin(), keyword.end(), ::isspace));
-		//		keyword.erase(std::find_if_not(keyword.rbegin(), keyword.rend(), ::isspace).base(), keyword.end());
-		//		if (keyword != "none") {
-		//			keywords.push_back(keyword);
-		//		}
-		//		++keywords_iterator;
-		//	}
-		//	l.keywords = keywords;
-		//}
-
-		//// extract keywords
-		//std::regex  keywordsOr_regex("filterByKeywordsOr\\s*=([^:]+)", regex::icase);
-		//std::smatch keywordsOr_match;
-		//std::regex_search(line, keywordsOr_match, keywordsOr_regex);
-		//std::vector<std::string> keywordsOr;
-		//if (keywordsOr_match.empty() || keywordsOr_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          keywordsOr_str = keywordsOr_match[1];
-		//	std::regex           keywordsOr_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator keywordsOr_iterator(keywordsOr_str.begin(), keywordsOr_str.end(), keywordsOr_list_regex);
-		//	std::sregex_iterator keywordsOr_end;
-		//	while (keywordsOr_iterator != keywordsOr_end) {
-		//		std::string keyword = (*keywordsOr_iterator)[0].str();
-		//		keyword.erase(keyword.begin(), std::find_if_not(keyword.begin(), keyword.end(), ::isspace));
-		//		keyword.erase(std::find_if_not(keyword.rbegin(), keyword.rend(), ::isspace).base(), keyword.end());
-		//		if (keyword != "none") {
-		//			keywordsOr.push_back(keyword);
-		//		}
-		//		++keywordsOr_iterator;
-		//	}
-		//	l.keywordsOr = keywordsOr;
-		//}
-
-		//// extract keywords
-		//std::regex  keywordsExcluded_regex("filterByKeywordsExcluded\\s*=([^:]+)", regex::icase);
-		//std::smatch keywordsExcluded_match;
-		//std::regex_search(line, keywordsExcluded_match, keywordsExcluded_regex);
-		//std::vector<std::string> keywordsExcluded;
-		//if (keywordsExcluded_match.empty() || keywordsExcluded_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          keywordsExcluded_str = keywordsExcluded_match[1];
-		//	std::regex           keywordsExcluded_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator keywordsExcluded_iterator(keywordsExcluded_str.begin(), keywordsExcluded_str.end(), keywordsExcluded_list_regex);
-		//	std::sregex_iterator keywordsExcluded_end;
-		//	while (keywordsExcluded_iterator != keywordsExcluded_end) {
-		//		std::string keyword = (*keywordsExcluded_iterator)[0].str();
-		//		keyword.erase(keyword.begin(), std::find_if_not(keyword.begin(), keyword.end(), ::isspace));
-		//		keyword.erase(std::find_if_not(keyword.rbegin(), keyword.rend(), ::isspace).base(), keyword.end());
-		//		if (keyword != "none") {
-		//			keywordsExcluded.push_back(keyword);
-		//		}
-		//		++keywordsExcluded_iterator;
-		//	}
-		//	l.keywordsExcluded = keywordsExcluded;
-		//}
-
-		//// extract attackDamage
-		//std::regex  attackDamage_regex("attackDamage\\s*=([^:]+)", regex::icase);
-		//std::smatch match;
-		//std::regex_search(line, match, attackDamage_regex);
-		//// extract the value after the equals sign
-		//if (match.empty() || match[1].str().empty()) {
-		//	l.attackDamage = "none";
-		//} else {
-		//	std::string value = match[1].str();
-		//	value.erase(std::remove_if(value.begin(), value.end(), ::isspace), value.end());
-		//	l.attackDamage = value;
-		//}
-
-		//		// extract critDamage
-		//std::regex  critDamage_regex("critDamage\\s*=([^:]+)", regex::icase);
-		//std::smatch matchCrit;
-		//std::regex_search(line, matchCrit, critDamage_regex);
-		//// extract the value after the equals sign
-		//if (matchCrit.empty() || matchCrit[1].str().empty()) {
-		//	l.critDamage = "none";
-		//} else {
-		//	std::string value = matchCrit[1].str();
-		//	value.erase(std::remove_if(value.begin(), value.end(), ::isspace), value.end());
-		//	l.critDamage = value;
-		//}
-
-		//// extract critPercentMult
-		//std::regex  critPercentMult_regex("critPercentMult\\s*=([^:]+)", regex::icase);
-		//std::smatch matchMult;
-		//std::regex_search(line, matchMult, critPercentMult_regex);
-		//// extract the value after the equals sign
-		//if (matchMult.empty() || matchMult[1].str().empty()) {
-		//	l.critPercentMult = "none";
-		//} else {
-		//	std::string value = matchMult[1].str();
-		//	value.erase(std::remove_if(value.begin(), value.end(), ::isspace), value.end());
-		//	l.critPercentMult = value;
-		//}
-
-		//extractValueString(line, "speed\\s *= ([^:] +)", l.speed);
-
-		//extractValueString(line, "speed\\s *= ([^:] +)", l.speed);
-		//extractValueString(line, "reach\\s *= ([^:] +)", l.reach);
-		//extractValueString(line, "rangeMin\\s *= ([^:] +)", l.rangeMin);
-		//extractValueString(line, "rangeMax\\s *= ([^:] +)", l.rangeMax);
-		//extractValueString(line, "stagger\\s *= ([^:] +)", l.stagger);
-
-		//extractValueString(line, "impactDataSet\\s *= ([^:] +)", l.impactDataSet);
-		//extractValueString(line, "equipSound\\s *= ([^:] +)", l.equipSound);
-
 		return l;
-	}  //endStruct
+	}
 
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
@@ -394,9 +175,6 @@ namespace CELL
 >>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
-			// PROTOTYPE: one view per rule, not per (rule, cell) pair. cell.cpp
-			// has no modNames/keywords/editorId/hasPlugin filters, so only
-			// objectExcluded is real; every other member binds noStrings().
 			const formfilter::CommonFilterView view{
 				formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
 				formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
@@ -413,7 +191,6 @@ namespace CELL
 					currentform = GetFormFromIdentifier(string_form);
 
 					if (currentform && currentform->formType == RE::FormType::Cell) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = currentform->As<RE::TESObjectCELL>();
 
 						if (!line.skipLT.empty()) {
@@ -424,7 +201,6 @@ namespace CELL
 								}
 							}
 							if (modFound == true) {
-								//logger::debug("cell formid: {:08X} Lighting Template is from {} skip!", curobj->formID, curobj->lightingTemplate->GetFile(0)->fileName);
 								continue;
 							}
 						}
@@ -439,7 +215,6 @@ namespace CELL
 								}
 							}
 							if (allMatched) {
-								////logger::debug("{:08X} Skipped by mod name contains {}", curobj->formID, fileName);
 								continue;
 							}
 						}
@@ -452,11 +227,9 @@ namespace CELL
 					}
 				}
 			}
-			//logger::debug("before con ");
 			if (!line.object.empty() && line.filterByAcousticSpace.empty() && line.filterByMusicType.empty() && line.filterBySkyRegion.empty() && line.filterByImageSpace.empty() && line.filterByLocation.empty()) {
 				continue;
 			}
-			//logger::debug("after con {}", ObjectArray.size());
 			for (const auto& curobj : ObjectArray) {
 								
 				if (!line.skipLT.empty()) {
@@ -467,7 +240,6 @@ namespace CELL
 						}
 					}
 					if (modFound == true) {
-						//logger::debug("cell formid: {:08X} Lighting Template is from {} skip!", curobj->formID, curobj->lightingTemplate->GetFile(0)->fileName);
 						continue;
 					}
 
@@ -489,30 +261,22 @@ namespace CELL
 						}
 					}
 				}
-				//	//logger::info("processing npc");
 				bool found = false;
-
-				// Filter: AcousticSpace
-				//logger::debug("line.filterByAcousticSpace {}", line.filterByAcousticSpace.size());
 
 				if (!found && !line.filterByAcousticSpace.empty()) {
 					for (const auto& aspString : line.filterByAcousticSpace) {
-						//logger::debug("line.filterByAcousticSpace aspString {}", aspString);
 						auto* form = GetFormFromIdentifier(aspString);
 						if (form && form->formType == RE::FormType::AcousticSpace) {
-							//logger::debug("line.filterByAcousticSpace aspString1 {}", aspString);
 							auto* asp = static_cast<RE::BGSAcousticSpace*>(form);
 							auto* extra = curobj->extraList.GetByType<RE::ExtraCellAcousticSpace>();
 							if (extra && extra->space && extra->space->formID == asp->formID) {
 								found = true;
-								//logger::debug("line.filterByAcousticSpace aspString2 {}", aspString);
 								break;
 							}
 						}
 					}
 				}
 
-				// Filter: MusicType
 				if (!found && !line.filterByMusicType.empty()) {
 					for (const auto& musString : line.filterByMusicType) {
 						auto* form = GetFormFromIdentifier(musString);
@@ -527,7 +291,6 @@ namespace CELL
 					}
 				}
 
-				// Filter: SkyRegion
 				if (!found && !line.filterBySkyRegion.empty()) {
 					for (const auto& regString : line.filterBySkyRegion) {
 						auto* form = GetFormFromIdentifier(regString);
@@ -571,58 +334,10 @@ namespace CELL
 				}
 
 				if (found && !line.objectExcluded.empty()) {
-					//logger::info("npc not empty");
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Cell)) {
 						found = false;
-						//logger::info("Cell Excluded.");
 					}
 				}
-				////Flags
-				//curobj->cellFlags;
-				////, LTMP
-				//curobj->lightingTemplate;
-				////FogNear, FogFar
-				//curobj->cellData.interior->fogNear;
-				//curobj->cellData.interior->fogFar;
-				////, , XCCM, XCIM
-				//curobj->loadedData;
-
-				//if (!line.filterByFlagsExclude.empty()) {
-				//	for (const auto& flag : line.filterByFlagsExclude) {
-				//		//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude"), curobj->formID, curobj->fullName);
-				//		if (toLowerCase(flag) == "notplayable" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kNotPlayable) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude nonplayable set to false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "cantdrop" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kCantDrop) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "embeddedweapon" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kEmbeddedWeapon) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "chargingattack" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kChargingAttack) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "criteffectondeath" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kCritEffectOnDeath) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "boltaction" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kBoltAction) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "automatic" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kAutomatic) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "secondaryweapon" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kSecondaryWeapon) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "chargingreload" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kChargingReload) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "holdinputtopower" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kHoldInputToPower) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		}
-				//	}
-				//}
 
 				if (found) {
 					patch(line, curobj);
@@ -759,7 +474,7 @@ namespace CELL
 
 		if (!line.waterHeight.empty() && line.waterHeight != "none") {
 			if (toLowerCase(line.waterHeight) == "null") {
-				curobj->waterHeight = -129.0f;  // Standardwert für "kein Wasser"
+				curobj->waterHeight = -129.0f;
 				logger::debug(FMT_STRING("cell formid {:08X} reset waterHeight to default"), curobj->formID);
 			} else {
 				try {
@@ -1189,17 +904,11 @@ namespace CELL
 				curobj->cellData.interior->directionalZ);
 		}
 
-		//curobj->cellData.interior->
-
-
-		//logger::debug("LLight 111 {}", line.lightingTemplate);
 		if (!line.lightingTemplate.empty() && line.lightingTemplate != "none") {
 			RE::TESForm* currentform = nullptr;
 			std::string  string_form = line.lightingTemplate;
 			currentform = GetFormFromIdentifier(string_form);
-			//logger::debug("LLight 1 {}", string_form);
 			if (currentform && currentform->formType == RE::FormType::LightingMaster) {
-				//logger::debug("LLight 2");
 				curobj->lightingTemplate = (RE::BGSLightingTemplate*)currentform;
 				logger::debug(FMT_STRING("cell formid: {:08X} {} changed lightingTemplate {:08X}"), curobj->formID, curobj->fullName, curobj->lightingTemplate->formID);
 			} else if (toLowerCase(line.lightingTemplate) == "null") {
@@ -1217,41 +926,6 @@ namespace CELL
 		}
 
 
-		//logger::info("Starting Patching");
-		////lightningTemplate
-		//if (curobj->loadedData && curobj->loadedData->t_unk028)
-		//	logger::info("curobj->loadedData t_unk028 {:08X}", curobj->loadedData->t_unk028->formID);
-		//if (curobj->loadedData && curobj->loadedData->t_unk030)
-		//	logger::info("curobj->loadedData t_unk030 {:08X}", curobj->loadedData->t_unk030->formID);
-		//if (curobj->loadedData && curobj->loadedData->t_unk038)
-		//	logger::info("curobj->loadedData t_unk038 {:08X}", curobj->loadedData->t_unk038->formID);
-
-		//if (!line.lightningTemplate.empty() && line.lightningTemplate != "none")
-		//{
-		//	try {
-		//		RE::TESForm* currentform = nullptr;
-		//		std::string  string_form = line.lightningTemplate;
-		//		currentform = GetFormFromIdentifier(string_form);
-		//		if (currentform && currentform->formType == RE::FormType::LightingMaster) {
-		//			curobj->lightingTemplate = (RE::BGSLightingTemplate*)currentform;
-		//			logger::debug(FMT_STRING("race formid: {:08X} {} changed lightingTemplate {:08X}"), curobj->formID, curobj->fullName, curobj->lightingTemplate->formID);
-		//		}
-		//	} catch (const std::exception& e) {
-		//	}
-		//}
-
-		//if (!line.lightningTemplate.empty() && line.lightningTemplate != "none") {
-		//	try {
-		//		RE::TESForm* currentform = nullptr;
-		//		std::string  string_form = line.lightningTemplate;
-		//		currentform = GetFormFromIdentifier(string_form);
-		//		if (currentform && currentform->formType == RE::FormType::LightingMaster) {
-		//			//curobj-> = (RE::BGSLightingTemplate*)currentform;
-		//			logger::debug(FMT_STRING("race formid: {:08X} {} changed lightingTemplate {:08X}"), curobj->formID, curobj->fullName, curobj->lightingTemplate->formID);
-		//		}
-		//	} catch (const std::exception& e) {
-		//	}
-		//}
 		return 0;
 	}
 

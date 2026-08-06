@@ -5,19 +5,6 @@
 
 namespace WEAPON
 {
-	// =====================================================================
-	// PHASE 1 -- WEAPON's own filter vocabulary, resolved once per rule.
-	//
-	// Everything here used to be re-derived from the rule's raw text on every
-	// (weapon, rule) pair. filterAnimationTypeOr was the worst offender: its
-	// upstream body calls toLowerCase(setFlag) once per if/else-if arm, i.e.
-	// up to TEN std::string allocations per list entry per pair, all to
-	// recompute a value fixed at load.
-	//
-	// Deliberately NOT done at parse time: create_patch_instructions must stay
-	// free of CommonLib singletons (golden_dump runs without a game), and
-	// patch_instruction's layout must not change or the golden snapshots move.
-	// =====================================================================
 	namespace
 	{
 		RE::WEAPON_TYPE* lookupAnimationType(const std::string& a_lower)
@@ -61,20 +48,6 @@ namespace WEAPON
 			return nullptr;
 		}
 
-		// ==================================================================
-		// PHASE 2 -- WEAPON's rule compiler.
-		//
-		// The filter chain that used to be ~150 lines inlined in
-		// process_patch_instructions is compiled once per rule into a
-		// formfilter::MatchProgram. See formfilter.h.
-		//
-		// WEAPON's positive disjuncts -- filterByAnimationTypeOr,
-		// filterByFirstPersonModelOr, filterBySkills, the EditorID pair and
-		// the keyword pair -- all only ever WRITE true, so ordering them
-		// cheapest-first cannot change the answer; it just gives the three
-		// integer compares the chance to reject before the EditorID substring
-		// search runs.
-		// ==================================================================
 		formfilter::MatchProgram compileRule(const patch_instruction& line)
 		{
 			using formfilter::Mode;
@@ -83,13 +56,9 @@ namespace WEAPON
 			formfilter::MatchProgram p;
 			p.modNames = &line.modNames;
 
-			// hasPlugins / hasPluginsOr consult no form at all, so they are a
-			// per-RULE skip, not a per-form one.
 			p.skipRule = (!line.hasPlugin.empty() && !formfilter::hasAllPlugins(line.hasPlugin)) ||
 				(!line.hasPluginOr.empty() && !formfilter::hasAnyPlugin(line.hasPluginOr));
 
-			// filterByAnimationTypeOr. The ten toLowerCase(setFlag) calls this
-			// used to make per (pair, entry) are one lookup per entry, once.
 			std::vector<std::uint64_t> vals;
 			for (const auto& s : line.filterAnimationTypeOr) {
 				if (auto* t = lookupAnimationType(toLowerCase(s))) {
@@ -109,7 +78,6 @@ namespace WEAPON
 				formfilter::pushDisjunct(p, p.positive, first);
 			}
 
-			// filterBySkills ("embeddedAVs").
 			vals.clear();
 			for (const auto& s : line.embeddedAVs) {
 				if (auto* av = lookupEmbeddedAV(toLowerCase(s))) {
@@ -150,7 +118,6 @@ namespace WEAPON
 				line.embeddedAVs.empty() && line.filterAnimationTypeOr.empty() &&
 				line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty();
 
-			// --- negative stage, in source order ---------------------------
 			if (!line.keywordsExcluded.empty()) {
 				formfilter::addNegative(p, Op::Keyword, Mode::Exclude,
 					formfilter::ptrOperands(line.keywordsExcluded, RE::FormType::Keyword));
@@ -164,16 +131,10 @@ namespace WEAPON
 					formfilter::needleOperands(p, line.filterByEditorIdContainsExcluded));
 			}
 			if (!line.filterByWFlags.empty()) {
-				// restrictToFlags' upstream loop writes `found = false` for
-				// every entry that is not the break case, so `found` can only
-				// survive if the FIRST entry is "boundweapon" and the weapon
-				// carries the flag. One operand, not a list.
 				formfilter::addNegative(p, Op::WeapBound, Mode::And,
 					{ toLowerCase(line.filterByWFlags.front()) == "boundweapon" ? 1ull : 0ull });
 			}
 			if (!line.restrictToSkill.empty()) {
-				// Every entry survives: StringToActorValue's answer for an
-				// unrecognised name is part of the comparison upstream.
 				vals.clear();
 				for (const auto& s : line.restrictToSkill) {
 					vals.push_back(static_cast<std::uint32_t>(StringToActorValue(toLowerCase(s))));
@@ -184,22 +145,8 @@ namespace WEAPON
 			return p;
 		}
 
-		// patch() writes indexed attributes, so a rule applied earlier can
-		// change whether a later rule matches. Every write site in
-		// WEAPON::patch to the keyword array, weaponData.animationType,
-		// weaponData.skill or firstPersonModelObject is guarded by one of:
-		//   keywordsToAdd / keywordsToRemove, mirrorWeapon, templateWeapon,
-		//   modelFirstPerson, animationType (setAnimationType),
-		//   skillType (setSkillType).
-		// From the first such rule on, the index is stale and every rule scans
-		// in full. Applied before the rule is classified, because the rule's
-		// own `object` loop patches before its scan.
 		bool weaponRuleInvalidatesIndex(const patch_instruction& line)
 		{
-			// mirrorWeapon / templateWeapon / modelFirstPerson come from
-			// extractValueString, which writes the literal "none" when the key
-			// is ABSENT -- so they are never empty, and the test has to be the
-			// same `!empty() && != "none"` guard their patch() sites use.
 			const auto live = [](const std::string& v) { return !v.empty() && v != "none"; };
 			return !line.keywordsToAdd.empty() || !line.keywordsToRemove.empty() ||
 				live(line.mirrorWeapon) || live(line.templateWeapon) ||
@@ -227,14 +174,6 @@ namespace WEAPON
 		}
 	}
 
-	// ==================================================================
-	// PHASE 2 -- WEAPON's key table. One row per upstream extract*() call,
-	// in the same order. See parsetable.h.
-	//
-	// "soundLevel" appears twice because upstream extracts it twice into the
-	// same member; both rows are harmless and keeping them keeps the table a
-	// literal transliteration of the call list.
-	// ==================================================================
 	namespace
 	{
 #define WEAP_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -353,7 +292,6 @@ namespace WEAPON
 		extractValueString(line, "critPercentMult\\s*=([^:]+)", l.critPercentMult);
 		extractValueString(line, "critDamage\\s*=([^:]+)", l.critDamage);
 
-		//extractValueString(line, "speed\\s *= ([^:] +)", l.speed);
 		extractValueString(line, "model\\s*=([^:]+)", l.model);
 		extractValueString(line, "mirrorWeapon\\s*=([^:]+)", l.mirrorWeapon);
 		extractValueString(line, "speed\\s*=([^:]+)", l.speed);
@@ -430,8 +368,6 @@ namespace WEAPON
 <<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectWEAP>();
 
-		// PHASE 3: built on first use, so a config of nothing but explicitly
-		// named weapons never pays for it.
 		formfilter::FormSignalIndex index;
 		bool                        indexBuilt = false;
 		bool                        indexStale = false;
@@ -452,7 +388,6 @@ namespace WEAPON
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Weapon) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = (RE::TESObjectWEAP*)currentform;
 						patch(line, curobj);
 					}
@@ -463,15 +398,11 @@ namespace WEAPON
 				continue;
 			}
 
-			// PHASE 1 + 2: the rule is compiled ONCE into a flat predicate
-			// program; the form loop below is a walk over it.
 			const formfilter::MatchProgram program = compileRule(line);
 			if (program.skipRule) {
 				continue;
 			}
 
-			// PHASE 3: restrict the scan to the weapons carrying at least one
-			// of the signals this rule names, read off the program's opcodes.
 			const bool keyed = !indexStale && formfilter::programSignals(program, keys);
 			if (keyed) {
 				if (!indexBuilt) {
@@ -483,7 +414,6 @@ namespace WEAPON
 			}
 			const std::uint32_t scanCount =
 				static_cast<std::uint32_t>(keyed ? candidates.size() : ObjectArray.size());
-			// Diagnostics only; see formfilter::IndexStats.
 			if (keyed) {
 				++formfilter::stats().rulesKeyed;
 				formfilter::stats().candidateVisits += scanCount;
@@ -495,8 +425,6 @@ namespace WEAPON
 				formfilter::stats().scanVisits += scanCount;
 			}
 
-			// Reused across the whole form loop, so the lowered EditorID
-			// allocates once rather than once per pair.
 			formfilter::MatchScratch scratch;
 			formfilter::MatchTarget  target;
 			for (std::uint32_t scanIdx = 0; scanIdx < scanCount; ++scanIdx) {
@@ -574,8 +502,6 @@ namespace WEAPON
 							found = true;
 							break;
 						} else {
-							// Handle the case where an invalid flag is provided
-							//logger::warn(FMT_STRING("Invalid set flag: {}"), setFlag);
 						}
 					}
 				}
@@ -592,8 +518,6 @@ namespace WEAPON
 
 							if (curobj->firstPersonModelObject && curobj->firstPersonModelObject->formID == fpmodel->formID) {
 								found = true;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-								//logger::info("Keyword found.");
 								break;
 							}
 						}
@@ -601,7 +525,6 @@ namespace WEAPON
 				}
 
 				if (!line.embeddedAVs.empty()) {
-					//logger::debug("skill {}", curobj->weaponData.skill.underlying());
 					for (auto string : line.embeddedAVs) {
 						string = toLowerCase(string);
 						if (string == "onehanded" && curobj->weaponData.skill == RE::ActorValue::kOneHanded) {
@@ -646,7 +569,6 @@ namespace WEAPON
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty()) {
-					//logger::info("keywords not empty");
 					for (const auto& editorString : line.filterByEditorIdContainsOr) {
 						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
 							containsOr = true;
@@ -658,13 +580,11 @@ namespace WEAPON
 				}
 
 				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
 				
 				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
 					for (const auto& keywordstring : line.keywords) {
 						RE::TESForm*    currentform = nullptr;
 						RE::BGSKeyword* keyword = nullptr;
@@ -678,18 +598,14 @@ namespace WEAPON
 								keywordAnd = true;
 							} else {
 								keywordAnd = false;
-								//logger::debug(FMT_STRING("KeywordAnd Weapon does not have all keywords"));
 								break;
 							}
-							//logger::debug(FMT_STRING("KeywordAnd Weapon true"));
 						}
 					}
 				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
 					for (const auto& keywordstring : line.keywordsOr) {
 						RE::TESForm*    currentform = nullptr;
 						RE::BGSKeyword* keyword = nullptr;
@@ -701,30 +617,24 @@ namespace WEAPON
 
 							if (curobj->HasKeyword(keyword)) {
 								keywordOr = true;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-								//logger::info("Keyword found.");
 								break;
 							}
 						}
 					}
 				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
 				}
 
 				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
 
-				//if (!line.object.empty() && line.keywords.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.filterAnimationTypeOr.empty() && line.embeddedAVs.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty())
 				if (line.object.empty() && line.keywords.empty() && line.filterByWFlags.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.embeddedAVs.empty() && line.filterAnimationTypeOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
 					found = true;
 				}
 
 				if (!line.keywordsExcluded.empty() && found ) {
-					//logger::info("keywords not empty");
 					for (const auto& keywordstring : line.keywordsExcluded) {
 						RE::TESForm*    currentform = nullptr;
 						RE::BGSKeyword* keyword = nullptr;
@@ -736,8 +646,6 @@ namespace WEAPON
 
 							if (curobj->HasKeyword(keyword)) {
 								found = false;
-								//logger::debug(FMT_STRING("KeywordExcluded has a keyword that is excluded.{:08X}"),keyword->formID);
-								//logger::info("Keyword found.");
 								break;
 							}
 						}
@@ -745,7 +653,6 @@ namespace WEAPON
 				}
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
 					for (const auto& npcstring : line.objectExcluded) {
 						RE::TESForm*       currentform = nullptr;
 						RE::TESObjectWEAP* npc = nullptr;
@@ -757,7 +664,6 @@ namespace WEAPON
 
 							if (curobj->formID == npc->formID) {
 								found = false;
-								//logger::info("Weapon Excluded.");
 								break;
 							}
 						}
@@ -765,7 +671,6 @@ namespace WEAPON
 				}
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-					//logger::info("factions not empty");
 					for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
 						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
 							found = false;
@@ -775,7 +680,6 @@ namespace WEAPON
 				}
 
 				if (found && !line.filterByWFlags.empty()) {
-					//logger::debug("skill {}", curobj->weaponData.skill.underlying());
 					for (auto string : line.filterByWFlags) {
 						string = toLowerCase(string);
 						if (string == "boundweapon" && curobj->weaponData.flags2 & RE::TESObjectWEAP::Data::Flag2::kBoundWeapon) {
@@ -873,16 +777,6 @@ namespace WEAPON
 	}
 
 <<<<<<< HEAD
-	// =====================================================================
-	// PHASE 4 -- WEAPON's action tables.
-	//
-	// Six of patch()'s setters were `else if` ladders over a lowercased
-	// config token, 4 to 18 rungs long, each rung calling toLowerCase AGAIN --
-	// so `setSkillType=enchanting` allocated eighteen std::strings per patched
-	// weapon to reach the last rung. The tables below are exact
-	// transcriptions of those ladders, in rung order; see formfilter.h
-	// "PHASE 4" for what "exact" had to mean.
-	// =====================================================================
 	namespace
 =======
 	void* patch(const WEAPON::patch_instruction& line, RE::TESObjectWEAP* curobj)
@@ -890,10 +784,6 @@ namespace WEAPON
 	{
 		using formfilter::ActionRow;
 
-		// `explodeOnly` is upstream's spelling and is DELIBERATELY kept: the
-		// ladder compares it against an already-lowercased token, so that rung
-		// is unreachable. `explode` (the next rung) is the live one. A
-		// transcription may not quietly fix that.
 		constexpr ActionRow kHitBehaviorRows[] = {
 			{ "normal", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kNormal), 0, "normal" },
 			{ "dismemberonly", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kDismemberOnly), 0, "dismember only" },
@@ -904,7 +794,6 @@ namespace WEAPON
 			{ "no", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kNoDismemberOrExplode), 0, "no dismember or explode" },
 		};
 
-		// "very load" is upstream's typo in the kVeryLoud log line, kept.
 		constexpr ActionRow kSoundLevelRows[] = {
 			{ "loud", static_cast<std::uint32_t>(RE::SOUND_LEVEL::kLoud), 0, "loud" },
 			{ "normal", static_cast<std::uint32_t>(RE::SOUND_LEVEL::kNormal), 0, "normal" },
@@ -926,8 +815,6 @@ namespace WEAPON
 			{ "crossbow", static_cast<std::uint32_t>(RE::WEAPON_TYPE::kCrossbow) },
 		};
 
-		// `marksman` -> kArchery is upstream's mapping; the log line says
-		// "marksman", which is what `name` carries.
 		constexpr ActionRow kSkillTypeRows[] = {
 			{ "onehanded", static_cast<std::uint32_t>(RE::ActorValue::kOneHanded) },
 			{ "twohanded", static_cast<std::uint32_t>(RE::ActorValue::kTwoHanded) },
@@ -949,8 +836,6 @@ namespace WEAPON
 			{ "enchanting", static_cast<std::uint32_t>(RE::ActorValue::kEnchanting) },
 		};
 
-		// setFlags and removeFlags were two identical 8-rung ladders; one table
-		// serves both, because only set-vs-reset differed.
 		constexpr ActionRow kWeaponFlagRows[] = {
 			{ "ignoresnormalweaponresistance", static_cast<std::uint32_t>(RE::TESObjectWEAP::Data::Flag::kIgnoresNormalWeaponResistance) },
 			{ "automatic", static_cast<std::uint32_t>(RE::TESObjectWEAP::Data::Flag::kAutomatic) },
@@ -1395,7 +1280,6 @@ namespace WEAPON
 
 		if (!line.enchantAmount.empty() && line.enchantAmount != "none") {
 			try {
-				//logger::debug(FMT_STRING("weapon formid: {:08X} {} changed old enchantAmount {}"), curobj->formID, curobj->fullName, curobj->amountofEnchantment);
 				curobj->amountofEnchantment = std::stoi(line.enchantAmount);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed enchantAmount {}"), curobj->formID, curobj->fullName, curobj->amountofEnchantment);
 			} catch (const std::exception& e) {
@@ -1427,7 +1311,6 @@ namespace WEAPON
 					curobj->weaponData.animationType = static_cast<RE::WEAPON_TYPE>(row->value);
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} set AnimationType {}"), curobj->formID, curobj->fullName, row->name);
 				} else {
-					// Handle the case where an invalid flag is provided
 					logger::warn(FMT_STRING("Invalid set flag: {}"), setFlag);
 				}
 			}
@@ -1439,7 +1322,6 @@ namespace WEAPON
 					curobj->weaponData.skill = static_cast<RE::ActorValue>(row->value);
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to {}"), curobj->formID, curobj->fullName, row->name);
 				} else {
-					// Handle the case where an invalid flag is provided
 					logger::warn(FMT_STRING("Invalid set flag: {}"), setFlag);
 				}
 			}
@@ -1447,13 +1329,10 @@ namespace WEAPON
 		
 		if (!line.setFlags.empty()) {
 			for (const auto& setFlag : line.setFlags) {
-				//logger::debug(FMT_STRING("weapon formid: {:08X} {} flag {}"), curobj->formID, curobj->fullName, setFlag);
 				if (const auto* row = formfilter::findAction(kWeaponFlagRows, setFlag)) {
 					curobj->weaponData.flags.set(static_cast<RE::TESObjectWEAP::Data::Flag>(row->value));
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag enabled {}"), curobj->formID, curobj->fullName, row->name);
 				} else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}
@@ -1464,8 +1343,6 @@ namespace WEAPON
 					curobj->weaponData.flags.reset(static_cast<RE::TESObjectWEAP::Data::Flag>(row->value));
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag disabled {}"), curobj->formID, curobj->fullName, row->name);
 				} else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}

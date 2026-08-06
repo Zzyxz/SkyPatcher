@@ -1,55 +1,6 @@
 #ifndef SP_PARSETABLE_H
 #define SP_PARSETABLE_H
 
-// =====================================================================
-// PHASE 2 -- the key table: a config line is DATA, so parsing it should be
-// a table lookup, not a wall of hand-written extractors.
-//
-// Every create_patch_instruction* in this codebase is a straight-line list of
-// 40-98 extract*() calls, one per supported key, and each of those runs a
-// std::regex_search over the WHOLE line. Cost is therefore O(keys DEFINED),
-// not O(keys PRESENT): a five-key line pays for all 98 searches, and ~76 % of
-// parse time is spent scanning for keys that are not on the line at all.
-//
-// This header replaces that with one pass over the line plus a hash/trie
-// lookup per '=' actually found. Each form type declares a `constexpr`
-// sp::KeySpec table -- key text, field kind, and the offset of the member the
-// value lands in -- and `sp::KeyTable::parse` interprets it.
-//
-//   struct KeySpec { std::string_view key; FieldKind kind; uint16_t offset; };
-//
-// EQUIVALENCE. The rewrite is exact, not approximate, and the 28 golden
-// snapshots are the gate. The three properties that make it exact:
-//
-//  1. Every extractor's regex has the shape `KEY\s*=([^:]+)`. `[^:]` cannot
-//     cross a ':', and KEY contains no ':', so a match lies wholly inside one
-//     ':'-delimited token, and the captured value is exactly "the rest of the
-//     token after that '='".
-//  2. `KEY\s*=` matches at a given '=' iff the token text before that '=',
-//     with trailing whitespace removed, ENDS WITH KEY. That is a suffix test,
-//     so one reversed trie over all the keys finds every key that fires at a
-//     given '=' in a single walk. This reproduces the substring behaviour of
-//     the originals exactly -- and that behaviour is load-bearing:
-//     `spellsToAdd\s*=` (icase) really does fire on `levSpellsToAdd=...`, and
-//     `ObjectsToRemove` / `objectsToRemove` really do fill two different
-//     members from the same token.
-//  3. `regex_search` takes the LEFTMOST match, so scanning tokens left to
-//     right and taking the first hit per key is the same answer. (For two
-//     '=' positions e1 < e2 the corresponding match starts are ordered the
-//     same way: the whitespace run before e2 cannot reach back past e1,
-//     because e1 holds a '=', which is not whitespace.)
-//
-// Case sensitivity is a property of the extractor, so it is derived from the
-// kind rather than spelled out per row: extractValueString is the one
-// extractor that does NOT pass std::regex::icase, so Value / ValueTilde are
-// case-sensitive and every other kind is not.
-//
-// NOTHING IS RESOLVED HERE. Parsing must stay free of CommonLib singletons --
-// golden_dump runs with no game behind it -- and patch_instruction's layout
-// must not change, because the golden snapshots serialize it member by
-// member. This header only decides WHICH member a value lands in.
-// =====================================================================
-
 #include "PCH.h"
 #include "utility.h"
 
@@ -65,42 +16,37 @@
 
 namespace sp
 {
-	// How a value is turned into fields. Each kind corresponds 1:1 to one of
-	// the seven extractors in utility.cpp, or to one of NPC's four bespoke
-	// inline blocks.
 	enum class FieldKind : std::uint8_t
 	{
-		List,          // extractData          -> vector<string>, comma list
-		ListAssign,    // extractDataStrings   -> vector<string>, comma list
-		Value,         // extractValueString   -> string, "none" when absent
-		ValueTilde,    // extractValueString with the `=\s*~([^~]+)~` pattern
-		Arr2D,         // extractToArr2D       -> vector<vector<string>>
-		MultiInt,      // extractMultiDataInt  -> (vector<string>, vector<int>, vector<int>)
-		MultiFloat,    // extractMultiDataFloat-> (vector<string>, vector<float>, vector<float>)
-		LevelRange,    // npc  levelRange=A~B  -> (string, string)
-		FactionRanks,  // npc  factionsToAdd   -> (vector<string>, vector<float>, vector<float>)
-		ObjectsToAdd,  // npc  objectsToAdd    -> (vector<string>, vector<string>)
-		AttackData3D,  // npc  attackDataTo{Add,Change} -> vector<vector<vector<string>>>
+		List,
+		ListAssign,
+		Value,
+		ValueTilde,
+		Arr2D,
+		MultiInt,
+		MultiFloat,
+		LevelRange,
+		FactionRanks,
+		ObjectsToAdd,
+		AttackData3D,
 	};
 
 	inline constexpr std::uint16_t kNoField = 0xFFFFu;
 
 	struct KeySpec
 	{
-		std::string_view key;                 // "keywordsToAdd"
-		FieldKind        kind;                // how the value is parsed
-		std::uint16_t    off1;                // offsetof() of the member it lands in
-		std::uint16_t    off2 = kNoField;     // second member, for the multi-field kinds
-		std::uint16_t    off3 = kNoField;     // third member
+		std::string_view key;
+		FieldKind        kind;
+		std::uint16_t    off1;
+		std::uint16_t    off2 = kNoField;
+		std::uint16_t    off3 = kNoField;
 	};
 
-	// extractValueString is the ONE extractor that omits std::regex::icase.
 	inline constexpr bool keyIsCaseSensitive(FieldKind a_kind)
 	{
 		return a_kind == FieldKind::Value || a_kind == FieldKind::ValueTilde;
 	}
 
-	// A kind that writes "none" into its member when the key is absent.
 	inline constexpr bool defaultsToNone(FieldKind a_kind)
 	{
 		return a_kind == FieldKind::Value || a_kind == FieldKind::ValueTilde ||
@@ -111,7 +57,6 @@ namespace sp
 	{
 		inline bool isRegexSpace(char c)
 		{
-			// std::regex's \s, spelled out so the '=' scan cannot drift from it.
 			return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
 		}
 
@@ -120,9 +65,6 @@ namespace sp
 			return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 		}
 
-		// utility.cpp's trim(): removes SPACES only, and returns the input
-		// untouched when it is all spaces. Used by extractToArr2D and by NPC's
-		// attackData blocks. Deliberately not the same as trimWs below.
 		inline std::string trimSpaces(std::string_view s)
 		{
 			const std::size_t first = s.find_first_not_of(' ');
@@ -133,9 +75,6 @@ namespace sp
 			return std::string(s.substr(first, last - first + 1));
 		}
 
-		// The inline erase(find_if_not(::isspace)) pattern used by
-		// extractData / extractDataStrings / extractValueString / the
-		// extractMultiData* family: removes ALL whitespace at both ends.
 		inline std::string trimWs(std::string_view s)
 		{
 			std::size_t b = 0;
@@ -155,10 +94,6 @@ namespace sp
 			return reinterpret_cast<T*>(static_cast<char*>(a_base) + a_off);
 		}
 
-		// `[^,]+` over the captured value, trimmed, "none" dropped. Shared by
-		// extractData and extractDataStrings, which differ only in whether they
-		// append to or assign the destination -- and the destination is always
-		// empty when they run, so that difference is not observable.
 		inline void pushCommaList(std::string_view a_value, std::vector<std::string>& a_out)
 		{
 			std::size_t i = 0;
@@ -178,12 +113,11 @@ namespace sp
 			}
 		}
 
-		// extractToArr2D, verbatim, on an already-captured value.
 		inline void applyArr2D(std::string_view a_value, std::vector<std::vector<std::string>>& a_out)
 		{
 			const std::string valueLine(a_value);
 			std::vector<std::string> arr;
-			std::size_t startPos = valueLine.find("=") + 1;  // npos + 1 == 0, exactly as upstream
+			std::size_t startPos = valueLine.find("=") + 1;
 			std::size_t pos = 0;
 			while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
 				arr.push_back(trimSpaces(std::string_view(valueLine).substr(startPos, pos - startPos)));
@@ -209,17 +143,12 @@ namespace sp
 			a_out = std::move(arr2D);
 		}
 
-		// The `(\w+)\s*=\s*([\d.]+)(?:\s*~\s*([\d.]+))?` sub-scan shared by
-		// extractMultiDataInt / extractMultiDataFloat. Kept as a regex on
-		// purpose: it now runs only when the key is actually on the line, which
-		// is the whole point of the table.
 		inline const std::regex& multiDataRegex()
 		{
 			static const std::regex re("(\\w+)\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", std::regex::icase);
 			return re;
 		}
 
-		// NPC's factionsToAdd sub-scan.
 		inline const std::regex& factionRankRegex()
 		{
 			static const std::regex re("([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?",
@@ -227,14 +156,12 @@ namespace sp
 			return re;
 		}
 
-		// NPC's objectsToAdd sub-scan.
 		inline const std::regex& objectsToAddRegex()
 		{
 			static const std::regex re("([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\\s*=\\s*([^,]+)", std::regex::icase);
 			return re;
 		}
 
-		// NPC's attackDataToAdd / attackDataToChange block, verbatim.
 		inline void applyAttackData3D(std::string_view a_value,
 			std::vector<std::vector<std::vector<std::string>>>& a_out)
 		{
@@ -287,17 +214,12 @@ namespace sp
 		}
 	}
 
-	// The interpreter. One instance per form type, built once from that type's
-	// constexpr KeySpec table.
 	class KeyTable
 	{
 	public:
 		KeyTable(const KeySpec* a_specs, std::size_t a_count) :
 			m_specs(a_specs), m_count(a_count)
 		{
-			// parse() carries the per-line "already matched" flags on the
-			// stack; no form type comes close to this, but fail loudly rather
-			// than silently if one ever does.
 			if (a_count > 256) {
 				std::abort();
 			}
@@ -309,8 +231,6 @@ namespace sp
 
 		void parse(const std::string& a_line, void* a_dest) const
 		{
-			// One bit per spec; nothing here allocates for a table under 256
-			// keys, which every form type is.
 			bool seen[256] = {};
 			const std::size_t n = a_line.size();
 
@@ -324,7 +244,6 @@ namespace sp
 					if (a_line[e] != '=') {
 						continue;
 					}
-					// `\s*` before the '='.
 					std::size_t k = e;
 					while (k > tokStart && detail::isRegexSpace(a_line[k - 1])) {
 						--k;
@@ -337,9 +256,6 @@ namespace sp
 				tokStart = tokEnd + 1;
 			}
 
-			// Every key the line did NOT carry still has to land its default:
-			// extractValueString writes the literal "none" when it finds
-			// nothing, and so does NPC's levelRange block.
 			for (std::size_t i = 0; i < m_count; ++i) {
 				if (seen[i] || !defaultsToNone(m_specs[i].kind)) {
 					continue;
@@ -354,11 +270,8 @@ namespace sp
 	private:
 		struct Node
 		{
-			// Small, sorted-by-insertion child list. The reversed-key trie is
-			// at most as deep as the longest key, and branching is tiny below
-			// the first character, so a linear scan beats a hash here.
 			std::vector<std::pair<char, std::int32_t>> kids;
-			std::vector<std::uint16_t>                 specs;  // key length == depth
+			std::vector<std::uint16_t>                 specs;
 		};
 
 		void insert(std::uint16_t a_spec)
@@ -387,9 +300,6 @@ namespace sp
 			}
 		}
 
-		// Walk the reversed trie backwards from a_keyEnd (the position just
-		// past the last non-whitespace character before the '='), reporting
-		// every key that is a suffix of a_line[a_tokStart, a_keyEnd).
 		void walk(const std::string& a_line, std::size_t a_tokStart, std::size_t a_keyEnd,
 			std::size_t a_eq, std::size_t a_tokEnd, bool* a_seen, void* a_dest) const
 		{
@@ -424,16 +334,12 @@ namespace sp
 			}
 		}
 
-		// Returns false when the value part of the pattern did not match, in
-		// which case regex_search would have carried on looking -- so the key
-		// must stay unseen.
 		static bool apply(const KeySpec& a_spec, const std::string& a_line, std::size_t a_eq,
 			std::size_t a_tokEnd, void* a_dest)
 		{
 			using detail::at;
 
 			if (a_spec.kind == FieldKind::ValueTilde) {
-				// `=\s*~([^~]+)~`, which is NOT bounded by ':'.
 				std::size_t i = a_eq + 1;
 				while (i < a_line.size() && detail::isRegexSpace(a_line[i])) {
 					++i;
@@ -451,7 +357,6 @@ namespace sp
 			}
 
 			if (a_spec.kind == FieldKind::LevelRange) {
-				// `levelRange\s*=\s*(\d+)\s*~\s*(\d+)`
 				std::size_t i = a_eq + 1;
 				const std::size_t n = a_line.size();
 				while (i < n && detail::isRegexSpace(a_line[i])) {
@@ -487,9 +392,8 @@ namespace sp
 				return true;
 			}
 
-			// Everything else captures `([^:]+)`: the rest of the token.
 			if (a_eq + 1 >= a_tokEnd) {
-				return false;  // empty capture -- `+` needs at least one char
+				return false;
 			}
 			const std::string_view value =
 				std::string_view(a_line).substr(a_eq + 1, a_tokEnd - a_eq - 1);

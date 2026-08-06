@@ -4,10 +4,6 @@
 namespace SCROLL
 {
 
-	// ==================================================================
-	// PHASE 2 -- SCROLL's key table. One row per upstream extract*() call,
-	// in the same order. See parsetable.h.
-	// ==================================================================
 	namespace
 	{
 #define SCROLL_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
@@ -72,23 +68,6 @@ namespace SCROLL
 		return l;
 	}
 
-	// ==================================================================
-	// PHASE 2 -- SCROLL's rule compiler.
-	//
-	// PARTIAL CONVERSION, deliberately, on the same terms as SPELL's: the
-	// keyword pair, the EditorID pair and the catch-all are compiled into a
-	// formfilter::MatchProgram; filterByAlternateTextures,
-	// filterByMinimumSkillLevel, filterByMgefs{,Or,Excluded},
-	// restrictToSchool and restrictToCastingType have no opcode and stay on
-	// their own path. All of them are still resolved ONCE PER RULE.
-	//
-	// SCROLL is a copy of SPELL that has DRIFTED, and the drift is preserved
-	// rather than unified:
-	//   * the mgef OR and EXCLUDED loops dereference `effect->baseEffect`
-	//     with no null check; the AND loop checks it. SPELL checks it in two
-	//     of the three.
-	//   * restrictToSchool's null guard omits SPELL's `effects.front() &&`.
-	// ==================================================================
 	namespace
 	{
 		formfilter::MatchProgram compileScrollRule(const line_content& line)
@@ -110,8 +89,6 @@ namespace SCROLL
 			}
 			formfilter::pushDisjunct(p, p.positive, first);
 
-			// DRIFT, PRESERVED: the inert `formID != 0x000007` player guard.
-			// See spell.cpp's copy for why this is exactly skipIfPlayer.
 			const bool playerGuard =
 				line.filterByEditorIdContains.empty() != line.filterByEditorIdContainsOr.empty();
 			first = p.preds.size();
@@ -137,16 +114,9 @@ namespace SCROLL
 
 		struct ScrollRuleExtras
 		{
-			// May contain nullptr, exactly as `currentform->As<BGSTextureSet>()`
-			// could: findTextureSet compares pointers and handles it.
 			std::vector<RE::BGSTextureSet*> textureSets;
-			// Only the entries std::stoi accepted. Upstream caught the
-			// invalid_argument per (pair, entry) and logged a warning; the
-			// parse now happens once per rule, so the warning fires once per
-			// rule instead of 4,000 times. Same call Phase 2 made for NPC's
-			// restrictToFlags.
 			std::vector<int>                          minimumSkillLevels;
-			std::vector<RE::FormID>                   mgefsAnd;  // holes kept
+			std::vector<RE::FormID>                   mgefsAnd;
 			std::vector<RE::FormID>                   mgefsOr, mgefsExcluded;
 			std::vector<RE::ActorValue>               schools;
 			std::vector<RE::MagicSystem::CastingType> castingTypes;
@@ -245,7 +215,6 @@ namespace SCROLL
 <<<<<<< HEAD
 		auto& objectSpellArray = dataHandler->GetFormArray<RE::ScrollItem>();
 =======
-		//RE::BSTArray<RE::AlchemyItem*> objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
 		const auto& objectSpellArray = dataHandler->GetFormArray<RE::ScrollItem>();
 >>>>>>> origin/new-main
 		for (const auto& line : tokens) {
@@ -259,7 +228,6 @@ namespace SCROLL
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Scroll) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = (RE::ScrollItem*)currentform;
 						patch(line, curobj);
 					}
@@ -270,9 +238,6 @@ namespace SCROLL
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, scroll) pair.
-			// scroll's line_content has no hasPlugin/hasPluginOr fields, so
-			// those two view members are bound to formfilter::noStrings().
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
@@ -280,7 +245,6 @@ namespace SCROLL
 				line.filterByEditorIdContainsExcluded, line.objectExcluded
 			};
 
-			// PHASE 1 + 2: the rule is resolved and compiled ONCE.
 			const formfilter::MatchProgram          program = compileScrollRule(line);
 			const ScrollRuleExtras                  extra = compileScrollExtras(line);
 			const formfilter::ResolvedCommonFilters resolved =
@@ -302,13 +266,8 @@ namespace SCROLL
 				target.kf = curobj;
 				target.isPlayer = extra.playerGuard && curobj->formID == 0x000007;
 
-				// keyword pair + EditorID pair + the catch-all.
 				bool found = formfilter::runProgram(program, target, scratch);
 
-				// --- filters the opcode table does not cover ----------------
-				// Each only ever writes `found = true`, so evaluating them
-				// after the program (and only when it did not match) is the
-				// same OR upstream computed.
 				if (!found && !extra.textureSets.empty()) {
 					for (RE::BGSTextureSet* const ts : extra.textureSets) {
 						if (findTextureSet(curobj, ts)) {
@@ -333,7 +292,6 @@ namespace SCROLL
 				if (!found && extra.mgefsPresent) {
 					bool mgefAnd = true;
 					if (!extra.mgefsAnd.empty()) {
-						// Hole-preserving AND; see spell.cpp's copy.
 						bool foundInList = false;
 						for (const RE::FormID id : extra.mgefsAnd) {
 							foundInList = false;
@@ -355,8 +313,6 @@ namespace SCROLL
 					if (!mgefOr) {
 						for (const RE::FormID id : extra.mgefsOr) {
 							for (const auto& effect : curobj->effects) {
-								// NOTE: no `effect->baseEffect` null check.
-								// Drift from the AND loop above, preserved.
 								if (effect && effect->baseEffect->formID == id) {
 									mgefOr = true;
 									break;
@@ -372,7 +328,6 @@ namespace SCROLL
 					}
 				}
 
-				// --- negative stage, in upstream source order ---------------
 				if (!line.keywordsExcluded.empty() && found) {
 					if (formfilter::hasExcludedKeyword(resolved, curobj, nullptr)) {
 						found = false;
@@ -382,8 +337,6 @@ namespace SCROLL
 				if (!line.mgefsExcluded.empty() && found) {
 					for (const RE::FormID id : extra.mgefsExcluded) {
 						for (const auto& effect : curobj->effects) {
-							// NOTE: no `effect->baseEffect` null check here
-							// either. Preserved.
 							if (effect && effect->baseEffect->formID == id) {
 								found = false;
 								break;
@@ -411,8 +364,6 @@ namespace SCROLL
 				if (found && !line.restrictToSchool.empty()) {
 					bool foundSchool = false;
 
-					// DRIFT, PRESERVED: SPELL's copy of this guard also tests
-					// `effects.front() &&`. This one does not.
 					if (curobj && !curobj->effects.empty() && curobj->effects.front()->baseEffect) {
 						const auto skill = curobj->effects.front()->baseEffect->data.associatedSkill;
 
@@ -431,8 +382,6 @@ namespace SCROLL
 
 				if (found && !line.restrictToCastingType.empty()) {
 					bool foundCastingType = false;
-					// GetCastingType() is a virtual; upstream short-circuited
-					// past it for every unrecognised name.
 					if (!extra.castingTypes.empty()) {
 						const auto castingType = curobj->GetCastingType();
 						for (const auto t : extra.castingTypes) {
@@ -445,16 +394,7 @@ namespace SCROLL
 					if (!foundCastingType)
 						found = false;
 				}
-				//if (found) {
-				//	for (const auto& effect : curobj->listOfEffects) {
-				//
-				//		logger::debug(FMT_STRING("effect formID: {:08X} name: {}"), effect->effectSetting->formID, effect->effectSetting->fullName);
-				//		logger::debug(FMT_STRING("effect magnitude: {}"), effect->data.magnitude);
-				//		logger::debug(FMT_STRING("effect duration: {}"), effect->data.duration);
-				//		logger::debug(FMT_STRING("effect area: {}"), effect->data.area);
-				//	}
 
-				//}
 				if (found) {
 					patch(line, curobj);
 				}
@@ -617,7 +557,7 @@ namespace SCROLL
 			objectToAdd.resize(5, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
-				if (addForm) {  // Only proceed if addForm is not null
+				if (addForm) {
 					float magnitude = 0.0f;
 					if (objectToAdd[1] != "null") {
 						magnitude = std::stof(objectToAdd[1]);
@@ -668,7 +608,7 @@ namespace SCROLL
 			objectToAdd.resize(4, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
-				if (addForm) {  // Only proceed if addForm is not null
+				if (addForm) {
 					float magnitude = 0.0f;
 					if (objectToAdd[1] != "null") {
 						magnitude = std::stof(objectToAdd[1]);
@@ -839,7 +779,6 @@ namespace SCROLL
 			}
 		}
 
-		//logger::debug("Spell Found True {}",line.chargeTime);
 		if ( !line.chargeTime.empty() && line.chargeTime != "none") {
 			curobj->As<RE::SpellItem>()->data.chargeTime = std::stof(line.chargeTime);
 			logger::debug(FMT_STRING("scroll formid: {:08X} {} changed chargeTime to {}"), curobj->formID, curobj->fullName, line.chargeTime);
@@ -847,7 +786,6 @@ namespace SCROLL
 
 		if ( !line.setFlags.empty()) {
 			for (const auto& setFlag : line.setFlags) {
-				//logger::debug(FMT_STRING("scroll formid: {:08X} {} flag {}"), curobj->formID, curobj->fullName, setFlag);
 				if (toLowerCase(setFlag) == "costoverride") {
 					curobj->As<RE::SpellItem>()->data.flags.set(RE::ScrollItem::SpellFlag::kCostOverride);
 					logger::debug(FMT_STRING("scroll formid: {:08X} {} flag enabled costoverride"), curobj->formID, curobj->fullName);
@@ -876,8 +814,6 @@ namespace SCROLL
 					curobj->As<RE::SpellItem>()->data.flags.set(RE::ScrollItem::SpellFlag::kNoDualCastMods);
 					logger::debug(FMT_STRING("scroll formid: {:08X} {} flag enabled nodualcastmods"), curobj->formID, curobj->fullName);
 				} else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}
@@ -912,8 +848,6 @@ namespace SCROLL
 					curobj->As<RE::SpellItem>()->data.flags.reset(RE::ScrollItem::SpellFlag::kNoDualCastMods);
 					logger::debug(FMT_STRING("scroll formid: {:08X} {} flag disabled nodualcastmods"), curobj->formID, curobj->fullName);
 				} else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}

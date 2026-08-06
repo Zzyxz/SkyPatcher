@@ -72,7 +72,6 @@ namespace CONTAINER
 	bool findObject(const line_content& line, const formfilter::CommonFilterView& view, RE::TESObjectCONT* curobj);
 =======
 	void                process_patch_instructions(const std::list<line_content>& tokens);
-	//void                patch(CONTAINER::line_content line, RE::TESLevItem* curobj);
 	void                patchContainer(const CONTAINER::line_content& line, RE::TESObjectCONT* curobj);
 	bool findObject(const line_content& line, RE::TESObjectCONT* curobj);
 >>>>>>> origin/new-main

@@ -6,15 +6,6 @@
 namespace SOULGEM
 {
 
-	// ==================================================================
-	// PHASE 2 -- SOULGEM's key table. One row per upstream (active)
-	// extract*() call, in the same order. See parsetable.h.
-	//
-	// Several members (keywords, keywordsOr, keywordsExcluded, filterAmmos,
-	// damageTypes, ...) are declared in the struct but have no active
-	// extract call upstream (dead fields) -- no row is added for them,
-	// preserving that (dead) behaviour exactly.
-	// ==================================================================
 	namespace
 	{
 #define SOUL_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -55,7 +46,7 @@ namespace SOULGEM
 		patch_instruction l;
 		soulGemKeyTable().parse(line, &l);
 		return l;
-	}  //endStruct
+	}
 
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
@@ -76,7 +67,6 @@ namespace SOULGEM
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::SoulGem) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = (RE::TESSoulGem*)currentform;
 						patch(line, curobj);
 					}
@@ -84,13 +74,9 @@ namespace SOULGEM
 			}
 
 			if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.alternateTexturesFind.empty()) {
-				//logger::info("continue");
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, soulgem) pair.
-			// This struct has no hasPlugin/hasPluginOr/filterByEditorIdContains*
-			// members, so those view slots are bound to formfilter::noStrings().
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
@@ -99,7 +85,6 @@ namespace SOULGEM
 			};
 
 			for (const auto& curobj : ObjectArray) {
-				//logger::info("processing npc");
 				bool found = false;
 				bool keywordAnd = false;
 				bool keywordOr = false;
@@ -118,9 +103,7 @@ namespace SOULGEM
 						RE::TESForm* currentform = nullptr;
 						currentform = GetFormFromIdentifier(textureString);
 						if (currentform) {
-							//logger::debug("start search");
 							if (findTextureSet(curobj, currentform->As<RE::BGSTextureSet>())) {
-								//logger::debug("Texture found");
 								found = true;
 								break;
 							}
@@ -130,22 +113,17 @@ namespace SOULGEM
 
 
 				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
 					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
 					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
 				}
 
 				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -154,7 +132,6 @@ namespace SOULGEM
 				}
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::SoulGem)) {
 						found = false;
 						logger::info("soulgem Excluded.");

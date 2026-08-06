@@ -5,10 +5,6 @@
 
 namespace FACTION
 {
-	// ==================================================================
-	// PHASE 2 -- FACTION's key table. One row per upstream extract*()
-	// call, in the same order. See parsetable.h.
-	// ==================================================================
 	namespace
 	{
 #define FACTION_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -51,7 +47,7 @@ namespace FACTION
 
 >>>>>>> origin/new-main
 		return l;
-	}  //endStruct
+	}
 
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
@@ -72,7 +68,6 @@ namespace FACTION
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Faction) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = (RE::TESFaction*)currentform;
 						patch(line, curobj);
 					}
@@ -80,11 +75,9 @@ namespace FACTION
 			}
 
 			if (!line.object.empty()  ) {
-				//logger::info("continue");
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, faction) pair.
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
@@ -93,7 +86,6 @@ namespace FACTION
 			};
 
 			for (const auto& curobj : ObjectArray) {
-				//logger::info("processing npc");
 				bool found = false;
 
 
@@ -114,7 +106,6 @@ namespace FACTION
 
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Faction)) {
 						found = false;
 						logger::info("Projectile Excluded.");
@@ -207,7 +198,6 @@ namespace FACTION
 	{
 
 
-		// Remove Flags
 		if (!line.removeFlags.empty()) {
 			for (const auto& removeFlag : line.removeFlags) {
 				auto lowerRemoveFlag = toLowerCase(std::string(removeFlag));
@@ -257,13 +247,10 @@ namespace FACTION
 					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kIgnoresCrimes_Werewolf);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled IgnoresCrimes_Werewolf"), curobj->formID, curobj->fullName);
 				} else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}
 
-		// Set Flags
 		if (!line.setFlags.empty()) {
 			for (const auto& setFlag : line.setFlags) {
 				auto lowerSetFlag = toLowerCase(std::string(setFlag));
@@ -316,8 +303,6 @@ namespace FACTION
 					curobj->data.flags.set(RE::FACTION_DATA::Flag::kIgnoresCrimes_Werewolf);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled IgnoresCrimes_Werewolf"), curobj->formID, curobj->fullName);
 				} else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}

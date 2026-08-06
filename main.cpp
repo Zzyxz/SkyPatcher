@@ -33,7 +33,6 @@
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 
-// SkyPatcher uses narrow INI paths and section names.
 #ifdef GetPrivateProfileInt
 #undef GetPrivateProfileInt
 #endif
@@ -51,8 +50,6 @@ bool                                  RefPatchingEnabled = false;
 bool                                  statRefreshExcludeEnabled = false;
 std::string                           excludeNPCs = "";
 std::vector<std::vector<std::string>> excludedNPCsArr;
-// Hot path: looked up once per actor 3D load (Load3D::thunk). Was a std::vector scanned
-// linearly; a hash set makes the exclusion test O(1) instead of O(number of excluded NPCs).
 std::unordered_set<RE::FormID>        excludedNPCsFormIDs = {};
 bool                                  loadOnlyOnce = true;
 int									  iUpdateNPCVisualsOnLoad = 1;
@@ -62,13 +59,6 @@ std::unordered_map<RE::FormID, int> npcStyles;
 inline constexpr std::array headSlots = { RE::BIPED_OBJECT::kHair, RE::BIPED_OBJECT::kLongHair, RE::BIPED_OBJECT::kCirclet };
 inline constexpr auto HAIR_TINT = "ZZYXZZ_HAIRTINT"sv;
 
-// Shared per-thread PRNG. The style/combat-style roll sites below used to construct a
-// std::random_device (an OS entropy syscall) plus a std::mt19937 (a 2.5 KB state array that
-// must be fully seeded) on every single actor 3D load. The engine is stateful, so seeding it
-// once per thread and drawing from it thereafter is both far cheaper and better distributed
-// than re-seeding per draw. Note the rolls are cosmetic-only (visual style / combat style
-// selection); nothing here is persisted to a save or replayed, so the changed sequence is not
-// observable beyond a different random pick.
 static std::mt19937& RandomEngine()
 {
 	static thread_local std::mt19937 engine{ std::random_device{}() };
@@ -87,7 +77,6 @@ void LoadIniFilesRecursive(const std::string& folderPath)
 	while ((entry = readdir(dir)) != nullptr) {
 		std::string name = entry->d_name;
 
-		// Skip "." and ".."
 		if (name == "." || name == "..") {
 			continue;
 		}
@@ -97,15 +86,12 @@ void LoadIniFilesRecursive(const std::string& folderPath)
 		struct stat s;
 		if (stat(fullPath.c_str(), &s) == 0) {
 			if (s.st_mode & S_IFDIR) {
-				// It's a directory → recurse
 				LoadIniFilesRecursive(fullPath);
 			} else if (s.st_mode & S_IFREG) {
-				// It's a file → check extension
 				if (name.size() > 4 && _stricmp(name.substr(name.size() - 4).c_str(), ".ini") == 0) {
 					std::string basePath = ".\\Data\\SKSE\\Plugins\\SkyPatcher\\";
 					std::string relativePath = fullPath;
 
-					// Kürze den Pfad, wenn er mit basePath beginnt
 					if (relativePath.rfind(basePath, 0) == 0) {
 						relativePath = relativePath.substr(basePath.length());
 					}
@@ -188,7 +174,7 @@ public:
 
 				}
 				count++;
-			}  // After enabling an actor their 3D model isn't accessible immediately (?). A hook would do the same job but would be more complex
+			}
 
 			SKSE::GetTaskInterface()->AddTask([actorID] {
 				if (auto* actor = lookupActor(actorID)) {
@@ -223,8 +209,6 @@ public:
 
 	void updateNPCVisualsByEnable(RE::FormID actorID)
 	{
-		//while (!a_this->Get3D(false))  // After enabling an actor their 3D model isn't accessible immediately (?). A hook would do the same job but would be more complex
-		//std::this_thread::sleep_for(std::chrono::milliseconds(500));
 		if (auto* actor = lookupActor(actorID)) {
 			actor->Disable();
 			std::this_thread::sleep_for(std::chrono::milliseconds(2000));
@@ -239,8 +223,6 @@ public:
 =======
 	void updateREFRAndDisable(RE::FormID refrID)
 	{
-		//while (!a_this->Get3D(false))  // After enabling an actor their 3D model isn't accessible immediately (?). A hook would do the same job but would be more complex
-		//std::this_thread::sleep_for(std::chrono::milliseconds(500));
 		if (auto* refr = lookupReference(refrID)) {
 			refr->Disable();
 		}
@@ -318,12 +300,9 @@ public:
 			return RE::BSEventNotifyControl::kContinue;
 		}
 
-		// Extract the deleted FormID
 		RE::FormID deletedFormID = a_event->formID;
-		//logger::debug("Form with FormID {:X} has been deleted.", deletedFormID);
 
 		npcStyles.erase(deletedFormID);
-		//logger::debug("Form with FormID {:X} has been deleted.", deletedFormID);
 
 
 		return RE::BSEventNotifyControl::kContinue;
@@ -344,50 +323,24 @@ public:
 	static FormDeleteEventSink formDeleteEventSink;
 };
 
-// **Define the static instance outside the class**
 FormDeleteEventSink FormDeleteEventSink::formDeleteEventSink;
-
-//void FormDeleteEventSink::Init()
-//{
-//	auto* source = RE::ScriptEventSourceHolder::GetSingleton();
-//	if (source) {
-//		source->AddEventSink(&formDeleteEventSink);
-//		logger::info("Registered TESFormDeleteEvent listener.");
-//	}
-//	else {
-//		logger::error("Failed to register TESFormDeleteEvent listener! Event source is null.");
-//	}
-//}
-
-
-
-// Create a singleton instance of the event sink
-//FormDeleteEventSink formDeleteEventSink;
 
 void SaveCallback(SKSE::SerializationInterface* serde) {
 	constexpr std::uint32_t SAVE_VERSION = 1;
 	const auto start_time{ std::chrono::system_clock::now() };
 
 
-	// Write the size of the map first
-	std::size_t mapSize = 0; // We will count valid entries here
+	std::size_t mapSize = 0;
 	std::vector<RE::FormID> invalidFormIDs;
 	for (const auto& pair : npcStyles) {
-		// Check if the NPC (FormID) is still valid
 		if (RE::TESForm::LookupByID(pair.first)) {
-			mapSize++; // Only count valid FormIDs
+			mapSize++;
 		}
 	}
-	// Write the size of the map first
 	serde->WriteRecord('STYL', SAVE_VERSION, mapSize);
-	// Write each valid FormID and style pair
 	for (const auto& pair : npcStyles) {
-		// Only save if the FormID is valid
-
 		if (auto npc = RE::TESForm::LookupByID(pair.first)) {
-			// Write the FormID (key)
 			serde->WriteRecordData(&pair.first, sizeof(pair.first));
-			// Write the style (value)
 			serde->WriteRecordData(&pair.second, sizeof(pair.second));
 			logger::debug("SaveCallback FormID {:08X} saved.", pair.first);
 		}
@@ -399,7 +352,6 @@ void SaveCallback(SKSE::SerializationInterface* serde) {
 	for (const auto formID : invalidFormIDs) {
 		npcStyles.erase(formID);
 	}
-	// Log how long the saving process took
 	const auto elapsed{ std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start_time) };
 	double     seconds = static_cast<double>(elapsed.count()) / 1000000.0;
 	logger::debug(">>>>>>>>>>>>>>>>>>>>>>>>>>> saved {} npc styles in {} seconds", npcStyles.size(), seconds);
@@ -416,19 +368,11 @@ void OnFormDeleted(RE::TESFormDeleteEvent* a_event) {
 
 }
 
-//void RegisterEventListeners() {
-//	auto* source = RE::ScriptEventSourceHolder::GetSingleton();
-//	if (source) {
-//		source->AddEventSink<RE::TESFormDeleteEvent>(&OnFormDeleted);
-//		logger::info("Registered TESFormDeleteEvent listener.");
-//	}
-//}
-
 void LoadCallback(SKSE::SerializationInterface* serde) {
 	std::uint32_t type, version, length;
 	const auto start_time{ std::chrono::system_clock::now() };
 
-	std::unordered_map<RE::FormID, int> tempNpcStyles = npcStyles; // Backup current styles
+	std::unordered_map<RE::FormID, int> tempNpcStyles = npcStyles;
 
 	while (serde->GetNextRecordInfo(type, version, length)) {
 		if (type == 'STYL' && version == 1) {
@@ -442,7 +386,7 @@ void LoadCallback(SKSE::SerializationInterface* serde) {
 				logger::warn("LoadCallback encountered a truncated STYL record.");
 				continue;
 			}
-			npcStyles.clear(); // Clear existing map
+			npcStyles.clear();
 
 			for (std::size_t i = 0; i < npcCount; ++i) {
 				RE::FormID formID;
@@ -454,7 +398,7 @@ void LoadCallback(SKSE::SerializationInterface* serde) {
 				}
 
 				if (auto npc = RE::TESForm::LookupByID(formID)) {
-					npcStyles[formID] = style;  // Load saved styles
+					npcStyles[formID] = style;
 				}
 				else {
 					logger::debug("NPC with FormID {:X} is no longer valid and was not loaded into npcStyles.", formID);
@@ -463,11 +407,9 @@ void LoadCallback(SKSE::SerializationInterface* serde) {
 		}
 	}
 
-	// Merge newly assigned styles that weren’t in the save
 	for (const auto& [formID, style] : tempNpcStyles) {
 		if (!npcStyles.contains(formID)) {
 			npcStyles[formID] = style;
-			//logger::debug("Merged new style for NPC {:X} assigned during Load3D.", formID);
 		}
 	}
 
@@ -479,12 +421,11 @@ void LoadCallback(SKSE::SerializationInterface* serde) {
 
 
 void RegisterSerialization() {
-	// Cast away constness to use the serialization interface
 	const auto* serde = SKSE::GetSerializationInterface();
 
 	serde->SetUniqueID('STYL');
-	serde->SetSaveCallback(SaveCallback);  // Now it's a non-const pointer
-	serde->SetLoadCallback(LoadCallback);  // Now it's a non-const pointer
+	serde->SetSaveCallback(SaveCallback);
+	serde->SetLoadCallback(LoadCallback);
 
 }
 
@@ -497,7 +438,6 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, NPC::NPCData npcDa
 		auto data = (RE::ExtraLeveledCreature*)a_this->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
 
 		if (data) {
-			//logger::debug("copyVisual: actor {:08X} original: {:08X} tempate: {:08X} base {:08X}", a_this->formID, data->originalBase->formID, data->templateBase->formID, npc->formID);
 			if (data->originalBase) {
 				auto it = actData.npcData.find(data->originalBase->formID);
 				if (it != actData.npcData.end()) {
@@ -548,17 +488,13 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, NPC::NPCData npcDa
 				npcToChange->height = npcToCopyFrom->height;
 				npcToChange->weight = npcToCopyFrom->weight;
 				npcToChange->faceNPC = npcToCopyFrom;
-				//npcToChange->tintLayers = npcToCopyFrom->tintLayers;
 				npcToChange->bodyTintColor = npcToCopyFrom->bodyTintColor;
-				//npcToChange->headRelatedData = npcToCopyFrom->headRelatedData;
 				if (npcData.changeVoice) {
 					npcToChange->voiceType = npcToCopyFrom->voiceType;
-					//logger::debug("changed voice in template base: Actor {:08X}", a_this->formID );
 				}
 				if (npcToCopyFrom->headParts) {
 					for (int i = 0; i < npcToCopyFrom->numHeadParts; i++) {
 						if (npcToCopyFrom->headParts[i]) {
-							//logger::debug("3d load template base: NPC {:08X} {} Change Head Part by random {:08X} {}", npcToChange->formID, npcToChange->fullName, npcToCopyFrom->headParts[i]->formID, npcToCopyFrom->headParts[i]->fullName);
 							npcToChange->ChangeHeadPart(npcToCopyFrom->headParts[i]);
 						}
 					}
@@ -583,45 +519,20 @@ struct Load3D
 {
 	static RE::NiAVObject* thunk(RE::Character* a_this, bool a_arg1)
 	{
-		//RE::NiAVObject* const root;
 		const auto root = func(a_this, a_arg1);
-		//return root;
 
 		if (a_this == nullptr) {
 			return root;
 		}
 
-		//if (a_this && a_this->GetParentCell() && a_this->GetParentCell()->cellData.interior)
-		//	logger::debug("color {} {} {} ", a_this->GetParentCell()->cellData.interior->ambient.red, a_this->GetParentCell()->cellData.interior->ambient.green, a_this->GetParentCell()->cellData.interior->ambient.blue);
-		//logger::debug("TESObjectREFR {:08X}", a_this->formID);
 		if (statRefreshExcludeEnabled) {
-			// GetActorBase() is a virtual call that walks the leveled-creature/template chain,
-			// so it is resolved once here rather than once per excluded-NPC entry, and the
-			// membership test is a single hash lookup rather than a linear scan.
-			// NOTE: the original 3D load (func) already ran above and its result is in `root`.
-			// This branch used to call func() a *second* time, re-running the whole character
-			// 3D load (skeleton, biped objects, shaders) and orphaning the first root.
 			if (const auto base = a_this->GetActorBase(); base && excludedNPCsFormIDs.contains(base->formID)) {
-				//logger::debug("NPC excluded {:08X} {}", base->formID, base->fullName);
 				return root;
 			}
 		}
-		//if (auto style = GetFormFromIdentifier("skyai_csHumanMeleeLvl1")->As<RE::TESCombatStyle>(); a_this->combatController)
-		//	a_this->combatController->combatStyle = style;
 		bool refreshHealth = false;
 		bool refreshStamina = false;
 		bool refreshMagicka = false;
-
-		//auto itActor = actData.npcData.find(a_this->formID);
-		//if (itActor != actData.npcData.end()) {
-		//	
-		//	if (a_this && itActor->second.baseObject) {
-		//		a_this->data.objectReference = itActor->second.baseObject;
-		//		updater.startUpdate(a_this);
-		//		logger::debug("Load3D: {:08X} updated actor base object to {}", a_this->formID, itActor->second.baseObject->formID);
-		//	}
-		//	//itActor->second.baseObject
-		//}
 
 		if (const auto npc = a_this->GetActorBase()) {
 			auto data = (RE::ExtraLeveledCreature*)a_this->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
@@ -629,7 +540,6 @@ struct Load3D
 			bool originalBaseHasStyleList = false;
 
 			if (data) {
-				//Get Original Base Data
 				if (data->originalBase) {
 					auto itBase = actData.npcData.find(data->originalBase->formID);
 					if (itBase != actData.npcData.end()) {
@@ -700,7 +610,6 @@ struct Load3D
 			}
 			else {
 				if (it != actData.npcData.end()) {
-					//logger::debug("set stats normal");
 					if (statRefreshEnabled  && !(npc->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats && npc->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kPCLevelMult)) {
 						if (it->second.health >= 0) {
 							npc->actorData.healthOffset = it->second.health;
@@ -742,9 +651,6 @@ struct Load3D
 
 
 
-			// `it` is only valid if the lookup at the top of this block (or the templateBase
-			// re-lookup) actually found an entry, which for most actors it does not. The three
-			// blocks below dereferenced it unconditionally. One guard covers the whole run.
 			if (it != actData.npcData.end()) {
 				if (it->second.updateFlags) {
 					RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
@@ -762,9 +668,9 @@ struct Load3D
 					}
 				}
 
-				if (it->second.minLevelWasSet || it->second.maxLevelWasSet) {  // Check conditions first
+				if (it->second.minLevelWasSet || it->second.maxLevelWasSet) {
 					RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
-					if (npcForm) {  // Check if the form is a valid NPC
+					if (npcForm) {
 						if (it->second.minLevelWasSet) {
 							npcForm->actorData.calcLevelMin = it->second.minLevel;
 							logger::debug("Load3D: {:08X} setminlevel {}", it->first, it->second.minLevel);
@@ -778,130 +684,12 @@ struct Load3D
 				}
 			}
 
-			//a_this->extraList
-			//if (!it->second.overlaysToAdd.empty()) {
-			//	logger::debug("Load3D {:08X} - OverlayToAdd size {} npcid: {:08X} tintlayers size {} ", npc->formID, it->second.overlaysToAdd.size(), it->first, npc->faceNPC->tintLayers->size());
-			//	
-			//	if (!npc->tintLayers) {
-			//		npc->tintLayers = new RE::BSTArray<RE::TESNPC::Layer*>();
-			//		if (npc->tintLayers) {
-			//			std::construct_at(npc->tintLayers);
-			//			logger::debug("Load3D {:08X} - tintLayers was null, allocated new BSTArray", npc->formID);
-			//		}
-			//		else {
-			//			logger::critical("Load3D {:08X} - Failed to allocate tintLayers", npc->formID);
-			//			//return;
-			//		}
-			//	}
-
-			//	for (const auto& overlay : it->second.overlaysToAdd) {
-			//		bool exists = std::any_of(npc->tintLayers->begin(), npc->tintLayers->end(),
-			//			[&](RE::TESNPC::Layer* layer) {
-			//				return layer && layer->tintIndex == overlay.tintIndex && layer->preset == overlay.preset;
-			//			});
-
-			//		if (!exists) {
-			//			auto* newLayer = new RE::TESNPC::Layer;
-			//			if (!newLayer) {
-			//				logger::critical("Load3D {:08X} - Failed to allocate new overlay layer", npc->formID);
-			//				continue;
-			//			}
-			//			//std::memset(newLayer, 0, sizeof(RE::TESNPC::Layer));
-
-			//			newLayer->tintIndex = overlay.tintIndex;   
-			//			newLayer->tintColor = overlay.color;
-			//			newLayer->interpolationValue = overlay.interpolationValue;
-			//			newLayer->preset = overlay.preset;
-
-			//			npc->tintLayers->push_back(newLayer);
-
-			//			logger::debug("Load3D {:08X} - Applied overlay index {} with color {} preset {}",
-			//				npc->formID, overlay.tintIndex, overlay.color.ToHex(), overlay.preset);
-			//		}
-			//		else {
-			//			logger::debug("Load3D {:08X} - Skipped duplicate overlay index {} preset {}",
-			//				npc->formID, overlay.tintIndex, overlay.preset);
-			//		}
-			//	}
-
-			//	updater.startUpdate(a_this);
-
-			//	if (npc->tintLayers) {
-			//		logger::info("Load3D {:08X} - Final Tint Layers:", npc->formID);
-			//		for (const auto* layer : *npc->tintLayers) {
-			//			if (!layer) continue;
-
-			//			logger::info("  - TINT INDEX: {}, COLOR: {}, ALPHA: {}, PRESET: {}",
-			//				layer->tintIndex,
-			//				layer->tintColor.ToHex(),
-			//				layer->interpolationValue,
-			//				layer->preset);
-			//		}
-			//	}
-			//}
-
-
-
-
-			//auto collo = it->second.haircolor;
-			//collo->color
-			
-			//if ( it->second.haircolor) {
-			//	//it->second.haircolor->color
-			//	//npc->SetHairColor(it->second.haircolor);
-			//	auto root = a_this->Get3D(false);
-			//	root->UpdateHairColor(it->second.haircolor->color);
-			//	auto haircolor = it->second.haircolor;
-			//	//if (const auto& biped = a_this->GetCurrentBiped(); biped) {
-			//	//	for (auto& slot : headSlots) {
-			//	//		const auto node = biped->objects[slot].partClone;
-			//	//		if (node && node->HasShaderType(RE::BSShaderMaterial::Feature::kHairTint)) {
-			//	//			node->UpdateHairColor(it->second.haircolor->color);
-			//	//		}
-			//	//	}
-			//	//}
-			//	//update_color_data(root, HAIR_TINT, it->second.haircolor->color);
-			//	SKSE::GetTaskInterface()->AddTask([root, a_this, haircolor]() {
-			//		root->UpdateHairColor(haircolor->color);
-			//		if (const auto& biped = a_this->GetCurrentBiped(); biped) {
-			//			for (auto& slot : headSlots) {
-			//				const auto node = biped->objects[slot].partClone;
-			//				if (node && node->HasShaderType(RE::BSShaderMaterial::Feature::kHairTint)) {
-			//					node->UpdateHairColor(haircolor->color);
-			//				}
-			//			}
-			//		}
-			//		update_color_data(root, HAIR_TINT, haircolor->color);
-			//		});
-			//	logger::debug("3DLoaded: Updated hair color.");
-			//	//updater.startUpdate(a_this);
-			//}
-
-			// Parenthesised to state the existing precedence explicitly (&& already bound
-			// tighter than ||). The originalBaseHasStyleList path is deliberately kept able to
-			// run with it == end(): it is set from a *different* lookup (data->originalBase)
-			// further up, and the body below re-derives its data from that same original base
-			// via `itr`. Narrowing the condition to `it != end() && (...)` would have silently
-			// disabled visual styles for every leveled/templated actor whose template base has
-			// no patch entry but whose original base does -- so the body is made safe instead.
 			if ((it != actData.npcData.end() && it->second.npcVisualStyleList) || originalBaseHasStyleList) {
-				//logger::debug("NPC assign rd vs: {:08X} {:08X} style: {:08X}", a_this->formID, npc->formID, it->second.npcVisualStyleList->formID);
-
-				// Was `NPC::NPCData& aNPCData = it->second;` with a later `aNPCData = itr->second;`.
-				// A reference cannot be rebound, so that assignment did not select the original
-				// base's data -- it deep-copied itr->second *into* it->second, permanently
-				// corrupting that entry of actData.npcData (and every actor that later resolves
-				// to it) for the rest of the session. A pointer is what the code meant. It also
-				// starts null when `it` is end(), which is exactly the originalBaseHasStyleList
-				// case above, where the pointer is then filled in from `itr`.
 				NPC::NPCData* aNPCData = (it != actData.npcData.end()) ? &it->second : nullptr;
 				auto actorData = (RE::ExtraLeveledCreature*)a_this->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
 				if (actorData && actorData->originalBase) {
 					if (auto itr = actData.npcData.find(actorData->originalBase->formID); itr != actData.npcData.end() && itr->second.npcVisualStyleList) {
-						//forms = itr->second.npcVisualStyleList->forms;
 						aNPCData = &itr->second;
-						//logger::debug("Use alternative");
-						//logger::debug("CopyVisual: actor {:08X} list {:08X} base {:08X}", a_this->formID, aNPCData->npcVisualStyleList->formID, actorData->originalBase->formID);
 					}
 				}
 
@@ -912,46 +700,39 @@ struct Load3D
 
 					auto& forms = aNPCData->npcVisualStyleList->forms;
 
-					// Check if the NPC already has an assigned style
 					auto styleIt = npcStyles.find(a_this->formID);
 					int styleIndex = -1;
 
 					if (styleIt != npcStyles.end()) {
-						// NPC already has a style, use the existing one
 						styleIndex = styleIt->second;
 
-						// Validate stored style index
 						if (styleIndex == -1) {
 							logger::debug("Load3D: NPC with FormID {:X} previously failed style roll and will not receive a style.", a_this->formID);
 						}
 						else if (styleIndex >= forms.size()) {
 							logger::debug("Load3D: NPC with FormID {:X} had an invalid style index {} (out of range). Reassigning a new style.", a_this->formID, styleIndex);
-							styleIt = npcStyles.end(); // Force reassigning a new style
+							styleIt = npcStyles.end();
 						}
 						else {
 							logger::debug("Load3D: NPC with FormID {:X} using stored style index {}.", a_this->formID, styleIndex);
 						}
 					}
 
-					// If no valid style was found, roll for a new one
 					if (styleIt == npcStyles.end()) {
 						auto& generator = RandomEngine();
 						std::uniform_int_distribution<int> chanceDist(1, 100);
 						int rolledChance = chanceDist(generator);
 						if (rolledChance > aNPCData->styleChance) {
-							// Failed chance roll, mark NPC as having no style
 							npcStyles[a_this->formID] = -1;
 							logger::debug("Load3D: NPC with FormID {:X} failed style chance {} rolled {} and will not receive a style.", a_this->formID, aNPCData->styleChance, rolledChance);
 							styleIndex = -1;
 						}
 						else if (!forms.empty()) {
-							// Assign a new random style
 							std::uniform_int_distribution<size_t> distribution(0, forms.size() - 1);
 							styleIndex = distribution(generator);
 							logger::debug("Load3D: Rolled new random style index {} to Actor with FormID {:X} from {} available styles ", styleIndex, a_this->formID, forms.size());
 						}
 						else {
-							// No styles available
 							npcStyles[a_this->formID] = -1;
 							logger::debug("Load3D: No styles available in the list! NPC with FormID {:X} will not receive a style.", a_this->formID);
 							styleIndex = -1;
@@ -974,7 +755,6 @@ struct Load3D
 						logger::debug("Load3D: Invalid styleIndex {} (out of range).", styleIndex);
 					}
 
-					// Wende den Stil nur an, wenn npcToCopyFrom gültig ist und CopyVisual erfolgreich war
 					if (npcToCopyFrom && CopyVisual(npcToCopyFrom, a_this, *aNPCData)) {
 						npcStyles[a_this->formID] = styleIndex;
 						logger::debug("--> Load3D: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.", styleIndex, a_this->formID, aNPCData->npcVisualStyleList->formID, npcToCopyFrom->formID);
@@ -983,32 +763,27 @@ struct Load3D
 			}
 
 			if (it != actData.npcData.end() && it->second.npcCombatStyleList) {
-				// Generate a random value between 1 and 100 (inclusive)
-				auto& gen = RandomEngine();                 // Per-thread engine, seeded once
-				std::uniform_int_distribution<int> dis(1, 100); // Define the range from 0 to 100
-				int randomValueThatNeedsTobeGen = dis(gen);  // Generate the random number
+				auto& gen = RandomEngine();
+				std::uniform_int_distribution<int> dis(1, 100);
+				int randomValueThatNeedsTobeGen = dis(gen);
 
 				if (randomValueThatNeedsTobeGen <= it->second.npcCombatStyleChance) {
-					auto& forms = it->second.npcCombatStyleList->forms;  // Reference to the forms array
-					if (!forms.empty()) {  // Ensure the array is not empty
-						// Generate a random index from the forms array
+					auto& forms = it->second.npcCombatStyleList->forms;
+					if (!forms.empty()) {
 						std::uniform_int_distribution<size_t> disForms(0, forms.size() - 1);
-						size_t randomIndex = disForms(gen);  // Generate a random index
-						// Access the random form
+						size_t randomIndex = disForms(gen);
 						auto* randomForm = forms[randomIndex] ? forms[randomIndex]->As<RE::TESCombatStyle>() : nullptr;
 						if (randomForm) {
 							auto dataCS = (RE::ExtraCombatStyle*)a_this->extraList.GetByType(RE::ExtraDataType::kCombatStyle);
 							if (dataCS) {
-								dataCS->combatStyle = randomForm; // Assign the new combat style
+								dataCS->combatStyle = randomForm;
 							}
-							npc->combatStyle = randomForm; // Set NPC combat style
+							npc->combatStyle = randomForm;
 						}
 					}
 				}
 			}
 
-			// Same end()-iterator hazard as the guarded run above; this site sits after the
-			// style blocks, so it carries its own check rather than joining that guard.
 			if (it != actData.npcData.end() && it->second.voiceType) {
 				RE::TESNPC* npc = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
 				if (npc) {
@@ -1018,8 +793,6 @@ struct Load3D
 			}
 
 		}
-		//const auto root = func(a_this, true);
-		//const auto root = func(a_this, a_arg1);
 		return root;
 	}
 
@@ -1034,14 +807,11 @@ struct Load3DREFR
 {
 	static RE::NiAVObject* thunk(RE::TESObjectREFR* a_this, bool a_arg1)
 	{
-		// RE::NiAVObject* const root;
 		const auto root = func(a_this, a_arg1);
 
 		if (a_this == nullptr) {
 			return root;
 		}
-
-		// logger::debug("TESObjectREFR {:08X}", a_this->formID);
 
 		auto it = refData.refrDataMap.find(a_this->formID);
 		if (it != refData.refrDataMap.end()) {
@@ -1058,15 +828,11 @@ struct Load3DREFR
 			if (it->second.replaceWith) {
 				RE::TESBoundObject* boundobj = it->second.replaceWith;
 
-				// logger::debug("TESObjectREFR {:08X} replace ref", a_this->formID);
-
 				if (boundobj) {
 					SKSE::GetTaskInterface()->AddTask([a_this, boundobj]() {
 						if (a_this) {
 							a_this->SetObjectReference(boundobj);
 							a_this->Enable(false);
-
-							// a_this->data.objectReference = boundobj;
 						}
 					});
 				}
@@ -1087,13 +853,11 @@ struct Load3DREFR
 void InstallActorHook()
 {
 	stl::write_vfunc<RE::Character, Load3D>();
-	//logger::debug("iUpdateNPC is enabled");
 }
 
 void InstallRefHook()
 {
 	stl::write_vfunc<RE::TESObjectREFR, Load3DREFR>();
-	//logger::debug("iUpdateRefs is enabled");
 }
 
 void MessageHandler(SKSE::MessagingInterface::Message* a_message)
@@ -1103,45 +867,12 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 	{
 		npcStyles.clear();
 		logger::debug(">>> Cleared Random NPC Styles Map.");
-		//SKSE::SerializationInterface* serde = skse->GetSerializationInterface();
-		//serde->SetSaveCallback(SaveCallback);
 		break;
 	}
 	case SKSE::MessagingInterface::kPostLoadGame:
 	{
 		const auto start_time{ std::chrono::system_clock::now() };
-		//TriggerLoad();
-		//loadStylesAfterLoad = false;
-		//if (GetPrivateProfileInt(settingsSection, "iEnableNPCPatching", 0, configFile)) {
-		//	const auto start_time{ std::chrono::system_clock::now() };
-		//	if (GetPrivateProfileInt(settingsSectionFeatures, "iEnableSetLevelDirectlyByPCMult", 0, configFile)) {
-		//		NPC::setbEnableSetLevelDirectlyByPCMult();
-		//	}
-		//	NPC::readConfig(".\\Data\\SKSE\\Plugins\\SkyPatcher\\npc");
-		//	const auto elapsed{ std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start_time) };
-		//	double     seconds = static_cast<double>(elapsed.count()) / 1000000.0;
-		//	logger::info(">>>>>>>>>>>>>>>>>>>>>>>>>>> Load Game NPC Patcher finished in {} seconds", seconds);
-		//}
 
-		//auto a_this = RE::PlayerCharacter::GetSingleton();
-		//if (a_this->GetActorBase()->attackDataMap && a_this->race && a_this->race->attackDataMap) {
-		//	//a_this->GetActorBase()->attackDataMap = a_this->race->attackDataMap;
-		//	//a_this->data.objectReference->As<RE::TESNPC>()->attackDataMap = a_this->race->attackDataMap;
-		//
-		//	for (auto& map : a_this->race->attackDataMap->attackDataMap) {
-		//		logger::debug("RACE map {} {}",  map.second.get()->event, map.second.get()->data.damageMult);
-		//		if (map.second.get()->event.c_str() == "attackPowerStartDualWield")
-		//			map.second.get()->data.damageMult = 0.36;
-		//		logger::debug("RACE map updated: {} {}", map.second.get()->event, map.second.get()->data.damageMult);
-		//	}
-		//	for (auto&  map : a_this->GetActorBase()->attackDataMap->attackDataMap) {
-		//		logger::debug("NPC map {} {}",  map.second.get()->event, map.second.get()->data.damageMult);
-		//		if (map.second.get()->event.c_str() == "attackPowerStartDualWield")
-		//			map.second.get()->data.damageMult = 0.36;
-		//		logger::debug("NPC map updated: {} {}", map.second.get()->event, map.second.get()->data.damageMult);
-		//	}
-		//	//RE::free(a_this->sourceFiles.array);
-		//}
 		const auto processLists = RE::ProcessLists::GetSingleton();
 		for (auto actorHandles : processLists->allProcesses) {
 			for (const auto actorHandle : *actorHandles) {
@@ -1150,11 +881,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 				auto        actor = actorHand.get();
 				if (actor) {
 					if (actor->data.objectReference) {
-						//logger::debug("actor has objectRef -> {:08X}", actor->data.objectReference->As<RE::TESNPC>()->formID);
 						auto it = actData.npcData.find(actor->data.objectReference->formID);
 						auto data = (RE::ExtraLeveledCreature*)actor->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
 						bool originalBaseHasStyleList = false;
-						//NPC::NPCData npcOriginalBaseData = {};
 
 						if (data) {
 
@@ -1165,7 +894,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 								}
 							}
 
-							//logger::debug(FMT_STRING("Actor {:08X}  orginalBase {:08X} templateBAse {:08X}"), a_this->formID, data->originalBase->formID, data->templateBase->formID);
 							if (data->templateBase) {
 								it = actData.npcData.find(data->templateBase->formID);
 							}
@@ -1177,33 +905,25 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 							}
 
 							if (it->second.npcCombatStyleList) {
-								// Generate a random value between 1 and 100 (inclusive)
-								auto& gen = RandomEngine();                 // Per-thread engine, seeded once
-								std::uniform_int_distribution<int> dis(1, 100); // Define the range from 1 to 100
-								int randomValueThatNeedsTobeGen = dis(gen);  // Generate the random number
+								auto& gen = RandomEngine();
+								std::uniform_int_distribution<int> dis(1, 100);
+								int randomValueThatNeedsTobeGen = dis(gen);
 
-								// Check if the random value is less than or equal to npcCombatStyleChance
 								if (randomValueThatNeedsTobeGen <= it->second.npcCombatStyleChance) {
 									auto& forms = it->second.npcCombatStyleList->forms;
-									if (!forms.empty()) {  // Ensure the array is not empty
-										// Generate a random index from the forms array
+									if (!forms.empty()) {
 										std::uniform_int_distribution<size_t> disForms(0, forms.size() - 1);
-										size_t randomIndex = disForms(gen);  // Generate a random index
+										size_t randomIndex = disForms(gen);
 
-										// Access the random form
 						auto* randomForm = forms[randomIndex] ? forms[randomIndex]->As<RE::TESCombatStyle>() : nullptr;
 										if (randomForm) {
 											auto dataCS = (RE::ExtraCombatStyle*)actor->extraList.GetByType(RE::ExtraDataType::kCombatStyle);
 											if (dataCS) {
-												// You can log or check previous combat style if needed
-												dataCS->combatStyle = randomForm;  // Assign the new combat style
+												dataCS->combatStyle = randomForm;
 											}
 
-											// Set the combat style if the actor is a TESNPC
 											if (actor->data.objectReference->As<RE::TESNPC>()) {
 												actor->data.objectReference->As<RE::TESNPC>()->combatStyle = randomForm;
-												// Optionally log the style change
-												// logger::debug("Actor: {:08X} new style {:08X}", actor->formID, randomForm->formID);
 											}
 										}
 									}
@@ -1211,42 +931,14 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 							}
 
 
-							////
-							//
-							//
 							if (it->second.skinWasSet) {
-								//auto skinArmor = it->second.skin;  // Reference to the forms array
-								//logger::debug("Load Save Actor set new visuals");
-								if (actor->data.objectReference->As<RE::TESNPC>()) {  // Ensure the array is not empty
+								if (actor->data.objectReference->As<RE::TESNPC>()) {
 									actor->data.objectReference->As<RE::TESNPC>()->skin = it->second.skin;
 								}
 							}
 
-							//if (it->second.haircolor) {
-							//	actor->data.objectReference->As<RE::TESNPC>()->SetHairColor(it->second.haircolor);
-							//	actor->UpdateHairColor();
-							//	auto root = actor->Get3D(false);
-							//	root->UpdateHairColor(it->second.haircolor->color);
-							//	auto haircolor = it->second.haircolor;
-							//	SKSE::GetTaskInterface()->AddTask([root, actor, haircolor]() {
-							//		root->UpdateHairColor(haircolor->color);
-							//		if (const auto& biped = actor->GetCurrentBiped(); biped) {
-							//			for (auto& slot : headSlots) {
-							//				const auto node = biped->objects[slot].partClone;
-							//				if (node && node->HasShaderType(RE::BSShaderMaterial::Feature::kHairTint)) {
-							//					node->UpdateHairColor(haircolor->color);
-							//				}
-							//			}
-							//		}
-							//		update_color_data(root, HAIR_TINT, haircolor->color);
-							//		});
-							//	//logger::debug("PostLoadGame: actor {:08X} {} hair color {:08X}", actor->data.objectReference->As<RE::TESNPC>()->formID, actor->data.objectReference->As<RE::TESNPC>()->fullName, it->second.haircolor->formID);
-							//}
-
 							if (it->second.npcRace) {
-								//auto npcRace = it->second.npcRace;  // Reference to the forms array
-								//logger::debug("Load Save Actor set new visuals");
-								if (actor->data.objectReference->As<RE::TESNPC>()) {  // Ensure the array is not empty
+								if (actor->data.objectReference->As<RE::TESNPC>()) {
 									actor->data.objectReference->As<RE::TESNPC>()->race = it->second.npcRace;
 								}
 							}
@@ -1255,9 +947,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 							if (it->second.updateFlags) {
 								RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
-								if (npcForm) {  // Check if LookupByID succeeded
+								if (npcForm) {
 									RE::TESNPC* actorNPC = actor->data.objectReference->As<RE::TESNPC>();
-									if (actorNPC) {  // Check if the cast to TESNPC succeeded
+									if (actorNPC) {
 										actorNPC->actorData.actorBaseFlags = npcForm->actorData.actorBaseFlags;
 										logger::debug("PostLoadGame: {:08X} updated actor flags", it->first);
 									}
@@ -1272,9 +964,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 							if (it->second.updateTemplateFlags) {
 								RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
-								if (npcForm) {  // Check if LookupByID succeeded
+								if (npcForm) {
 									RE::TESNPC* actorNPC = actor->data.objectReference->As<RE::TESNPC>();
-									if (actorNPC) {  // Check if the cast to TESNPC succeeded
+									if (actorNPC) {
 										actorNPC->actorData.templateUseFlags = npcForm->actorData.templateUseFlags;
 										logger::debug("PostLoadGame: {:08X} updated template flags", it->first);
 									}
@@ -1287,9 +979,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 								}
 							}
 
-							if (it->second.minLevelWasSet || it->second.maxLevelWasSet) {  // Check bools first
+							if (it->second.minLevelWasSet || it->second.maxLevelWasSet) {
 								RE::TESNPC* npc = actor->data.objectReference->As<RE::TESNPC>();
-								if (npc) {  // Check if the cast to TESNPC succeeded
+								if (npc) {
 									if (it->second.minLevelWasSet) {
 										npc->actorData.calcLevelMin = it->second.minLevel;
 										logger::debug("PostLoadGame: {:08X} setminlevel {}", it->first, it->second.minLevel);
@@ -1305,23 +997,18 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 								}
 							}
 
-							//
-
 							if (it->second.npcVisual) {
-								auto npcToCopyFrom = it->second.npcVisual;  // Reference to the forms array
-								//logger::debug("Load Save Actor set new visuals");
-								if (npcToCopyFrom && actor->data.objectReference->As<RE::TESNPC>()) {  // Ensure the array is not empty
+								auto npcToCopyFrom = it->second.npcVisual;
+								if (npcToCopyFrom && actor->data.objectReference->As<RE::TESNPC>()) {
 									RE::TESNPC* npcToChange = actor->data.objectReference->As<RE::TESNPC>();
 									npcToChange->height = npcToCopyFrom->height;
 									npcToChange->weight = npcToCopyFrom->weight;
 									npcToChange->faceNPC = npcToCopyFrom;
 									npcToChange->tintLayers = npcToCopyFrom->tintLayers;
 									npcToChange->bodyTintColor = npcToCopyFrom->bodyTintColor;
-									//npcToChange->headRelatedData = npcToCopyFrom->headRelatedData;
 									if (npcToChange && npcToCopyFrom) {
 										for (int i = 0; i < npcToCopyFrom->numHeadParts; i++) {
 											if (npcToCopyFrom->headParts && npcToCopyFrom->headParts[i]) {
-												//logger::debug("PostLoadGame: Change Head Part {:08X} {}", npcToCopyFrom->headParts[i]->formID, npcToCopyFrom->headParts[i]->fullName);
 												npcToChange->ChangeHeadPart(npcToCopyFrom->headParts[i]);
 											}
 										}
@@ -1330,23 +1017,13 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 								}
 							}
 
-							/////////////////////////
-
 							if (it != actData.npcData.end() && it->second.npcVisualStyleList || originalBaseHasStyleList) {
 
-								// Same reference-rebinding bug as in Load3D::thunk above: assigning
-								// through a reference overwrote it->second in actData.npcData rather than
-								// selecting the original base's entry. `it` is guaranteed valid here (the
-								// enclosing block is inside `it != end()`), so this site was not UB -- but
-								// it corrupted the map identically. A pointer is what was intended.
 								NPC::NPCData* aNPCData = &it->second;
 								auto actorData = (RE::ExtraLeveledCreature*)actor->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
 								if (actorData && actorData->originalBase) {
 									if (auto itr = actData.npcData.find(actorData->originalBase->formID); itr != actData.npcData.end() && itr->second.npcVisualStyleList) {
-										//forms = itr->second.npcVisualStyleList->forms;
 										aNPCData = &itr->second;
-										//logger::debug("Use alternative");
-										//logger::debug("CopyVisual: actor {:08X} list {:08X} base {:08X}", a_this->formID, aNPCData->npcVisualStyleList->formID, actorData->originalBase->formID);
 									}
 								}
 
@@ -1354,52 +1031,44 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 									auto& forms = aNPCData->npcVisualStyleList->forms;
 
-									// Check if the NPC already has an assigned style
 									auto styleIt = npcStyles.find(actor->formID);
 
-									// Check if the NPC already has an assigned style
 									int styleIndex = -1;
 
 									if (styleIt != npcStyles.end()) {
-										// NPC already has a style, use the existing one
 										styleIndex = styleIt->second;
 
-										// Validate stored style index
 										if (styleIndex == -1) {
 											logger::debug("PostLoadGame: NPC with FormID {:X} previously failed style roll and will not receive a style.", actor->formID);
 										}
 										else if (styleIndex >= forms.size()) {
 											logger::debug("PostLoadGame: NPC with FormID {:X} had an invalid style index {} (out of range). Reassigning a new style.",
 												actor->formID, styleIndex);
-											styleIt = npcStyles.end(); // Force reassigning a new style
+											styleIt = npcStyles.end();
 										}
 										else {
 											logger::debug("PostLoadGame: NPC with FormID {:X} using stored style index {}.", actor->formID, styleIndex);
 										}
 									}
 
-									// If no valid style was found, roll for a new one
 									if (styleIt == npcStyles.end()) {
-										auto& generator = RandomEngine();  // Per-thread engine, seeded once
+										auto& generator = RandomEngine();
 										std::uniform_int_distribution<int> chanceDist(1, 100);
 
 										int rolledChance = chanceDist(generator);
 										if (rolledChance > aNPCData->styleChance) {
-											// Failed chance roll, mark NPC as having no style
 											npcStyles[actor->formID] = -1;
 											logger::debug("PostLoadGame: NPC with FormID {:X} failed style chance {} rolled {} and will not receive a style.",
 												actor->formID, aNPCData->styleChance, rolledChance);
 											styleIndex = -1;
 										}
 										else if (!forms.empty()) {
-											// Assign a new random style
 											std::uniform_int_distribution<size_t> distribution(0, forms.size() - 1);
 											styleIndex = distribution(generator);
 											npcStyles[actor->formID] = styleIndex;
 											logger::debug("PostLoadGame: Assigned new random style index {} to Actor with FormID {:X}", styleIndex, actor->formID);
 										}
 										else {
-											// No styles available
 											npcStyles[actor->formID] = -1;
 											logger::debug("PostLoadGame: No styles available in the list! NPC with FormID {:X} will not receive a style.", actor->formID);
 											styleIndex = -1;
@@ -1422,7 +1091,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 										logger::debug("PostLoadGame: Invalid styleIndex {} (out of range).", styleIndex);
 									}
 
-									// Wende den Stil nur an, wenn npcToCopyFrom gültig ist und CopyVisual erfolgreich war
 									if (npcToCopyFrom && CopyVisual(npcToCopyFrom, actor, *aNPCData)) {
 										npcStyles[actor->formID] = styleIndex;
 										logger::debug("--> PostLoadGame: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.",
@@ -1436,9 +1104,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 								}
 
 							}
-
-							///////////////////////////
-
 
 							if ((it->second.npcVisual || it->second.skinWasSet) || it->second.haircolor) {
 								if (iUpdateNPCVisualsOnLoad == 1) {
@@ -1486,20 +1151,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 									logger::debug("PostLoadGame: {:08X} {} updated voiceType to {:08X}", npc->formID, npc->fullName.c_str(), it->second.voiceType->formID);
 								}
 							}
-
-							//if (false && it->second.npcVisualStyleList) {
-							//	updater.startUpdateByEnable(actor);
-							//}
-
 						}
 					}
-					//if (statRefreshEnabled) {
-					//actor->InitValues();
-					//actor->ApplyPerksFromBase();
-					//}
 				}
-
-				//}
 			}
 		}
 
@@ -1519,7 +1173,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 			if (npc) {
 			auto it = actData.npcData.find(npc->formID);
 				if (it != actData.npcData.end()) {
-					//logger::debug("set stats template");
 					if (it->second.health >= 0)
 						npc->actorData.healthOffset = it->second.health;
 					if (it->second.stamina >= 0)
@@ -1529,7 +1182,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 				}
 				else {
-					//logger::debug("no set stats template");
 				}
 			player->As<RE::Actor>()->SetBaseActorValue(RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
 			player->As<RE::Actor>()->SetBaseActorValue(RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
@@ -1761,94 +1413,11 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 			logger::info(">>>>>>>>>>>>>>>>>>>>>>>>>>> Encounterzone Patcher finished in {} seconds", seconds);
 		}
 
-		//CELL::readConfig(".\\Data\\SKSE\\Plugins\\SkyPatcher\\cell\\");
-
 		auto player = RE::PlayerCharacter::GetSingleton();
 		auto npc = player->data.objectReference->As<RE::TESNPC>();
 		player->SetBaseActorValue(RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
 		player->SetBaseActorValue(RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
 		player->SetBaseActorValue(RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
-		//logger::debug("playerskill NPC {} {}", npc->playerSkills.values[RE::TESNPC::Skills::kOneHanded], npc->playerSkills.values[RE::TESNPC::Skills::kTwoHanded]);
-		//logger::debug("playerskill SKILL {} {}", player->skills->data->skills[RE::TESNPC::Skills::kOneHanded].level, player->skills->data->skills[RE::TESNPC::Skills::kTwoHanded].level);
-		//
-		//// One-Handed
-		//player->skills->data->skills[RE::TESNPC::Skills::kOneHanded].level = (npc->playerSkills.values[RE::TESNPC::Skills::kOneHanded] + npc->playerSkills.offsets[RE::TESNPC::Skills::kOneHanded]);
-		//player->SetBaseActorValue(RE::ActorValue::kOneHanded, (npc->playerSkills.values[RE::TESNPC::Skills::kOneHanded] + npc->playerSkills.offsets[RE::TESNPC::Skills::kOneHanded]));
-
-		//// Two-Handed
-		//player->skills->data->skills[RE::TESNPC::Skills::kTwoHanded].level = (npc->playerSkills.values[RE::TESNPC::Skills::kTwoHanded] + npc->playerSkills.offsets[RE::TESNPC::Skills::kTwoHanded]);
-		//player->SetBaseActorValue(RE::ActorValue::kTwoHanded, (npc->playerSkills.values[RE::TESNPC::Skills::kTwoHanded] + npc->playerSkills.offsets[RE::TESNPC::Skills::kTwoHanded]));
-
-		//// Marksman
-		//player->skills->data->skills[RE::TESNPC::Skills::kMarksman].level = (npc->playerSkills.values[RE::TESNPC::Skills::kMarksman] + npc->playerSkills.offsets[RE::TESNPC::Skills::kMarksman]);
-		//player->SetBaseActorValue(RE::ActorValue::kArchery, (npc->playerSkills.values[RE::TESNPC::Skills::kMarksman] + npc->playerSkills.offsets[RE::TESNPC::Skills::kMarksman]));
-
-		//// Block
-		//player->skills->data->skills[RE::TESNPC::Skills::kBlock].level = (npc->playerSkills.values[RE::TESNPC::Skills::kBlock] + npc->playerSkills.offsets[RE::TESNPC::Skills::kBlock]);
-		//player->SetBaseActorValue(RE::ActorValue::kBlock, (npc->playerSkills.values[RE::TESNPC::Skills::kBlock] + npc->playerSkills.offsets[RE::TESNPC::Skills::kBlock]));
-
-		//// Smithing
-		//player->skills->data->skills[RE::TESNPC::Skills::kSmithing].level = (npc->playerSkills.values[RE::TESNPC::Skills::kSmithing] + npc->playerSkills.offsets[RE::TESNPC::Skills::kSmithing]);
-		//player->SetBaseActorValue(RE::ActorValue::kSmithing, (npc->playerSkills.values[RE::TESNPC::Skills::kSmithing] + npc->playerSkills.offsets[RE::TESNPC::Skills::kSmithing]));
-
-		//// Heavy Armor
-		//player->skills->data->skills[RE::TESNPC::Skills::kHeavyArmor].level = (npc->playerSkills.values[RE::TESNPC::Skills::kHeavyArmor] + npc->playerSkills.offsets[RE::TESNPC::Skills::kHeavyArmor]);
-		//player->SetBaseActorValue(RE::ActorValue::kHeavyArmor, (npc->playerSkills.values[RE::TESNPC::Skills::kHeavyArmor] + npc->playerSkills.offsets[RE::TESNPC::Skills::kHeavyArmor]));
-
-		//// Light Armor
-		//player->skills->data->skills[RE::TESNPC::Skills::kLightArmor].level = (npc->playerSkills.values[RE::TESNPC::Skills::kLightArmor] + npc->playerSkills.offsets[RE::TESNPC::Skills::kLightArmor]);
-		//player->SetBaseActorValue(RE::ActorValue::kLightArmor, (npc->playerSkills.values[RE::TESNPC::Skills::kLightArmor] + npc->playerSkills.offsets[RE::TESNPC::Skills::kLightArmor]));
-
-		//// Pickpocket
-		//player->skills->data->skills[RE::TESNPC::Skills::kPickpocket].level = (npc->playerSkills.values[RE::TESNPC::Skills::kPickpocket] + npc->playerSkills.offsets[RE::TESNPC::Skills::kPickpocket]);
-		//player->SetBaseActorValue(RE::ActorValue::kPickpocket, (npc->playerSkills.values[RE::TESNPC::Skills::kPickpocket] + npc->playerSkills.offsets[RE::TESNPC::Skills::kPickpocket]));
-
-		//// Lockpicking
-		//player->skills->data->skills[RE::TESNPC::Skills::kLockpicking].level = (npc->playerSkills.values[RE::TESNPC::Skills::kLockpicking] + npc->playerSkills.offsets[RE::TESNPC::Skills::kLockpicking]);
-		//player->SetBaseActorValue(RE::ActorValue::kLockpicking, (npc->playerSkills.values[RE::TESNPC::Skills::kLockpicking] + npc->playerSkills.offsets[RE::TESNPC::Skills::kLockpicking]));
-
-		//// Sneak
-		//player->skills->data->skills[RE::TESNPC::Skills::kSneak].level = (npc->playerSkills.values[RE::TESNPC::Skills::kSneak] + npc->playerSkills.offsets[RE::TESNPC::Skills::kSneak]);
-		//player->SetBaseActorValue(RE::ActorValue::kSneak, (npc->playerSkills.values[RE::TESNPC::Skills::kSneak] + npc->playerSkills.offsets[RE::TESNPC::Skills::kSneak]));
-
-		//// Alchemy
-		//player->skills->data->skills[RE::TESNPC::Skills::kAlchemy].level = (npc->playerSkills.values[RE::TESNPC::Skills::kAlchemy] + npc->playerSkills.offsets[RE::TESNPC::Skills::kAlchemy]);
-		//player->SetBaseActorValue(RE::ActorValue::kAlchemy, (npc->playerSkills.values[RE::TESNPC::Skills::kAlchemy] + npc->playerSkills.offsets[RE::TESNPC::Skills::kAlchemy]));
-
-		//// Speechcraft
-		//player->skills->data->skills[RE::TESNPC::Skills::kSpeechcraft].level = (npc->playerSkills.values[RE::TESNPC::Skills::kSpeechcraft] + npc->playerSkills.offsets[RE::TESNPC::Skills::kSpeechcraft]);
-		//player->SetBaseActorValue(RE::ActorValue::kSpeech, (npc->playerSkills.values[RE::TESNPC::Skills::kSpeechcraft] + npc->playerSkills.offsets[RE::TESNPC::Skills::kSpeechcraft]));
-
-		//// Alteration
-		//player->skills->data->skills[RE::TESNPC::Skills::kAlteration].level = (npc->playerSkills.values[RE::TESNPC::Skills::kAlteration] + npc->playerSkills.offsets[RE::TESNPC::Skills::kAlteration]);
-		//player->SetBaseActorValue(RE::ActorValue::kAlteration, (npc->playerSkills.values[RE::TESNPC::Skills::kAlteration] + npc->playerSkills.offsets[RE::TESNPC::Skills::kAlteration]));
-
-		//// Conjuration
-		//player->skills->data->skills[RE::TESNPC::Skills::kConjuration].level = (npc->playerSkills.values[RE::TESNPC::Skills::kConjuration] + npc->playerSkills.offsets[RE::TESNPC::Skills::kConjuration]);
-		//player->SetBaseActorValue(RE::ActorValue::kConjuration, (npc->playerSkills.values[RE::TESNPC::Skills::kConjuration] + npc->playerSkills.offsets[RE::TESNPC::Skills::kConjuration]));
-
-		//// Destruction
-		//player->skills->data->skills[RE::TESNPC::Skills::kDestruction].level = (npc->playerSkills.values[RE::TESNPC::Skills::kDestruction] + npc->playerSkills.offsets[RE::TESNPC::Skills::kDestruction]);
-		//player->SetBaseActorValue(RE::ActorValue::kDestruction, (npc->playerSkills.values[RE::TESNPC::Skills::kDestruction] + npc->playerSkills.offsets[RE::TESNPC::Skills::kDestruction]));
-
-		//// Illusion
-		//player->skills->data->skills[RE::TESNPC::Skills::kIllusion].level = (npc->playerSkills.values[RE::TESNPC::Skills::kIllusion] + npc->playerSkills.offsets[RE::TESNPC::Skills::kIllusion]);
-		//player->SetBaseActorValue(RE::ActorValue::kIllusion, (npc->playerSkills.values[RE::TESNPC::Skills::kIllusion] + npc->playerSkills.offsets[RE::TESNPC::Skills::kIllusion]));
-
-		//// Restoration
-		//player->skills->data->skills[RE::TESNPC::Skills::kRestoration].level = (npc->playerSkills.values[RE::TESNPC::Skills::kRestoration] + npc->playerSkills.offsets[RE::TESNPC::Skills::kRestoration]);
-		//player->SetBaseActorValue(RE::ActorValue::kRestoration, (npc->playerSkills.values[RE::TESNPC::Skills::kRestoration] + npc->playerSkills.offsets[RE::TESNPC::Skills::kRestoration]));
-
-		//// Enchanting
-		//player->skills->data->skills[RE::TESNPC::Skills::kEnchanting].level = (npc->playerSkills.values[RE::TESNPC::Skills::kEnchanting] + npc->playerSkills.offsets[RE::TESNPC::Skills::kEnchanting]);
-		//player->SetBaseActorValue(RE::ActorValue::kEnchanting, (npc->playerSkills.values[RE::TESNPC::Skills::kEnchanting] + npc->playerSkills.offsets[RE::TESNPC::Skills::kEnchanting]));
-
-		//logger::debug("playerskill NPC {} {}", npc->playerSkills.values[RE::TESNPC::Skills::kOneHanded], npc->playerSkills.values[RE::TESNPC::Skills::kTwoHanded]);
-		//logger::debug("playerskill SKILL {} {}", player->skills->data->skills[RE::TESNPC::Skills::kOneHanded].level, player->skills->data->skills[RE::TESNPC::Skills::kTwoHanded].level);
-		//
-
-		//RE::BGSMovementType aa;
-		//aa.movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kLeft][RE::Movement::MaxSpeeds::kWalk];
 
 		const auto processLists = RE::ProcessLists::GetSingleton();
 		for (auto actorHandles : processLists->allProcesses) {
@@ -1860,12 +1429,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 				if (actor && actor->data.objectReference) {
 					auto it = actData.npcData.find(actor->data.objectReference->formID);
 					if (it != actData.npcData.end()) {
-						//logger::debug(FMT_STRING("Actor from ProcessList {:08X} "), actor->formID);
 						if (actor->extraList.HasType(RE::ExtraDataType::kLevCreaModifier)) {
-							//refr->extraList.GetByType(RE::ExtraDataType::kLevCreaModifier);
 							auto data = (RE::ExtraLeveledCreature*)actor->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
 							if (data) {
-								//logger::debug(FMT_STRING("Actor {:08X}  orginalBase {:08X} templateBAse {:08X}"), actor->formID, data->originalBase->formID, data->templateBase->formID);
 								if (data->templateBase) {
 									data->originalBase->actorData.healthOffset = data->templateBase->actorData.healthOffset;
 									data->originalBase->actorData.staminaOffset = data->templateBase->actorData.staminaOffset;
@@ -1875,11 +1441,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 							}
 						}
 						auto npc = actor->data.objectReference->As<RE::TESNPC>();
-						//if (actor->formID == 0x000014) {
-						//	playerHealth = npc->actorData.healthOffset;
-						//	playerStamina = npc->actorData.staminaOffset;
-						//	playerMagicka = npc->actorData.magickaOffset;
-						//}
 						if (npc) {
 							actor->SetBaseActorValue(RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
 							actor->SetBaseActorValue(RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
@@ -1887,12 +1448,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 							actor->InitValues();
 							actor->ApplyPerksFromBase();
 						}
-						//auto data = (RE::ExtraLeveledCreature*)actor->extraList.GetByType(RE::ExtraDataType::k);
-						//if (data) {
-						//
-						//}
-						//logger::debug(FMT_STRING("Actor {:08X} updated with stats: health {} mag {} stam {}"), actor->formID, npc->actorData.healthOffset+npc->race->data.startingHealth,npc->actorData.magickaOffset + npc->race->data.startingMagicka,npc->actorData.staminaOffset + npc->race->data.startingStamina);
-						//actor->InitValues();
 					}
 				}
 			}
@@ -1918,21 +1473,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 					}
 				}
 				});
-
-			//if (form && form->formType == RE::FormType::LeveledNPC) {
-			//	RE::TESLevCharacter* tempLLChar = (RE::TESLevCharacter*)form->As<RE::TESLevCharacter>();
-			//	tempLLChar->llFlags = RE::TESLeveledList::Flag::kCalculateForEachItemInCount;
-			//	for (auto& entry : tempLLChar->entries) {
-			//		if (entry.form) {
-			//			entry.level = 1;
-			//			logger::debug(FMT_STRING("NPC {:08X} unleveled to level 1 "), entry.form->formID);
-			//		}
-			//	}
-			//}
 		}
 
 		if (statRefreshExcludeEnabled) {
-			//logger::debug("statRefreshExcludeEnabled 2");
 			extractToArr2D(excludeNPCs, "iUpdateNPCExcludeList\\s*=([^:]+)", excludedNPCsArr);
 			for (auto arr : excludedNPCsArr) {
 				if (arr.size() > 0 && IsPluginInstalled(arr[0].c_str())) {
@@ -1950,130 +1493,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 			statRefreshExcludeEnabled = false;
 			logger::debug("No mods found to exclude. Shutting down exclusion function.");
 		}
-
-		//    for (const auto& pair : actData.npcData) {
-		//	logger::debug("Key: {:08X} {} {} {} ", pair.first, pair.second.health, pair.second.stamina, pair.second.magicka );
-		//}
-
-		//auto allForms = RE::TESForm::GetAllForms();
-		//std::for_each(std::execution::par, allForms.first->begin(), allForms.first->end(), [&](auto& pair) {
-		//	auto& key = pair.first;
-		//	auto& form = pair.second;
-		//	if (GetPrivateProfileInt(settingsSectionFeatures, "iEnableUnlevelNPCs", 0, configFile)) {
-		//		if (form && form->formType == RE::FormType::LeveledNPC) {
-		//			RE::TESLevCharacter* tempLLChar = (RE::TESLevCharacter*)form->As<RE::TESLevCharacter>();
-		//			tempLLChar->llFlags = RE::TESLeveledList::Flag::kCalculateForEachItemInCount;
-		//			for (auto& entry : tempLLChar->entries) {
-		//				if (entry.form) {
-		//					entry.level = 1;
-		//					logger::debug(FMT_STRING("NPC {:08X} unleveled to level 1 "), entry.form->formID);
-		//				}
-		//			}
-		//		}
-		//		if (form && form->formType == RE::FormType::EncounterZone) {
-		//			RE::BGSEncounterZone* tempEncounterZone = (RE::BGSEncounterZone*)form->As<RE::BGSEncounterZone>();
-		//			//tempEncounterZone->data.minLevel = 1;
-		//			tempEncounterZone->data.maxLevel = 127;
-		//			logger::debug(FMT_STRING("Encounterzone {:08X} unleveled."), tempEncounterZone->formID);
-		//		}
-		//	}
-		//	if (form && form->formType == RE::FormType::ActorCharacter) {
-		//		//logger::debug(FMT_STRING("IS Actor  {} {:08X}"), form->formType.underlying(), form->formID);
-		//		auto refr = (RE::Actor*)form;
-		//		if (refr && refr->data.objectReference) {
-		//
-		//			//refr->ShouldPerformRevert();
-		//			//refr->extraList.RemoveByType(RE::ExtraDataType::kLevCreaModifier);
-		//			//if (refr->extraList.HasType(RE::ExtraDataType::kLevCreaModifier)) {
-		//			//	refr->data.objectReference = nullptr;
-		//			//	logger::debug(FMT_STRING("Removed kLevCreaModifier"));
-		//			//}
-		//			//refr->InitValues();
-		//			//auto aaa =  refr->GetTemplateActorBase();
-		//			//logger::debug(FMT_STRING("IS NPC {:08X}"), npc->formID);
-		//			//logger::debug(FMT_STRING("Stats Health {} {} {} Race {:08X}"), npc->actorData.healthOffset, npc->actorData.staminaOffset, npc->actorData.magickaOffset, npc->race->formID);
-		//			//	auto player = refr->data.objectReference->As<RE::TESNPC>();
-		//			//	refr->As<RE::Actor>()->SetBaseActorValue(RE::ActorValue::kHealth, player->actorData.healthOffset + player->race->data.startingHealth);
-		//			//	refr->As<RE::Actor>()->SetBaseActorValue(RE::ActorValue::kMagicka, player->actorData.magickaOffset + player->race->data.startingMagicka);
-		//			//	refr->As<RE::Actor>()->SetBaseActorValue(RE::ActorValue::kStamina, player->actorData.staminaOffset + player->race->data.startingStamina);
-		//			//	//refr->InitValues();
-		//			//	//refr->ApplyPerksFromBase();
-		//			//}
-		//			//auto cache = refr->As<RE::Actor>()->currentProcess->cachedValues->actorValueCache;
-		//			//for (RE::CachedValueData* it = cache.begin(); it != cache.end(); ++it)
-		//			//{
-		//			//	// Access the extra data using 'it'
-		//			//	logger::debug(FMT_STRING("v1 {} v2 {} v3 {}"), it->pad1, it->pad2, it->value);
-		//			//	// Do something with 'extraData'
-		//			//}
-		//			//logger::debug(FMT_STRING("Map sizes {} {} {} "), b.healthMap.size(), b.staminaMap.size(), b.magickaMap.size());
-		//			//if (refr->extraList.HasType(RE::ExtraDataType::kLevCreaModifier)) {
-		//			//	auto healthIt = b.healthMap.find(npc->race->formID);
-		//			//	if (healthIt != b.healthMap.end()) {
-		//			//		npc->actorData.healthOffset = healthIt->second;
-		//			//		//logger::debug(FMT_STRING("Setting Health."));
-		//			//	}
-		//			//	auto stamIt = b.staminaMap.find(npc->race->formID);
-		//			//	if (stamIt != b.staminaMap.end()) {
-		//			//		npc->actorData.staminaOffset = stamIt->second;
-		//			//	}
-		//			//	auto magIt = b.magickaMap.find(npc->race->formID);
-		//			//	if (magIt != b.magickaMap.end()) {
-		//			//		npc->actorData.magickaOffset = magIt->second;
-		//			//	}
-		//			//	//logger::debug(FMT_STRING("Stats Health {} {} {} Race {:08X}"), npc->actorData.healthOffset, npc->actorData.staminaOffset, npc->actorData.magickaOffset, npc->race->formID);
-		//			//	StatWeights swActor;
-		//			//	swActor.healthWeight = npc->npcClass->data.attributeWeights.health;
-		//			//	swActor.staminaWeight = npc->npcClass->data.attributeWeights.stamina;
-		//			//	swActor.magickaWeight = npc->npcClass->data.attributeWeights.magicka;
-		//			//
-		//			//	auto autoHealthIt = b.autoHealthMap.find(npc->race->formID);
-		//			//	if (autoHealthIt != b.autoHealthMap.end()) {
-		//			//		auto tempResult = calculateAttributePoints(npc->actorData.level, swActor);
-		//			//		npc->actorData.healthOffset = tempResult.health;
-		//			//		//logger::debug(FMT_STRING("Setting Health."));
-		//			//	}
-		//			//	auto autoStamIt = b.autoStaminaMap.find(npc->race->formID);
-		//			//	if (autoStamIt != b.autoStaminaMap.end()) {
-		//			//		auto tempResult = calculateAttributePoints(npc->actorData.level, swActor);
-		//			//		npc->actorData.staminaOffset = tempResult.stamina;
-		//			//	}
-		//			//	auto autoMagIt = b.autoMagickaMap.find(npc->race->formID);
-		//			//	if (autoMagIt != b.autoMagickaMap.end()) {
-		//			//		auto tempResult = calculateAttributePoints(npc->actorData.level, swActor);
-		//			//		npc->actorData.magickaOffset = tempResult.magicka;
-		//			//	}
-		//			//}
-		//			if (refr->extraList.HasType(RE::ExtraDataType::kLevCreaModifier)) {
-		//				//refr->extraList.GetByType(RE::ExtraDataType::kLevCreaModifier);
-		//				auto data = (RE::ExtraLeveledCreature*)refr->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
-		//				if (data) {
-		//					//logger::debug(FMT_STRING("Actor {:08X}  orginalBase {:08X} templateBAse {:08X}"), refr->formID, data->originalBase->formID, data->templateBase->formID);
-		//					if (data->templateBase) {
-		//						refr->data.objectReference->As<RE::TESNPC>()->actorData = data->templateBase->actorData;
-		//						//refr->data.objectReference->As<RE::TESNPC>()->perks = data->templateBase->perks;
-		//						//refr->data.objectReference->As<RE::TESNPC>()->perkCount = data->templateBase->perkCount;
-		//					}
-		//				}
-		//			}
-		//
-		//			auto npc = refr->data.objectReference->As<RE::TESNPC>();
-		//			if (refr->formID == 0x000014) {
-		//				playerHealth = npc->actorData.healthOffset;
-		//				playerStamina = npc->actorData.staminaOffset;
-		//				playerMagicka = npc->actorData.magickaOffset;
-		//			}
-		//			refr->As<RE::Actor>()->SetBaseActorValue(RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
-		//			refr->As<RE::Actor>()->SetBaseActorValue(RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
-		//			refr->As<RE::Actor>()->SetBaseActorValue(RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
-		//			logger::debug(FMT_STRING("Actor OLD {:08X}  "), refr->formID);
-		//			//logger::debug(FMT_STRING("Actor got patched {:08X}  "), refr->formID);
-		//			//refr->InitValues();
-		//			//refr->ApplyPerksFromBase();
-		//		}
-		//		//logger::debug(FMT_STRING("----------------------"));
-		//	}
-		//});
 
 		const auto elapsed{ std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start_time_gameLoaded) };
 		double     seconds = static_cast<double>(elapsed.count()) / 1000000.0;
@@ -2164,7 +1583,6 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	RegisterSerialization();
 	const auto messaging = SKSE::GetMessagingInterface();
 	messaging->RegisterListener(MessageHandler);
-	//FormDeleteEventSink::Init();
 	CONTAINER::iAllowLeveledListsAddedToContainers = GetPrivateProfileInt(settingsSectionFeatures, "iAllowLeveledListsAddedToContainers", 0, configFile);
 	logger::info("Enabled Features *******");
 	if (CONTAINER::iAllowLeveledListsAddedToContainers == 0) {
@@ -2189,23 +1607,10 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	logger::info("************************");
 	LoadIniFilesRecursive(".\\Data\\SKSE\\Plugins\\SkyPatcher\\");
 	logger::info("************************");
-	//prepare Race Attack Data information
 	if (GetPrivateProfileInt(settingsSection, "iEnableRaceHookPatching", 0, configFile)) {
 		RACE::readConfigHook(".\\Data\\SKSE\\Plugins\\SkyPatcher\\raceHook\\");
 		RACE::LoadRaceDataHook::InstallHook();
 	}
-
-	//	//prepare Race Attack Data information
-	//if (GetPrivateProfileInt(settingsSection, "iEnableNPCHookPatching", 0, configFile)) {
-	//	RACE::readConfigHook(".\\Data\\SKSE\\Plugins\\SkyPatcher\\raceHook\\");
-	//	RACE::LoadRaceDataHook::InstallHook();
-	//}
-
-	//if (GetPrivateProfileInt(settingsSection, "iEnableRaceHookPatching", 0, configFile)) {
-	//RACE::readConfigHook(".\\Data\\SKSE\\Plugins\\SkyPatcher\\raceHook\\");
-	//CONTAINER::readConfigHook(".\\Data\\SKSE\\Plugins\\SkyPatcher\\container\\");
-	//CONTAINER::LoadRaceDataHook::InstallHook();
-	//}
 
 	if (npcPatchingEnabled)
 		InstallActorHook();
@@ -2213,15 +1618,12 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	if (RefPatchingEnabled)
 		InstallRefHook();
 
-	//logger::debug("statRefreshExcludeEnabled {}", statRefreshExcludeEnabled);
 	if (statRefreshEnabled && statRefreshExcludeEnabled) {
 		std::ifstream configFile(".\\Data\\SKSE\\Plugins\\SkyPatcher.ini");
 
 		std::string line;
 		while (std::getline(configFile, line)) {
-			// Check if the line starts with the desired prefix
 			if (line.compare(0, sizeof("iUpdateNPCExcludeList") - 1, "iUpdateNPCExcludeList") == 0) {
-				//logger::debug("line found");
 				excludeNPCs = line;
 				break;
 			}

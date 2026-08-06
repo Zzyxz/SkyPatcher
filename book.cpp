@@ -5,10 +5,6 @@
 
 namespace BOOK
 {
-	// ==================================================================
-	// PHASE 2 -- BOOK's key table. One row per upstream extract*() call,
-	// in the same order. See parsetable.h.
-	// ==================================================================
 	namespace
 	{
 #define BOOK_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -68,7 +64,7 @@ namespace BOOK
 		patch_instruction l;
 		bookKeyTable().parse(line, &l);
 		return l;
-	}  //endStruct
+	}
 
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
@@ -89,7 +85,6 @@ namespace BOOK
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Book) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = (RE::TESObjectBOOK*)currentform;
 						patch(line, curobj);
 					}
@@ -97,11 +92,9 @@ namespace BOOK
 			}
 
 			if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterByFlags.empty() && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterBySpellKeywordsOr.empty() && line.filterByCastingPerk.empty()) {
-				//logger::info("continue");
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, book) pair.
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
@@ -110,7 +103,6 @@ namespace BOOK
 			};
 
 			for (const auto& curobj : ObjectArray) {
-				//logger::info("processing npc");
 				bool found = false;
 				bool keywordAnd = false;
 				bool keywordOr = false;
@@ -131,7 +123,6 @@ namespace BOOK
 						std::string  string_form = npcstring;
 						currentform = GetFormFromIdentifier(string_form);
 						if (currentform && currentform->formType == RE::FormType::Book && curobj->TeachesSpell() && curobj->data.teaches.spell && curobj->data.teaches.spell->data.castingPerk && curobj->data.teaches.spell->data.castingPerk->formID == currentform->formID) {
-							//logger::debug("Form {:08X} ", currentform->formID);
 							found = true;
 							break;
 						}
@@ -145,14 +136,12 @@ namespace BOOK
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty() ) {
-					//logger::info("keywords not empty");
 					containsOr = formfilter::matchesEditorIdOr(view, curobj);
 				} else  {
 					containsOr = true;
 				}
 
 				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -161,9 +150,7 @@ namespace BOOK
 						RE::TESForm*       currentform = nullptr;
 						currentform = GetFormFromIdentifier(textureString);
 						if (currentform) {
-							//logger::debug("start search");
 							if (findTextureSet(curobj, currentform->As<RE::BGSTextureSet>())) {
-								//logger::debug("Texture found");
 								found = true;
 								break;
 							}
@@ -178,13 +165,11 @@ namespace BOOK
 						if (currentform && currentform->formType == RE::FormType::Keyword) {
 							auto spell = curobj->data.teaches.spell;
 							auto keyword = (RE::BGSKeyword*)currentform;
-							//logger::info("spellformid {}", spell->formID);
 							if (curobj->TeachesSpell() && spell && keyword) {
 								for (const auto& effect : spell->effects)
 								{
 									if (effect->baseEffect->HasKeyword(keyword)) {
 										found = true;
-										//logger::debug(FMT_STRING("mgefAnd found in list."));
 										break;
 									}
 								}
@@ -198,22 +183,17 @@ namespace BOOK
 				}
 
 				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
 					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
 					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
 				}
 
 				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -239,20 +219,12 @@ namespace BOOK
 				}
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
-					// PROTOTYPE: was RE::FormType::Projectile -- objectExcluded
-					// on a book patcher could never match, making the filter
-					// dead code. Fixed to Book as part of the migration.
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Book)) {
 						found = false;
 					}
 				}
 
-				// PROTOTYPE: `curobj->formID != 0x000007` is a copy-pasted
-				// player-guard from a per-form patcher; it is always true here
-				// (books are never the player) and is preserved verbatim.
 				if (!line.filterByEditorIdContainsExcluded.empty() && found && curobj->formID != 0x000007) {
-					//logger::info("factions not empty");
 					if (formfilter::hasExcludedEditorId(view, curobj)) {
 						found = false;
 					}
@@ -407,7 +379,6 @@ namespace BOOK
 			}
 		}
 
-		// Set Flags
 		if (!line.setFlags.empty()) {
 			for (const auto& setFlag : line.setFlags) {
 				if (toLowerCase(setFlag) == "advancesactorvalue") {
@@ -423,13 +394,10 @@ namespace BOOK
 					curobj->data.flags.set(RE::OBJ_BOOK::Flag::kHasBeenRead);
 					logger::debug(FMT_STRING("book formid: {:08X} {} flag enabled HasBeenRead"), curobj->formID, curobj->fullName);
 				} else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}
 
-		// Reset Flags
 		if (!line.removeFlags.empty()) {
 			for (const auto& removeFlag : line.removeFlags) {
 				if (toLowerCase(removeFlag) == "advancesactorvalue") {
@@ -445,8 +413,6 @@ namespace BOOK
 					curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kHasBeenRead);
 					logger::debug(FMT_STRING("book formid: {:08X} {} flag disabled HasBeenRead"), curobj->formID, curobj->fullName);
 				} else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}

@@ -6,15 +6,6 @@
 namespace PROJECTILE
 {
 
-	// ==================================================================
-	// PHASE 2 -- PROJECTILE's key table. One row per upstream (active)
-	// extract*() call, in the same order. See parsetable.h.
-	//
-	// Several members (keywords, keywordsOr, keywordsExcluded, filterAmmos,
-	// damageTypes, ...) are declared in the struct but have no active
-	// extract call upstream (dead fields) -- no row is added for them,
-	// preserving that (dead) behaviour exactly.
-	// ==================================================================
 	namespace
 	{
 #define PROJ_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -58,7 +49,7 @@ namespace PROJECTILE
 		patch_instruction l;
 		projectileKeyTable().parse(line, &l);
 		return l;
-	}  //endStruct
+	}
 
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
@@ -79,7 +70,6 @@ namespace PROJECTILE
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Projectile) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = (RE::BGSProjectile*)currentform;
 						patch(line, curobj);
 					}
@@ -87,13 +77,9 @@ namespace PROJECTILE
 			}
 
 			if (!line.object.empty() && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
-				//logger::info("continue");
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, projectile) pair.
-			// This struct has no hasPlugin/hasPluginOr members, so those two
-			// view slots are bound to noStrings().
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
@@ -102,7 +88,6 @@ namespace PROJECTILE
 			};
 
 			for (const auto& curobj : ObjectArray) {
-				//logger::info("processing npc");
 				bool found = false;
 				bool contains = false;
 				bool containsOr = false;
@@ -122,31 +107,26 @@ namespace PROJECTILE
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty()) {
-					//logger::info("keywords not empty");
 					containsOr = formfilter::matchesEditorIdOr(view, curobj);
 				} else {
 					containsOr = true;
 				}
 
 				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
-				//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 				if (!found && line.object.empty() && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
 					found = true;
 				}
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-					//logger::info("factions not empty");
 					if (formfilter::hasExcludedEditorId(view, curobj)) {
 						found = false;
 					}
 				}
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Projectile)) {
 						found = false;
 					}
@@ -290,10 +270,7 @@ namespace PROJECTILE
 					curobj->data.flags.set(RE::BGSProjectileData::BGSProjectileFlags::kContinuousUpdate);
 					logger::debug(FMT_STRING("projectile formid: {:08X} {} flag enabled continuousupdate"), curobj->formID, curobj->fullName);
 				}
-				// Add similar blocks for any additional flags in RE::BGSProjectileData::BGSProjectileFlags
 				else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}
@@ -334,10 +311,7 @@ namespace PROJECTILE
 					curobj->data.flags.reset(RE::BGSProjectileData::BGSProjectileFlags::kContinuousUpdate);
 					logger::debug(FMT_STRING("projectile formid: {:08X} {} flag disabled continuousupdate"), curobj->formID, curobj->fullName);
 				}
-				// Add similar blocks for any additional flags in RE::BGSProjectileData::BGSProjectileFlags
 				else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}

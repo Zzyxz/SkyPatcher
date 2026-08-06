@@ -5,10 +5,6 @@
 
 namespace ENCOUNTERZONE
 {
-	// ==================================================================
-	// PHASE 2 -- ENCOUNTERZONE's key table. One row per upstream
-	// extract*() call, in the same order. See parsetable.h.
-	// ==================================================================
 	namespace
 	{
 #define EZ_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -43,7 +39,7 @@ namespace ENCOUNTERZONE
 		patch_instruction l;
 		encounterZoneKeyTable().parse(line, &l);
 		return l;
-	}  //endStruct
+	}
 
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
@@ -74,9 +70,6 @@ namespace ENCOUNTERZONE
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, encounterzone)
-			// pair. encounterzone.cpp has no keywords/hasPlugin fields at
-			// all, so only modNames, editorId*, and objectExcluded are real.
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
@@ -85,9 +78,6 @@ namespace ENCOUNTERZONE
 			};
 
 			for (const auto& curobj : ObjectArray) {
-				//logger::debug("{:08X} editorID {}", curobj->formID, clib_util::editorID::get_editorID(curobj));
-				//logger::debug("{:08X} editorID {}", RE::TESForm::LookupByEditorID("Saw01")->formID, "Saw01");
-				//logger::info("processing npc");
 				bool found = false;
 				bool contains = false;
 				bool containsOr = false;
@@ -107,14 +97,12 @@ namespace ENCOUNTERZONE
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty() ) {
-					//logger::info("keywords not empty");
 					containsOr = formfilter::matchesEditorIdOr(view, curobj);
 				} else {
 					containsOr = true;
 				}
 
 				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -126,18 +114,13 @@ namespace ENCOUNTERZONE
 
 
 
-				// PROTOTYPE: preserved verbatim -- missing `&& found` that
-				// its siblings (e.g. filterByEditorIdContainsExcluded right
-				// below) have; not added here.
 				if (!line.objectExcluded.empty()) {
-					//logger::info("npc not empty");
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::EncounterZone)) {
 						found = false;
 					}
 				}
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found ) {
-					//logger::info("factions not empty");
 					if (formfilter::hasExcludedEditorId(view, curobj)) {
 						found = false;
 					}
@@ -256,7 +239,6 @@ namespace ENCOUNTERZONE
 						curobj->data.minLevel);
 				}
 			} catch (const std::exception&) {
-				// Ungültige Eingabe – wird ignoriert
 			}
 		}
 
@@ -307,7 +289,6 @@ namespace ENCOUNTERZONE
 						curobj->data.maxLevel);
 				}
 			} catch (const std::exception&) {
-				// Ungültige Eingabe – wird ignoriert
 			}
 		}
 
@@ -341,37 +322,6 @@ namespace ENCOUNTERZONE
 			}
 		}
 
-		//if (!line.faction.empty() && line.faction != "none") {
-		//	RE::TESForm* currentform = nullptr;
-		//	std::string  string_form = line.faction;
-		//	currentform = GetFormFromIdentifier(string_form);
-		//	if (currentform && currentform->formType == RE::FormType::Faction) {
-		//		curobj->data.zoneOwner = (RE::TESFaction*)currentform;
-		//		logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed zone owner to "), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->formID, clib_util::editorID::get_editorID(currentform));
-		//	} else if (toLowerCase(line.faction) == "null") {
-		//		curobj->data.zoneOwner = nullptr;
-		//		logger::debug(FMT_STRING("encounterzone formid: {:08X} {} removed zone owner"), curobj->formID, clib_util::editorID::get_editorID(curobj));
-		//	}
-		//}
-
-		//if (!line.rank.empty() && line.rank != "none") {
-		//	try {
-		//		int val = std::stoi(line.rank);
-		//		if (val >= INT8_MIN && val <= INT8_MAX) {
-		//			curobj->data.ownerRank = static_cast<int8_t>(val);
-		//			logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed rank {}"),
-		//				curobj->formID,
-		//				clib_util::editorID::get_editorID(curobj),
-		//				curobj->data.ownerRank);
-		//		} else {
-		//			logger::debug(FMT_STRING("encounterzone formid: {:08X} {} rank out of bound"),
-		//				curobj->formID,
-		//				clib_util::editorID::get_editorID(curobj));
-		//		}
-		//	} catch (const std::exception&) {
-		//	}
-		//}
-		
 		return nullptr;
 	}
 

@@ -6,15 +6,6 @@
 namespace MISC
 {
 
-	// ==================================================================
-	// PHASE 2 -- MISC's key table. One row per upstream extract*() call,
-	// in the same order. See parsetable.h and npc.cpp/weapon.cpp for the
-	// pattern this follows.
-	//
-	// The upstream `speed` extractValueString call was already commented
-	// out (and its pattern was malformed: "speed\s *= ([^:] +)" with
-	// stray spaces inside the regex tokens), so it has no row here.
-	// ==================================================================
 	namespace
 	{
 #define MISC_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -59,7 +50,7 @@ namespace MISC
 		patch_instruction l;
 		miscKeyTable().parse(line, &l);
 		return l;
-	}  //endStruct
+	}
 
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
@@ -80,7 +71,6 @@ namespace MISC
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Misc) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = (RE::TESObjectMISC*)currentform;
 						patch(line, curobj);
 					}
@@ -91,7 +81,6 @@ namespace MISC
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, misc) pair.
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
@@ -100,9 +89,6 @@ namespace MISC
 			};
 
 			for (const auto& curobj : ObjectArray) {
-				//logger::debug("{:08X} editorID {}", curobj->formID, clib_util::editorID::get_editorID(curobj));
-				//logger::debug("{:08X} editorID {}", RE::TESForm::LookupByEditorID("Saw01")->formID, "Saw01");
-				//logger::info("processing npc");
 				bool found = false;
 				bool keywordAnd = false;
 				bool keywordOr = false;
@@ -123,9 +109,7 @@ namespace MISC
 						RE::TESForm* currentform = nullptr;
 						currentform = GetFormFromIdentifier(textureString);
 						if (currentform) {
-							//logger::debug("start search");
 							if (findTextureSet(curobj, currentform->As<RE::BGSTextureSet>())) {
-								//logger::debug("Texture found");
 								found = true;
 								break;
 							}
@@ -140,34 +124,27 @@ namespace MISC
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty() ) {
-					//logger::info("keywords not empty");
 					containsOr = formfilter::matchesEditorIdOr(view, curobj);
 				} else {
 					containsOr = true;
 				}
 
 				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
 				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
 					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
 					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
 				}
 
 				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -177,11 +154,7 @@ namespace MISC
 
 
 
-				// DRIFT (preserved, not fixed): upstream is missing "&& found"
-				// here, so this runs -- and can force found=false -- even
-				// when found was already false. See task report.
 				if (!line.objectExcluded.empty()) {
-					//logger::info("npc not empty");
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Misc)) {
 						found = false;
 						logger::info("Misc Excluded.");
@@ -189,16 +162,12 @@ namespace MISC
 				}
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found ) {
-					//logger::info("factions not empty");
 					if (formfilter::hasExcludedEditorId(view, curobj)) {
 						found = false;
 					}
 				}
 
-				// DRIFT (preserved, not fixed): upstream is missing "&& found"
-				// here too. See task report.
 				if (!line.keywordsExcluded.empty()) {
-					//logger::info("keywords not empty");
 					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
 						found = false;
 					}

@@ -29,8 +29,8 @@ namespace NPC
 
 	struct TintLayerOverlay {
 		uint16_t tintIndex = 0;
-		RE::Color color{};  // Defaults to (0,0,0,0)
-		uint16_t interpolationValue = 100;  // 1.0f * 100
+		RE::Color color{};
+		uint16_t interpolationValue = 100;
 		uint16_t preset = 0;
 
 		bool operator==(const TintLayerOverlay& other) const {
@@ -219,7 +219,6 @@ namespace NPC
 	};
 
 	struct patch_instruction create_patch_instruction(const std::string& line);
-	//void                     process_patch_instructions(const patch_instruction& line);
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	ActorData readConfig(const std::string& folder);
@@ -227,11 +226,6 @@ namespace NPC
 	void*     patch(const NPC::patch_instruction& line, RE::TESNPC* curobj);
 	void      setbEnableSetLevelDirectlyByPCMult();
 	bool      findObject(const patch_instruction& line, RE::TESNPC* curobj);
-	// PHASE 2: the rule is COMPILED once, outside the form loop, into a flat
-	// predicate program (formfilter::MatchProgram); findObject is then a walk
-	// over that program. The two-argument overload above compiles one per call
-	// and forwards; it is for callers that have no rule loop of their own, and
-	// is NOT what process_patch_instructions uses.
 	bool      findObject(const patch_instruction& line, const formfilter::MatchProgram& program, RE::TESNPC* curobj);
 	formfilter::MatchProgram makeFilterView(const patch_instruction& line);
 =======

@@ -2,18 +2,6 @@
 #include "parsetable.h"
 namespace FORMLIST
 {
-	// ==================================================================
-	// PHASE 2 -- FORMLIST's key table. One row per upstream extract*()
-	// call, in the same order. See parsetable.h.
-	//
-	// "formsToReplace" stays hand-written below: its sub-scan pattern
-	// `([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\s*=\s*([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})`
-	// requires the SECOND capture group to also be `name|editorid`-shaped,
-	// which does not match FieldKind::ObjectsToAdd's second group
-	// (plain `[^,]+`) -- those two kinds diverge on inputs where the
-	// replacement value is not itself `name|editorid` shaped, so it cannot
-	// be represented by an existing FieldKind.
-	// ==================================================================
 	namespace
 	{
 #define FORMLIST_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
@@ -40,13 +28,11 @@ namespace FORMLIST
 		line_content l;
 		formlistKeyTable().parse(line, &l);
 
-		// NOT convertible: see the comment on kFormlistKeys above.
 		std::regex  formListReplace_regex("formsToReplace\\s*=([^:]+)", regex::icase);
 		std::smatch formListReplace_match;
 		std::regex_search(line, formListReplace_match, formListReplace_regex);
 		std::vector<std::string> formListReplace;
 		if (formListReplace_match.empty() || formListReplace_match[1].str().empty()) {
-			//empty
 		} else {
 			std::string formListReplace_str = formListReplace_match[1];
 			std::regex  pattern("([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\\s*=\\s*([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})", regex::icase);
@@ -59,7 +45,6 @@ namespace FORMLIST
 				std::smatch match = *i;
 				l.formsToReplace.push_back(match[1]);
 				l.formsToReplaceWith.push_back(match[2]);
-				//logger::debug(FMT_STRING("Match: {} {}"), match[1].str(), match[2].str());
 			}
 		}
 		return l;
@@ -77,7 +62,6 @@ namespace FORMLIST
 		for (const auto& line : tokens) {
 
 			if (!line.objects.empty()) {
-				//logger::info("npc not empty");
 				for (const auto& objectstring : line.objects) {
 					RE::TESForm*     currentform = nullptr;
 					RE::BGSListForm* object = nullptr;
@@ -91,7 +75,6 @@ namespace FORMLIST
 						}
 						if (object->formID) {
 							patch(line, object);
-							//logger::info("NPC found.");
 							break;
 						}
 					}
@@ -99,22 +82,6 @@ namespace FORMLIST
 			}
 
 			
-
-			//for (const auto& curobj : objectArray) {
-			//	bool found = false;
-			//	
-			//	if (!line.modNames.empty()) {
-			//		bool modFound = false;
-			//		for (auto const modName : line.modNames) {
-			//			if (modName == curobj->GetFile(0)->fileName) {
-			//				modFound = true;
-			//			}
-			//		}
-			//		if (modFound == false) {
-			//			continue;
-			//		}
-			//	}
-			//}
 		}
 	}
 
@@ -149,7 +116,6 @@ namespace FORMLIST
 				std::string  string_form = line.objectsAdd[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform) {
-					//logger::debug(FMT_STRING("formlist formid: {:08X} with count({}) added form {:08X} "), curobj->formID, curobj->arrayOfForms.size(), currentform->formID);
 					curobj->forms.push_back(currentform);
 					logger::debug(FMT_STRING("formlist formid: {:08X} with count({}) added form {:08X} "), curobj->formID, curobj->forms.size(), currentform->formID);
 				}
@@ -165,10 +131,9 @@ namespace FORMLIST
 				currentform = GetFormFromIdentifier(string_form);
 				currentform2 = GetFormFromIdentifier(string_form2);
 				if (currentform && currentform2) {
-					// Loop through all elements in arrayOfForms and replace matches
 					for (auto& form : curobj->forms) {
 						if (form && form->formID == currentform->formID) {
-							form = currentform2;  // Replace the matching form
+							form = currentform2;
 						}
 					}
 				}

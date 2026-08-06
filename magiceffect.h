@@ -101,9 +101,6 @@ namespace MGEF
 		std::string				 hitShader;
 		std::string              removeEdgeGlow;
 		
-		
-		//std::string              sounds;
-
 	};
 
 	struct patch_instruction create_patch_instructions(const std::string& line);

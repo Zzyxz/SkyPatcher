@@ -3,10 +3,6 @@
 #include "parsetable.h"
 namespace AMMO
 {
-	// ==================================================================
-	// PHASE 2 -- AMMO's key table. One row per upstream extract*() call,
-	// in the same order. See parsetable.h.
-	// ==================================================================
 	namespace
 	{
 #define AMMO_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
@@ -79,7 +75,6 @@ namespace AMMO
 		for (const auto& line : tokens) {
 
 			if (!line.ammo.empty()) {
-				//logger::info("npc not empty");
 				for (const auto& ammostring : line.ammo) {
 					RE::TESForm* currentform = nullptr;
 					RE::TESAmmo* ammo = nullptr;
@@ -98,7 +93,6 @@ namespace AMMO
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, ammo) pair.
 			const formfilter::CommonFilterView view{
 				line.modNames, line.hasPlugin, line.hasPluginOr,
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
@@ -106,7 +100,6 @@ namespace AMMO
 				line.filterByEditorIdContainsExcluded, line.objectExcluded
 			};
 
-			// hasPlugin / hasPluginOr consult no form at all.
 			if (!line.hasPlugin.empty() && !formfilter::hasAllPlugins(line.hasPlugin)) {
 				continue;
 			}
@@ -115,15 +108,12 @@ namespace AMMO
 			}
 
 			for (const auto& curobj : AmmoArray) {
-				//logger::debug("Mod: {} || Weapon Type: {} || Damage: {} || Projectile: {} || addToFormList: {}", line.ammo.c_str(), line.type.c_str(), line.damage.c_str(), line.projectile.c_str(), line.armorPenetration.c_str());
 				bool found = false;
-				//logger::info("Bad");
 
 				bool keywordAnd = false;
 				bool keywordOr = false;
 				bool contains = false;
 				bool containsOr = false;
-				//logger::info(FMT_STRING("Its a form! {:08X}"), curobj->formID);
 
 				if (!curobj || curobj->IsDeleted()) {
 					continue;
@@ -138,9 +128,7 @@ namespace AMMO
 						RE::TESForm* currentform = nullptr;
 						currentform = GetFormFromIdentifier(textureString);
 						if (currentform) {
-							//logger::debug("start search");
 							if (findTextureSet(curobj, currentform->As<RE::BGSTextureSet>())) {
-								//logger::debug("Texture found");
 								found = true;
 								break;
 							}
@@ -155,35 +143,28 @@ namespace AMMO
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty()) {
-					//logger::info("keywords not empty");
 					containsOr = formfilter::matchesEditorIdOr(view, curobj);
 				} else {
 					containsOr = true;
 				}
 
 				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
 
 				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
 					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
 					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
 				}
 
 				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 				#ifndef SKYRIMVR
@@ -193,39 +174,31 @@ namespace AMMO
 					}
 				}
 				#endif
-				//logger::debug(FMT_STRING("{} {} {} {}"), line.ammo.size(), line.weightLessThan.size(), line.keywords.size(), line.keywordsOr.size());
 				if (line.ammo.empty() && line.weightLessThan == "none" && line.keywords.empty() && line.keywordsOr.empty() && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
 					
-					//logger::debug(FMT_STRING("all Empty"));
 					found = true;
 				}
 
 				if (!line.keywordsExcluded.empty() && found) {
-					//logger::info("keywords not empty");
 					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
 						found = false;
 					}
 				}
 
-						//proj
-
 				if (!line.restrictToBolts.empty() && line.restrictToBolts != "none" && toLowerCase(line.restrictToBolts) == "true" && !curobj->IsBolt()) {
 					try {
 						found = false;
-						//logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} is not a bolt."), curobj->formID, curobj->fullName);
 					} catch (const std::exception& e) {
 					}
 				}
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-					//logger::info("factions not empty");
 					if (formfilter::hasExcludedEditorId(view, curobj)) {
 						found = false;
 					}
 				}
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Ammo)) {
 						found = false;
 					}
@@ -338,7 +311,6 @@ namespace AMMO
 				curobj->data.projectile = currentprojectile;
 				logger::debug(FMT_STRING("projectile set to {:08X} {}"), currentprojectile->formID, currentprojectile->fullName);
 			} else {
-				//logger::debug("Projectile not set.");
 			}
 		}
 
@@ -355,8 +327,6 @@ namespace AMMO
 		}
 
 		if (!line.formList.empty()) {
-			//logger::info("found! patching values");
-			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.formList.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				RE::BGSListForm* listForm = nullptr;
@@ -368,7 +338,6 @@ namespace AMMO
 					listForm->AddForm(curobj);
 					logger::debug(FMT_STRING("added ammo {:08X} {} to FormList: {:08X}"), curobj->formID, curobj->fullName, listForm->formID);
 				} else {
-					//logger::info("Armor Penetration not set.");
 				}
 			}
 		}
@@ -463,8 +432,6 @@ namespace AMMO
 
 
 
-		//proj
-
 		if (!line.speed.empty() && line.speed != "none" && curobj->data.projectile) {
 			try {
 				curobj->data.projectile->data.speed = std::stof(line.speed);
@@ -515,7 +482,6 @@ namespace AMMO
 
 		if (!line.setFlags.empty()) {
 			for (const auto& setFlag : line.setFlags) {
-				// logger::debug(FMT_STRING("ammo formid: {:08X} {} flag {}"), curobj->formID, curobj->fullName, setFlag);
 				if (toLowerCase(setFlag) == "ignoresnormalweaponresistance") {
 					curobj->data.flags.set(RE::AMMO_DATA::Flag::kIgnoresNormalWeaponResistance);
 					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag enabled ignoresnormalweaponresistance"), curobj->formID, curobj->fullName);
@@ -526,8 +492,6 @@ namespace AMMO
 					curobj->data.flags.set(RE::AMMO_DATA::Flag::kNonBolt);
 					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag enabled nonbolt"), curobj->formID, curobj->fullName);
 				} else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}
@@ -544,8 +508,6 @@ namespace AMMO
 					curobj->data.flags.reset(RE::AMMO_DATA::Flag::kNonBolt);
 					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag disabled nonbolt"), curobj->formID, curobj->fullName);
 				} else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}

@@ -5,11 +5,6 @@
 
 namespace ARMOR
 {
-	// =====================================================================
-	// PHASE 1 -- ARMOR's own filter vocabulary, resolved once per rule.
-	// Same rationale, and the same parse-time prohibition, as WEAPON's copy;
-	// see formfilter.h.
-	// =====================================================================
 	namespace
 	{
 		bool lookupArmorType(const std::string& a_lower, RE::BIPED_MODEL::ArmorType& a_out)
@@ -47,21 +42,11 @@ namespace ARMOR
 			std::vector<std::uint64_t> out;
 			out.reserve(a_in.size());
 			for (const auto& s : a_in) {
-				// std::stoi's throw behaviour is preserved, only hoisted: it now
-				// throws before the form loop rather than on the first form the
-				// loop reaches. Both terminate the process; nothing catches it.
 				out.push_back(static_cast<std::uint32_t>(getBipedObjectSlot(std::stoi(s))));
 			}
 			return out;
 		}
 
-		// ==================================================================
-		// PHASE 2 -- ARMOR's rule compiler.
-		//
-		// The ~280 lines of filter chain that used to be inlined in
-		// process_patch_instructions_armor are compiled once per rule into a
-		// formfilter::MatchProgram. See formfilter.h.
-		// ==================================================================
 		formfilter::MatchProgram compileRule(const patch_instruction_armor& line)
 		{
 			using formfilter::Mode;
@@ -122,11 +107,6 @@ namespace ARMOR
 
 			first = p.preds.size();
 			if (!line.filterByArmorAddons.empty()) {
-				// The one AND list here that must keep a slot for an identifier
-				// that did not resolve: its upstream loop resets its accumulator
-				// at the TOP of every iteration, so a trailing non-resolving
-				// entry drags the whole test to false. 0 is the hole marker, and
-				// Mode::And on Op::ArmorAddon is the one arm that honours it.
 				std::vector<std::uint64_t> holes;
 				for (const RE::FormID id : formfilter::resolveFormIDsKeepingHoles(
 						 line.filterByArmorAddons, RE::FormType::Armature)) {
@@ -147,7 +127,6 @@ namespace ARMOR
 				line.filterByNameContains.empty() && line.filterByNameContainsOr.empty() &&
 				line.filterByArmorAddons.empty() && line.filterByArmorAddonsOr.empty();
 
-			// --- negative stage, in source order ---------------------------
 			if (!line.keywordsExcluded.empty()) {
 				formfilter::addNegative(p, Op::Keyword, Mode::Exclude,
 					formfilter::ptrOperands(line.keywordsExcluded, RE::FormType::Keyword));
@@ -186,22 +165,8 @@ namespace ARMOR
 			return p;
 		}
 
-		// patch() writes indexed attributes, so a rule applied earlier can
-		// change whether a later rule matches. Every write site in
-		// ARMOR::patch to the keyword array, bipedModelData.armorType,
-		// bipedModelData.bipedObjectSlots or armorAddons is guarded by one of:
-		//   keywordsToAdd / keywordsToRemove, mirrorArmor, templateArmor,
-		//   bipedSlotsToAdd (setBipedSlot), bipedSlotsToRemove
-		//   (removeBipedSlot), armorType, clearArmorAddons,
-		//   armorAddonsToAdd (armorAddonToAdd), armorAddonsToRemove
-		//   (armorAddonToRemove).
-		// From the first such rule on, the index is stale.
 		bool armorRuleInvalidatesIndex(const patch_instruction_armor& line)
 		{
-			// mirrorArmor / templateArmor / armorType / clearArmorAddons come
-			// from extractValueString, which writes the literal "none" when the
-			// key is ABSENT -- so they are never empty, and the test has to be
-			// the same `!empty() && != "none"` guard their patch() sites use.
 			const auto live = [](const std::string& v) { return !v.empty() && v != "none"; };
 			return !line.keywordsToAdd.empty() || !line.keywordsToRemove.empty() ||
 				live(line.mirrorArmor) || live(line.templateArmor) ||
@@ -239,10 +204,6 @@ namespace ARMOR
 		}
 	}
 
-	// ==================================================================
-	// PHASE 2 -- ARMOR's key table. One row per upstream extract*() call, in
-	// the same order. See parsetable.h.
-	// ==================================================================
 	namespace
 	{
 #define ARMO_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction_armor, member))
@@ -439,7 +400,6 @@ namespace ARMOR
 <<<<<<< HEAD
 		auto& ArmorArray = dataHandler->GetFormArray<RE::TESObjectARMO>();
 
-		// PHASE 3: built on first use.
 		formfilter::FormSignalIndex index;
 		bool                        indexBuilt = false;
 		bool                        indexStale = false;
@@ -460,7 +420,6 @@ namespace ARMOR
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Armor) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = (RE::TESObjectARMO*)currentform;
 						patch(line, curobj);
 					}
@@ -468,19 +427,14 @@ namespace ARMOR
 			}
 
 			if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.bipedSlot.empty() && line.bipedSlotOr.empty() && line.filterByArmorType.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByNameContains.empty() && line.filterByNameContainsOr.empty() && line.filterByArmorAddons.empty() && line.filterByArmorAddonsOr.empty()) {
-				//logger::info("continue");
 				continue;
 			}
 
-			// PHASE 1 + 2: the rule is compiled ONCE into a flat predicate
-			// program; the form loop below is a walk over it.
 			const formfilter::MatchProgram program = compileRule(line);
 			if (program.skipRule) {
 				continue;
 			}
 
-			// PHASE 3: restrict the scan to the armors carrying at least one of
-			// the signals this rule names, read off the program's opcodes.
 			const bool keyed = !indexStale && formfilter::programSignals(program, keys);
 			if (keyed) {
 				if (!indexBuilt) {
@@ -492,7 +446,6 @@ namespace ARMOR
 			}
 			const std::uint32_t scanCount =
 				static_cast<std::uint32_t>(keyed ? candidates.size() : ArmorArray.size());
-			// Diagnostics only; see formfilter::IndexStats.
 			if (keyed) {
 				++formfilter::stats().rulesKeyed;
 				formfilter::stats().candidateVisits += scanCount;
@@ -504,8 +457,6 @@ namespace ARMOR
 				formfilter::stats().scanVisits += scanCount;
 			}
 
-			// Reused across the whole form loop: the lowered fullName and the
-			// lowered EditorID now allocate once, not once per pair.
 			formfilter::MatchScratch scratch;
 			formfilter::MatchTarget  target;
 			for (std::uint32_t scanIdx = 0; scanIdx < scanCount; ++scanIdx) {
@@ -595,26 +546,16 @@ namespace ARMOR
 	}
 
 <<<<<<< HEAD
-	// =====================================================================
-	// PHASE 4 -- ARMOR's action tables. See formfilter.h "PHASE 4".
-	//
-	// Three ladders, each re-lowercasing the token once per rung. The
-	// `armorType` one did it three times to reject a token; setFlags and
-	// removeFlags were the same four rungs written twice.
-	// =====================================================================
 	namespace
 	{
 		using formfilter::ActionRow;
 
-		// The log line spells these with capitals ("LightArmor"), the config
-		// token does not; `label` carries the log spelling.
 		constexpr ActionRow kArmorTypeRows[] = {
 			{ "lightarmor", static_cast<std::uint32_t>(RE::BIPED_MODEL::ArmorType::kLightArmor), 0, "LightArmor" },
 			{ "heavyarmor", static_cast<std::uint32_t>(RE::BIPED_MODEL::ArmorType::kHeavyArmor), 0, "HeavyArmor" },
 			{ "clothing", static_cast<std::uint32_t>(RE::BIPED_MODEL::ArmorType::kClothing), 0, "Clothing" },
 		};
 
-		// RecordFlags is a raw bit mask OR'd into formFlags, not an enum set.
 		constexpr ActionRow kArmorFlagRows[] = {
 			{ "nonplayable", static_cast<std::uint32_t>(RE::TESObjectARMO::RecordFlags::kNonPlayable) },
 			{ "deleted", static_cast<std::uint32_t>(RE::TESObjectARMO::RecordFlags::kDeleted) },
@@ -693,15 +634,6 @@ namespace ARMOR
 
 		if (!line.reCalcArmorRatingv2.empty()) {
 			for (const auto& p : line.reCalcArmorRatingv2) {
-				// v2 Parameter-Layout (7 Werte, damit dein Parser unverändert bleiben kann):
-				// [0] startRating
-				// [1] maxGain
-				// [2] k
-				// [3] minGain (optional, meist 0)
-				// [4] outSoftCap (optional, 0 = aus)
-				// [5] outHardCap (optional, 0 = aus)
-				// [6] gapSpreader
-
 				if (p.size() < 7) {
 					continue;
 				}
@@ -726,17 +658,13 @@ namespace ARMOR
 					x = 0.0f;
 				}
 
-				// Sättigung: gain -> nähert sich maxGain an
-				// gain = minGain + (maxGain - minGain) * (1 - exp(-k * x))
 				float gain = minGain + (maxGain - minGain) * (1.0f - std::exp(-k * x));
 				float out = startRating + gain;
 
-				// Optionaler Output Softcap, falls du zusätzlich noch härter bremsen willst
 				if (outSoftCap > 0.0f && outHardCap > outSoftCap && out > outSoftCap) {
 					float over = out - outSoftCap;
 					float span = outHardCap - outSoftCap;
 
-					// nochmal Sättigung auf den Output
 					out = outSoftCap + span * (1.0f - std::exp(-over / 0.8f));
 				}
 
@@ -1000,8 +928,6 @@ namespace ARMOR
 				if (removeForm) {
 					auto it = curobj->armorAddons.begin();
 					while (it != curobj->armorAddons.end()) {
-						//logger::debug(FMT_STRING("spell {:08X} {}, effect {:08X} cost {} {}"), curobj->formID, curobj->fullName, (*it)->baseEffect->formID, (*it)->cost, curobj->CalculateMagickaCost(RE::PlayerCharacter::GetSingleton()));
-
 						if ((*it) && (*it)->formID == removeForm->formID) {
 							it = curobj->armorAddons.erase(it);
 							logger::debug(FMT_STRING("armor {:08X} {}, {:08X} armor addon removed, armor addons left {}"), curobj->formID, curobj->fullName, removeForm->formID, curobj->armorAddons.size());
@@ -1096,24 +1022,18 @@ namespace ARMOR
 				if (currentform && currentform->formType == RE::FormType::Armor) {
 					auto templateArmor = (RE::TESObjectARMO*)currentform;
 					curobj->boundData = templateArmor->boundData;
-					//curobj->bipedModelData = templateArmor->bipedModelData;
 					curobj->bipedModelData.bipedObjectSlots = templateArmor->bipedModelData.bipedObjectSlots;
 					curobj->armorAddons = templateArmor->armorAddons;
-					//curobj->worldModels[RE::SEXES::kFemale] = templateArmor->worldModels[RE::SEXES::kFemale];
-					//curobj->worldModels[RE::SEXES::kMale] = templateArmor->worldModels[RE::SEXES::kMale];
 					if (templateArmor->worldModels[RE::SEXES::kMale].GetModel()) {
-						//curobj->worldModels[RE::SEXES::kMale] = templateArmor->worldModels[RE::SEXES::kMale];
 						curobj->worldModels[RE::SEXES::kMale].SetModel(templateArmor->worldModels[RE::SEXES::kMale].GetModel());
 					} else {
 						curobj->worldModels[RE::SEXES::kMale].ClearDataComponent();
 					}
 					if (templateArmor->worldModels[RE::SEXES::kFemale].GetModel()) {
-						//curobj->worldModels[RE::SEXES::kFemale] = templateArmor->worldModels[RE::SEXES::kFemale];
 						curobj->worldModels[RE::SEXES::kFemale].SetModel(templateArmor->worldModels[RE::SEXES::kFemale].GetModel());
 					} else {
 						curobj->worldModels[RE::SEXES::kFemale].ClearDataComponent();
 					}
-					//curobj->worldModels[RE::SEXES::kTotal] = templateArmor->worldModels[RE::SEXES::kTotal];
 					curobj->ReplaceModel();
 					curobj->inventoryIcons[RE::SEXES::kFemale] = templateArmor->inventoryIcons[RE::SEXES::kFemale];
 					curobj->inventoryIcons[RE::SEXES::kMale] = templateArmor->inventoryIcons[RE::SEXES::kMale];
@@ -1183,34 +1103,29 @@ namespace ARMOR
 					logger::warn("armor formid: {:08X}: ignoring empty armaRaceToAdd entry", curobj->formID);
 					continue;
 				}
-				std::string  armaToAddTo = objectToAdd[0];  // Armature identifier
+				std::string  armaToAddTo = objectToAdd[0];
 				RE::TESForm* currentform = GetFormFromIdentifier(armaToAddTo);
 
 				if (currentform && currentform->formType == RE::FormType::Armature) {
-					// Find the correct armorAddon by matching formID
 					auto it = std::find_if(curobj->armorAddons.begin(), curobj->armorAddons.end(),
 						[&](const RE::TESObjectARMA* addon) {
 							return addon && addon->formID == currentform->formID;
 						});
 
 					if (it != curobj->armorAddons.end()) {
-						// Dereference the iterator to access the found armorAddon
 						RE::TESObjectARMA* armorAddon = *it;
 
-						// Loop through all races starting from index 1
 						for (size_t i = 1; i < objectToAdd.size(); ++i) {
 							std::string  raceToAddStr = objectToAdd[i];
 							RE::TESForm* raceToAdd = GetFormFromIdentifier(raceToAddStr);
 
 							if (raceToAdd && raceToAdd->As<RE::TESRace>()) {
-								// Check if the race already exists in the armorAddon->races
 								bool raceExists = std::any_of(armorAddon->additionalRaces.begin(), armorAddon->additionalRaces.end(),
 									[&](RE::TESForm* existingRace) {
 								return existingRace && existingRace->formID == raceToAdd->formID;
 									});
 
 								if (!raceExists) {
-									// Add the race if it doesn't already exist
 									armorAddon->additionalRaces.push_back(raceToAdd->As<RE::TESRace>());
 
 									logger::debug(FMT_STRING("armor formid: {:08X} {} Added race with formID: {:08X} to armorAddon with formID: {:08X}"),
@@ -1244,8 +1159,6 @@ namespace ARMOR
 				}
 			}
 
-			// Wenn mindestens ein Flag gesetzt wurde, Änderung an den Flags markieren,
-			// damit es ins Save übernommen wird.
 			if (changedFlags) {
 				curobj->AddChange(RE::TESForm::ChangeFlags::kFlags);
 			}

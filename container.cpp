@@ -7,10 +7,6 @@ namespace CONTAINER
 	std::list<line_content> hooktokens;
 	int                     iAllowLeveledListsAddedToContainers = 0;
 
-	// ==================================================================
-	// PHASE 2 -- CONTAINER's key table. One row per upstream extract*()
-	// call, in the same order. See parsetable.h.
-	// ==================================================================
 	namespace
 	{
 #define CONT_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
@@ -59,7 +55,6 @@ namespace CONTAINER
 		for (const auto& line : tokens) {
 
 			if (!line.containerObjects.empty()) {
-				//logger::info("npc not empty");
 				for (const auto& objectstring : line.containerObjects) {
 					RE::TESForm* currentform = nullptr;
 					RE::TESObjectCONT* object = nullptr;
@@ -76,9 +71,6 @@ namespace CONTAINER
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, container) pair.
-			// container.cpp has no keywords/objectExcluded/hasPlugin fields at
-			// all, so only modNames and editorId* are real.
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
@@ -87,9 +79,6 @@ namespace CONTAINER
 			};
 
 			for (const auto& curobj : ObjectArray) {
-				//logger::info("processing npc");
-
-					//logger::info(FMT_STRING("Its a form! {:08X}"), curobj->formID);
 				if (!curobj || curobj->IsDeleted()) {
 					continue;
 				}
@@ -98,17 +87,6 @@ namespace CONTAINER
 					continue;
 				}
 
-				// The `line.containerObjects.empty() &&` that used to guard this
-				// call made the whole loop dead for every rule that names
-				// explicit containers AND carries an editorId filter -- the one
-				// shape the `continue` above deliberately lets through. findObject
-				// already applies that exact test itself, in the only place it
-				// belongs: its "no filters at all, so match everything" fallback.
-				// Duplicating it here also suppressed the editorId match, which is
-				// the reason such a rule reaches this loop in the first place.
-				// Hook_InitItemImpl below calls the same findObject unguarded, and
-				// every sibling patcher (encounterzone.cpp, cobj.cpp, npc.cpp)
-				// patches on the filter result alone.
 				if (findObject(line, view, curobj)) {
 					patchContainer(line, curobj);
 				}
@@ -167,7 +145,6 @@ namespace CONTAINER
 									hooktokens.push_back(create_patch_instruction(line));
 								}
 								infile.close();
-								//process_patch_instructions(tokens);
 							}
 						}
 					}
@@ -269,7 +246,6 @@ namespace CONTAINER
 
 		if (!line.removedContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.removedContainerObjects) {
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string         addFormStr = objectToAdd;
 				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
 				if (addForm) {
@@ -285,12 +261,7 @@ namespace CONTAINER
 		if (!line.removeContainerObjectsByCount.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjectsByCount) {
 				if (objectToAdd.size() < 2) { logger::warn("container {:08X}: invalid removeContainerObjectsByCount entry, expected 2 values", curobj->formID); continue; }
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string addFormStr = objectToAdd[0];
-				// `removeContainerObjectsByCount=<form>~<count>`: the count is the
-				// verb, so there is no defensible default for a missing one, and a
-				// malformed one is skipped with a warning rather than thrown out of
-				// patchContainer() and out of the plugin load.
 				if (objectToAdd.size() < 2) {
 					logger::warn(FMT_STRING("removeContainerObjectsByCount is missing its count, skipping entry: {}"), addFormStr);
 					continue;
@@ -316,7 +287,6 @@ namespace CONTAINER
 
 		if (!line.removeContainerObjectsByKeyword.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjectsByKeyword) {
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string         addFormStr = objectToAdd;
 				RE::BGSKeyword* addForm = (RE::BGSKeyword*)GetFormFromIdentifier(addFormStr);
 				if (addForm) {
@@ -332,11 +302,9 @@ namespace CONTAINER
 		if (!line.addedContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjects) {
 				if (objectToAdd.empty()) { logger::warn("container {:08X}: empty addedContainerObjects entry", curobj->formID); continue; }
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				uint32_t            count = 1;
 				std::string         addFormStr = objectToAdd[0];
 				if (objectToAdd.size() > 1) {
-					// The bounds were guarded here; the conversion was not.
 					try {
 						count = std::stoi(objectToAdd[1]);
 					} catch (...) {
@@ -365,7 +333,6 @@ namespace CONTAINER
 				uint32_t            count = 1;
 				std::string         addFormStr = objectToAdd[0];
 				if (objectToAdd.size() > 1) {
-					// The bounds were guarded here; the conversion was not.
 					try {
 						count = std::stoi(objectToAdd[1]);
 					} catch (...) {
@@ -379,15 +346,12 @@ namespace CONTAINER
 						logger::debug(FMT_STRING("container {:08X} add container objects once skipped Leveled Item {:08X}"), curobj->formID, addForm->formID);
 						continue;
 					}
-					// Check if addForm already exists in the container
 					bool formExists = curobj->CountObjectsInContainer(addForm) != 0;
 					if (!formExists) {
-						// addForm not found in the container, add it
 						curobj->AddObjectToContainer(addForm, count, nullptr);
 						logger::debug(FMT_STRING("container {:08X} added once Form  {:08X}"), curobj->formID, addForm->formID);
 					}
 					else {
-						// addForm already exists in the container, log a message or handle it accordingly
 						logger::debug(FMT_STRING("container {:08X} Form {:08X} already exists"), curobj->formID, addForm->formID);
 					}
 				}
@@ -399,11 +363,9 @@ namespace CONTAINER
 
 		if (!line.objectMultCount.empty()) {
 			for (const auto& objectToreplace : line.objectMultCount) {
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string formToReplaceString = objectToreplace[0];
 				float multiplier = 1;
 				if (objectToreplace.size() > 1) {
-					// The bounds were guarded here; the conversion was not.
 					try {
 						multiplier = std::stof(objectToreplace[1]);
 					} catch (...) {
@@ -413,7 +375,6 @@ namespace CONTAINER
 				}
 				int          count = 0;
 				RE::TESForm* formToReplace = GetFormFromIdentifier(formToReplaceString);
-				// Replace logic for the entire vector
 				if (formToReplace && formToReplace->IsBoundObject() && curobj->CountObjectsInContainer(formToReplace->As<RE::TESBoundObject>()) > 0) {
 					count = curobj->MultObjectCountInContainer(formToReplace->As<RE::TESBoundObject>(), multiplier);
 					logger::debug(FMT_STRING("container {:08X} all matching forms of {:08X} have their count multiplied by {}"), curobj->formID, formToReplace->formID, multiplier, count);
@@ -424,9 +385,6 @@ namespace CONTAINER
 		if (!line.objectsToReplace.empty()) {
 			for (const auto& objectToAdd : line.objectsToReplace) {
 				if (objectToAdd.size() < 2) { logger::warn("container {:08X}: invalid objectsToReplace entry, expected 2 values", curobj->formID); continue; }
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-				// `replaceInContainers=<old>~<new>` needs both halves; a
-				// one-element group read past the end.
 				if (objectToAdd.size() < 2) {
 					logger::warn(FMT_STRING("replaceInContainers needs <oldForm>~<newForm>, skipping entry: {}"), objectToAdd[0]);
 					continue;
@@ -468,7 +426,6 @@ namespace CONTAINER
 		}
 
 		if (!found && !line.filterByEditorIdContainsOr.empty()) {
-			//logger::info("keywords not empty");
 			containsOr = formfilter::matchesEditorIdOr(view, curobj);
 		}
 		else {
@@ -476,7 +433,6 @@ namespace CONTAINER
 		}
 
 		if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-			//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 			found = true;
 		}
 
@@ -485,7 +441,6 @@ namespace CONTAINER
 		}
 
 		if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-			//logger::info("factions not empty");
 			if (formfilter::hasExcludedEditorId(view, curobj)) {
 				found = false;
 			}
@@ -514,9 +469,6 @@ namespace CONTAINER
 					return result;
 				}
 
-				// PROTOTYPE: one view per rule; the hook already processes a
-				// single curobj per invocation, so this is not rebuilt per
-				// (rule, container) pair here either.
 				const formfilter::CommonFilterView view{
 					line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 					formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
@@ -528,13 +480,10 @@ namespace CONTAINER
 					continue;
 				}
 
-				//logger::info("looking up npc {:08X} {} {}", curobj->formID, clib_util::editorID::get_editorID(curobj), string_form);
 				if (!line.containerObjects.empty()) {
-					//logger::debug("objects size {}", line.object.size());
 					for (const auto& npcstring : line.containerObjects) {
 						RE::TESForm* currentform = nullptr;
 						std::string  string_form = npcstring;
-						//logger::info("looking up npc {:08X} {} {}", curobj->formID, clib_util::editorID::get_editorID(curobj), string_form);
 						currentform = GetFormFromIdentifier(string_form);
 						if (currentform) {
 							if (curobj->formID == currentform->formID) {
@@ -544,8 +493,6 @@ namespace CONTAINER
 						}
 					}
 				}
-
-				//logger::debug("CONT {:08X} {} {} -> patching {}", curobj->formID, curobj->fullName, curobj->GetFormEditorID(), found);
 
 				if (found || findObject(line, view, curobj))
 					patchContainer(line, curobj);

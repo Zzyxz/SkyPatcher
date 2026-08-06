@@ -16,10 +16,6 @@ namespace SPELL
 	{"nodualcastmods", RE::SpellItem::SpellFlag::kNoDualCastMods}
 	};
 
-	// ==================================================================
-	// PHASE 2 -- SPELL's key table. One row per upstream extract*() call,
-	// in the same order. See parsetable.h.
-	// ==================================================================
 	namespace
 	{
 #define SPELL_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
@@ -77,36 +73,9 @@ namespace SPELL
 		line_content l;
 		spellKeyTable().parse(line, &l);
 
-		//extractData(line, "filterByHalfCostPerk\\s*=([^:]+)", l.filterByHalfCostPerk);
-
 		return l;
 	}
 
-	// ==================================================================
-	// PHASE 2 -- SPELL's rule compiler.
-	//
-	// PARTIAL CONVERSION, deliberately. Only the filters the shared opcode
-	// table already covers are compiled into a formfilter::MatchProgram:
-	// the keyword pair, the EditorID pair and the catch-all. SPELL's other
-	// four filter blocks -- filterByCastingPerk, filterByFlags{,Or,Excluded},
-	// filterByMgefs{,Or,Excluded}, restrictToCastingType/restrictToSchool --
-	// have no opcode, and per formfilter.h's rule they stay on their own path
-	// rather than growing an engine three already-verified types depend on.
-	//
-	// They are still hoisted OUT of the (form, rule) loop: every identifier,
-	// flag name, casting-type name and school name is resolved ONCE PER RULE
-	// into SpellRuleExtras, where before every one of them was re-parsed and
-	// re-looked-up on every single (form, rule) pair.
-	//
-	// WHY THE REORDER IS SAFE. Every one of SPELL's positive filters only
-	// ever WRITES `found = true`, and the ones upstream guards with `!found`
-	// are skipped once it is true -- so `found` is a pure OR over them and
-	// the order they are evaluated in cannot change the answer. That is what
-	// lets the program's two disjuncts run first (stable-sorted
-	// cheapest-first, so the integer keyword compares get to reject before
-	// the EditorID substring search) and the remaining blocks run only if
-	// they did not already match.
-	// ==================================================================
 	namespace
 	{
 		formfilter::MatchProgram compileSpellRule(const line_content& line)
@@ -128,15 +97,6 @@ namespace SPELL
 			}
 			formfilter::pushDisjunct(p, p.positive, first);
 
-			// DRIFT, PRESERVED. Both EditorID branches carry an
-			// `else if (curobj->formID != 0x000007)` player check copy-pasted
-			// from npc.cpp, where 0x7 really is the player. It is only ever
-			// reached when the corresponding list is EMPTY, so it can only
-			// matter when EXACTLY ONE of the two lists is present -- in which
-			// case it ANDs into that one predicate, which is precisely
-			// Predicate::skipIfPlayer. With both lists present it is dead
-			// code; with neither, the disjunct does not exist at all. Not
-			// removed, and not widened.
 			const bool playerGuard =
 				line.filterByEditorIdContains.empty() != line.filterByEditorIdContainsOr.empty();
 			first = p.preds.size();
@@ -159,19 +119,11 @@ namespace SPELL
 			return p;
 		}
 
-		// The filters with no opcode, resolved once per rule.
 		struct SpellRuleExtras
 		{
 			std::vector<RE::FormID>               castingPerks;
 			std::vector<RE::SpellItem::SpellFlag> flagsAnd, flagsOr;
-			// The excluded list keeps the lowered name alongside the flag so
-			// upstream's debug line still names the flag it rejected on.
 			std::vector<std::pair<RE::SpellItem::SpellFlag, std::string>> flagsExcluded;
-			// One slot per RAW entry, 0 marking "did not resolve to a
-			// MagicEffect". The upstream AND loop resets its accumulator at
-			// the top of every iteration and SKIPS a non-resolving entry
-			// without breaking, which makes the hole observable -- same shape
-			// as ARMOR's filterByArmorAddons.
 			std::vector<RE::FormID>                   mgefsAnd;
 			std::vector<RE::FormID>                   mgefsOr, mgefsExcluded;
 			std::vector<RE::MagicSystem::CastingType> castingTypes;
@@ -183,10 +135,6 @@ namespace SPELL
 			bool                                      playerGuard = false;
 		};
 
-		// Upstream logged one line per (pair, unrecognised name); resolving
-		// once per rule makes that one line per rule. Same call Phase 2 made
-		// for NPC's restrictToFlags. The filter's effect is unchanged: an
-		// unrecognised name was, and is, a no-op.
 		std::vector<RE::SpellItem::SpellFlag> resolveSpellFlags(const std::vector<std::string>& a_in,
 			const char* a_kind)
 		{
@@ -221,9 +169,6 @@ namespace SPELL
 			return out;
 		}
 
-		// Upstream's chains are `if (name == "x" && value == kX) hit = true;`
-		// repeated, so an unrecognised name contributes nothing and the whole
-		// chain reduces to "the form's value is one of the named ones".
 		std::vector<RE::MagicSystem::CastingType> resolveCastingTypes(const std::vector<std::string>& a_in)
 		{
 			std::vector<RE::MagicSystem::CastingType> out;
@@ -289,10 +234,6 @@ namespace SPELL
 			return x;
 		}
 
-		// The lowered EditorID for this pair, reusing the memo the program's
-		// EditorID opcodes already filled. Identical to
-		// formfilter::hasExcludedEditorId's own one-lowercase-per-call shape,
-		// minus the second lowercase when the positive stage already did it.
 		const std::string& loweredEditorId(const RE::TESForm* a_form, formfilter::MatchScratch& a_s)
 		{
 			if (!a_s.haveEditorId) {
@@ -310,7 +251,6 @@ namespace SPELL
 <<<<<<< HEAD
 		auto& objectSpellArray = dataHandler->GetFormArray<RE::SpellItem>();
 =======
-		//RE::BSTArray<RE::AlchemyItem*> objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
 		const auto& objectSpellArray = dataHandler->GetFormArray<RE::SpellItem>();
 >>>>>>> origin/new-main
 		for (const auto& line : tokens) {
@@ -323,7 +263,6 @@ namespace SPELL
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Spell) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = (RE::SpellItem*)currentform;
 						patch(line, curobj);
 					}
@@ -334,7 +273,6 @@ namespace SPELL
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, spell) pair.
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
@@ -342,19 +280,11 @@ namespace SPELL
 				line.filterByEditorIdContainsExcluded, line.objectExcluded
 			};
 
-			// PHASE 1 + 2: the rule is resolved and compiled ONCE; the form
-			// loop below is a walk over the result. `resolved` supplies the
-			// three excluded lists (keyword / EditorID / object), which stay
-			// on the Phase-1 matchers because the program's negative stage
-			// cannot be reached when one of the no-opcode blocks below is
-			// what set `found`.
 			const formfilter::MatchProgram          program = compileSpellRule(line);
 			const SpellRuleExtras                   extra = compileSpellExtras(line);
 			const formfilter::ResolvedCommonFilters resolved =
 				formfilter::resolve(view, RE::FormType::Spell);
 
-			// Reused across the whole form loop, so the lowered EditorID
-			// allocates once rather than once per pair.
 			formfilter::MatchScratch scratch;
 			formfilter::MatchTarget  target;
 
@@ -371,13 +301,8 @@ namespace SPELL
 				target.kf = curobj;
 				target.isPlayer = extra.playerGuard && curobj->formID == 0x000007;
 
-				// keyword pair + EditorID pair + the catch-all.
 				bool found = formfilter::runProgram(program, target, scratch);
 
-				// --- filters the opcode table does not cover ----------------
-				// All three only ever write `found = true`, so running them
-				// only when the program did not already match is the same OR
-				// upstream computed, with strictly fewer evaluations.
 				if (!found && !extra.castingPerks.empty() && curobj->data.castingPerk) {
 					for (const RE::FormID id : extra.castingPerks) {
 						if (curobj->data.castingPerk->formID == id) {
@@ -388,9 +313,6 @@ namespace SPELL
 				}
 
 				if (!found && extra.flagsPresent) {
-					// flagAnd's accumulator starts TRUE upstream (unlike every
-					// keyword AND in this codebase), so a list of nothing but
-					// unrecognised names passes.
 					bool flagAnd = true;
 					for (const auto f : extra.flagsAnd) {
 						if (!curobj->data.flags.all(f)) {
@@ -415,10 +337,6 @@ namespace SPELL
 				if (!found && extra.mgefsPresent) {
 					bool mgefAnd = true;
 					if (!extra.mgefsAnd.empty()) {
-						// The hole-preserving AND: on the `break` path
-						// foundInList is false, so upstream's trailing
-						// `if (foundInList) mgefAnd = true;` collapses to
-						// "mgefAnd is foundInList after the loop".
 						bool foundInList = false;
 						for (const RE::FormID id : extra.mgefsAnd) {
 							foundInList = false;
@@ -455,7 +373,6 @@ namespace SPELL
 					}
 				}
 
-				// --- negative stage, in upstream source order ---------------
 				if (!line.keywordsExcluded.empty() && found) {
 					if (formfilter::hasExcludedKeyword(resolved, curobj, nullptr)) {
 						found = false;
@@ -483,9 +400,6 @@ namespace SPELL
 				}
 
 				if (!line.mgefsExcluded.empty() && found) {
-					// NOTE the missing `effect->baseEffect` null check: this
-					// loop has it where the AND/OR loops above do. Drift,
-					// transcribed rather than tidied.
 					for (const RE::FormID id : extra.mgefsExcluded) {
 						for (const auto& effect : curobj->effects) {
 							if (effect && effect->baseEffect->formID == id) {
@@ -504,9 +418,6 @@ namespace SPELL
 
 				if (found && !line.restrictToCastingType.empty()) {
 					bool foundCastingType = false;
-					// GetCastingType() is a virtual; upstream short-circuited
-					// past it for every unrecognised name, so it is only
-					// called when some name actually resolved.
 					if (!extra.castingTypes.empty()) {
 						const auto castingType = curobj->GetCastingType();
 						for (const auto t : extra.castingTypes) {
@@ -523,8 +434,6 @@ namespace SPELL
 				if (found && !line.restrictToSchool.empty()) {
 					bool foundSchool = false;
 
-					// The null guard is upstream's; when it fails, `found` is
-					// left alone -- the filter passes vacuously.
 					if (curobj && !curobj->effects.empty() && curobj->effects.front() && curobj->effects.front()->baseEffect) {
 						const auto skill = curobj->effects.front()->baseEffect->data.associatedSkill;
 
@@ -544,7 +453,6 @@ namespace SPELL
 
 
 
-				//}
 				if (found) {
 					patch(line, curobj);
 				}
@@ -662,8 +570,6 @@ namespace SPELL
 				if (removeForm) {
 					auto it = curobj->effects.begin();
 					while (it != curobj->effects.end()) {
-						//logger::debug(FMT_STRING("spell {:08X} {}, effect {:08X} cost {} {}"), curobj->formID, curobj->fullName, (*it)->baseEffect->formID, (*it)->cost, curobj->CalculateMagickaCost(RE::PlayerCharacter::GetSingleton()));
-						
 						if ((*it) && (*it)->baseEffect && (*it)->baseEffect->formID == removeForm->formID) {
 							it = curobj->effects.erase(it);
 							logger::debug(FMT_STRING("spell {:08X} {}, {:08X} effect removed, effects left {}"), curobj->formID, curobj->fullName, removeForm->formID, curobj->effects.size());
@@ -711,7 +617,7 @@ namespace SPELL
 			objectToAdd.resize(5, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
-				if (addForm) {  // Only proceed if addForm is not null
+				if (addForm) {
 					float magnitude = 0.0f;
 					if (objectToAdd[1] != "null") {
 						magnitude = std::stof(objectToAdd[1]);
@@ -763,7 +669,7 @@ namespace SPELL
 			objectToAdd.resize(4, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
-				if (addForm) {  // Only proceed if addForm is not null
+				if (addForm) {
 					float magnitude = 0.0f;
 					if (objectToAdd[1] != "null") {
 						magnitude = std::stof(objectToAdd[1]);
@@ -946,7 +852,6 @@ namespace SPELL
 		}
 
 
-		//logger::debug("Spell Found True {}",line.chargeTime);
 		if ( !line.chargeTime.empty() && line.chargeTime != "none") {
 			curobj->data.chargeTime = std::stof(line.chargeTime);
 			logger::debug(FMT_STRING("spell formid: {:08X} {} changed chargeTime to {}"), curobj->formID, curobj->fullName, line.chargeTime);

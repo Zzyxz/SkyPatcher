@@ -5,10 +5,6 @@
 
 namespace COBJ
 {
-	// ==================================================================
-	// PHASE 2 -- COBJ's key table. One row per upstream extract*() call,
-	// in the same order. See parsetable.h.
-	// ==================================================================
 	namespace
 	{
 #define COBJ_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -59,7 +55,7 @@ namespace COBJ
 		patch_instruction l;
 		cobjKeyTable().parse(line, &l);
 		return l;
-	}  //endStruct
+	}
 
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
@@ -87,19 +83,9 @@ namespace COBJ
 			}
 
 			if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterWorkbenchKeywords.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.keywordsNew.empty() && line.keywordsNewOr.empty()) {
-				//logger::info("continue");
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, cobj) pair.
-			// NOTE: cobj's `filterByKeywords` maps to l.keywordsNew (tested
-			// against curobj->createdItem), not l.keywords -- l.keywords is
-			// `filterByIngredients` and tests container contents, a
-			// different semantic the shared helpers do not cover. The view
-			// below intentionally binds keywords/keywordsOr/keywordsExcluded
-			// to the "New" fields; l.keywords/keywordsOr/
-			// filterByRecipeIngredientsExcluded stay on their own inline
-			// container-contents code path further down.
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				line.keywordsNew, line.keywordsNewOr, line.keywordsNewExcluded,
@@ -127,22 +113,17 @@ namespace COBJ
 				RE::BGSKeywordForm* createdItemKw = curobj->createdItem ? curobj->createdItem->As<RE::BGSKeywordForm>() : nullptr;
 
 				if (!line.keywordsNew.empty() && createdItemKw) {
-					//logger::info("keywords not empty");
 					keywordNewAnd = formfilter::matchesKeywordsAnd(view, createdItemKw, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordNewAnd = true;
 				}
 				if (!line.keywordsNewOr.empty() && createdItemKw) {
-					//logger::info("keywords not empty");
 					keywordNewOr = formfilter::matchesKeywordsOr(view, createdItemKw, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordNewOr = true;
 				}
 
 				if ((!line.keywordsNew.empty() || !line.keywordsNewOr.empty()) && keywordNewAnd && keywordNewOr) {
-					//logger::debug(FMT_STRING("Found a matching armor by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -166,37 +147,27 @@ namespace COBJ
 				}
 
 				if (!line.keywords.empty()) {
-					//logger::info("filterByRecipeIngredients 1");
 					for (const auto& keywordstring : line.keywords) {
 						RE::TESForm*        currentform = nullptr;
 						RE::TESBoundObject* keyword = nullptr;
-						//logger::info("filterByRecipeIngredients 2");
 						std::string string_form = keywordstring;
 						currentform = GetFormFromIdentifier(string_form);
 						if (currentform && currentform->IsBoundObject()) {
-							//logger::info("filterByRecipeIngredients 3");
-
 							keyword = (RE::TESBoundObject*)currentform;
 							if (curobj->requiredItems.CountObjectsInContainer(keyword) > 0) {
 								keywordAnd = true;
-								//logger::info("filterByRecipeIngredients 4");
 
 							} else {
 								keywordAnd = false;
-								//	logger::info("filterByRecipeIngredients 5");
 
-								//logger::debug(FMT_STRING("KeywordAnd Weapon does not have all keywords"));
 								break;
 							}
-							//logger::debug(FMT_STRING("KeywordAnd Weapon true"));
 						}
 					}
 				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
 					for (const auto& keywordstring : line.keywordsOr) {
 						RE::TESForm*        currentform = nullptr;
 						RE::TESBoundObject* keyword = nullptr;
@@ -208,19 +179,15 @@ namespace COBJ
 
 							if (curobj->requiredItems.CountObjectsInContainer(keyword) > 0) {
 								keywordOr = true;
-								//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-								//logger::info("Keyword found.");
 								break;
 							}
 						}
 					}
 				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
 				}
 
 				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -231,14 +198,12 @@ namespace COBJ
 				}
 
 				if (!found && !line.filterByEditorIdContainsOr.empty()) {
-					//logger::info("keywords not empty");
 					containsOr = formfilter::matchesEditorIdOr(view, curobj);
 				} else {
 					containsOr = true;
 				}
 
 				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -261,28 +226,24 @@ namespace COBJ
 						}
 					}
 					if (hasRestrictedKeyword) {
-						//found = true;
 					} else {
 						found = false;
 					}
 				}
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-					//logger::info("factions not empty");
 					if (formfilter::hasExcludedEditorId(view, curobj)) {
 						found = false;
 					}
 				}
 
 				if (!line.keywordsNewExcluded.empty() && createdItemKw && found) {
-					//logger::info("keywords not empty");
 					if (formfilter::hasExcludedKeyword(view, createdItemKw, nullptr)) {
 						found = false;
 					}
 				}
 
 				if (!line.filterWorkbenchKeywordsExcluded.empty() && found) {
-					//logger::info("keywords not empty");
 					for (const auto& keywordstring : line.filterWorkbenchKeywordsExcluded) {
 						RE::TESForm*    currentform = nullptr;
 						RE::BGSKeyword* keyword = nullptr;
@@ -416,12 +377,7 @@ namespace COBJ
 		if (!line.removeContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjects) {
 				if (objectToAdd.size() < 2) { logger::warn("cobj {:08X}: invalid removeContainerObjects entry, expected 2 values", curobj->formID); continue; }
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string addFormStr = objectToAdd[0];
-				// `removeFromCobjsByCount=<form>~<count>`: the count IS the verb,
-				// so a missing one has no defensible default. A malformed one is
-				// skipped with a warning instead of being thrown out of patch()
-				// -- same convention as changeCobjsCount below.
 				if (objectToAdd.size() < 2) {
 					logger::warn(FMT_STRING("removeFromCobjsByCount is missing its count, skipping entry: {}"), addFormStr);
 					continue;
@@ -446,7 +402,6 @@ namespace COBJ
 
 		if (!line.removeInstancesContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.removeInstancesContainerObjects) {
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string         addFormStr = objectToAdd;
 				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
 
@@ -462,14 +417,7 @@ namespace COBJ
 		if (!line.addedContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjects) {
 				if (objectToAdd.size() < 2) { logger::warn("cobj {:08X}: invalid addedContainerObjects entry, expected 2 values", curobj->formID); continue; }
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string addFormStr = objectToAdd[0];
-				// `addToCobjs` is `addToContainers` for a recipe; container.cpp's
-				// copy of the same verb already defaults a missing count to 1
-				// (container.cpp `if (objectToAdd.size() > 1)`), so do that here
-				// rather than reading past the end of a one-element group. A count
-				// that is PRESENT but malformed is skipped with a warning -- we
-				// must not silently add a quantity the user did not ask for.
 				uint32_t count = 1;
 				if (objectToAdd.size() > 1) {
 					try {
@@ -493,15 +441,7 @@ namespace COBJ
 		if (!line.addedContainerObjectsAdjusted.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjectsAdjusted) {
 				if (objectToAdd.size() < 3) { logger::warn("cobj {:08X}: invalid addedContainerObjectsAdjusted entry, expected 3 values", curobj->formID); continue; }
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string addFormStr = objectToAdd[0];
-				// `addToCobjsAdjusted=<form>~<count>~<maxAmount>`. Both operands
-				// are required -- maxAmount is the divisor, so neither a missing
-				// nor a zero one has a defensible default. Skip with a warning
-				// rather than read past the end of the group (a short group was
-				// undefined behaviour) or divide by zero (which produced an
-				// infinite `proportion` and then an out-of-range float->int
-				// conversion, also undefined).
 				if (objectToAdd.size() < 3) {
 					logger::warn(FMT_STRING("addToCobjsAdjusted needs <form>~<count>~<maxAmount>, skipping entry: {}"), addFormStr);
 					continue;
@@ -536,10 +476,6 @@ namespace COBJ
 		if (!line.replaceObjectInContainer.empty()) {
 			for (const auto& objectToAdd : line.replaceObjectInContainer) {
 				if (objectToAdd.size() < 2) { logger::warn("cobj {:08X}: invalid replaceObjectInContainer entry, expected 2 values", curobj->formID); continue; }
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-				// `replaceInCobjs=<old>~<new>` needs both halves; a one-element
-				// group read past the end. No conversion here, so this is only
-				// the bounds half of the same malformed-config hazard.
 				if (objectToAdd.size() < 2) {
 					logger::warn(FMT_STRING("replaceInCobjs needs <oldForm>~<newForm>, skipping entry: {}"), objectToAdd[0]);
 					continue;
@@ -557,14 +493,12 @@ namespace COBJ
 		}
 
 		for (const auto& entry : line.changeCobjsCount) {
-			// The conversion below was already guarded; the INDEXING was not.
-			// `changeCobjsCount=null` (no `~`) is a one-element group.
 			if (entry.size() < 2) {
 				logger::warn(FMT_STRING("changeCobjsCount needs <form|null>~<count>, skipping entry: {}"), entry[0]);
 				continue;
 			}
-			std::string identifier = entry[0];  // "null" oder "Skyrim.esm|12345678"
-			std::string multStr = entry[1];     // z. B. "0.01"
+			std::string identifier = entry[0];
+			std::string multStr = entry[1];
 
 			RE::TESBoundObject* oldObject = nullptr;
 			if (!identifier.empty() && identifier != "null") {
@@ -595,13 +529,12 @@ namespace COBJ
 		}
 
 		for (const auto& entry : line.changeCobjsCountByMult) {
-			// As above: std::stof was guarded, entry[1] was not.
 			if (entry.size() < 2) {
 				logger::warn(FMT_STRING("changeCobjsCountByMult needs <form|null>~<mult>, skipping entry: {}"), entry[0]);
 				continue;
 			}
-			std::string identifier = entry[0];  // "null" oder "Skyrim.esm|12345678"
-			std::string multStr = entry[1];     // z. B. "0.01"
+			std::string identifier = entry[0];
+			std::string multStr = entry[1];
 
 			RE::TESBoundObject* oldObject = nullptr;
 			if (!identifier.empty() && identifier != "null") {
@@ -668,10 +601,6 @@ namespace COBJ
 				logger::debug(FMT_STRING("cobj formid: {:08X} changed count {}"), curobj->formID, curobj->data.numConstructed);
 <<<<<<< HEAD
 			} catch (...) {
-				// Was `catch (const std::invalid_argument&)`, which let
-				// std::out_of_range (e.g. `count=99999999999`) escape patch()
-				// and terminate the load. Widened, and given the diagnostic the
-				// silent catch never produced.
 				logger::warn(FMT_STRING("Invalid count for cobj: {}"), line.count);
 =======
 			} catch (const std::exception& e) {
@@ -685,7 +614,6 @@ namespace COBJ
 				logger::debug(FMT_STRING("cobj formid: {:08X} multiplied count {}"), curobj->formID, curobj->data.numConstructed);
 <<<<<<< HEAD
 			} catch (...) {
-				// As above: std::out_of_range escaped the narrower catch.
 				logger::warn(FMT_STRING("Invalid countMult for cobj: {}"), line.countMult);
 =======
 			} catch (const std::exception& e) {

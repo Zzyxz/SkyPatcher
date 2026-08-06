@@ -7,38 +7,6 @@ namespace RACE
 
 	std::list<patch_instruction> hooktokens;
 
-	// ======================================================================
-	// PHASE 2 -- RACE's two key tables (create_patch_instruction_hook and
-	// create_patch_instruction both build the same `patch_instruction`, but
-	// with different call lists, so each gets its own table). One row per
-	// upstream (active) extract*() call / bespoke block, in the same order.
-	// See parsetable.h.
-	//
-	// "attackDataToAdd" / "attackDataToChange" in the hook table: the
-	// upstream inline block (comma x '~' x '=' grid, trimmed with
-	// utility::trim -- SPACES only, matching parsetable.h's trimSpaces) is
-	// byte-for-byte parsetable.h's detail::applyAttackData3D, so
-	// FieldKind::AttackData3D is exact, not an approximation.
-	//
-	// "changeStats" in the main table: the upstream inline "avifs" block
-	// uses the pattern
-	//   ([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\s*=\s*([\d.]+)(?:\s*~\s*([\d.]+))?
-	// which is character-for-character detail::factionRankRegex() (the same
-	// regex NPC's factionsToAdd uses), applied to the same
-	// (names, lo, hi) triple shape, including the "none" first-name break.
-	// FieldKind::FactionRanks is therefore exact here too.
-	//
-	// NOT converted: "startingHealthMult" / "startingStaminaMult" /
-	// "startingMagickaMult". Upstream's patterns are
-	// "KEY\s*= ([^:]+)" -- note the LITERAL SPACE between '=' and the
-	// capture group, which every other Value key omits. That requires a
-	// literal space immediately after '=' in the config line itself (e.g.
-	// "startingHealthMult= 5" matches but "startingHealthMult=5" does not,
-	// leaving the field "none"), which is not the "KEY\s*=([^:]+)" shape
-	// parsetable.h's FieldKind::Value assumes (see parsetable.h's exactness
-	// argument, property 1). Left on the original extractValueString calls
-	// below, appended after the table parse.
-	// ======================================================================
 	namespace
 	{
 #define RACEHOOK_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -67,14 +35,8 @@ namespace RACE
 	{
 		patch_instruction hookl;
 		raceHookKeyTable().parse(line, &hookl);
-		//logger::debug(FMT_STRING("races: {}  keywords: {}  avifs: {} keywordsToAdd: {} spellsToAdd {}"), l.object.size(), l.keywords.size(), l.avifs.size(), l.keywordsToAdd.size(), l.spellsToAdd.size());
-		//logger::info("returning patch instructions");
 		return hookl;
 	}
-	//
-	//
-	//
-	//
 	namespace
 	{
 #define RACE_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -111,9 +73,6 @@ namespace RACE
 			{ "reachUnarmed", sp::FieldKind::Value, RACE_F(reachUnarmed) },
 			{ "baseMassMult", sp::FieldKind::Value, RACE_F(baseMassMult) },
 			{ "baseCarryweightMult", sp::FieldKind::Value, RACE_F(baseCarryweightMult) },
-			// GAP: startingHealthMult / startingStaminaMult / startingMagickaMult
-			// are NOT here -- see the comment above kRaceHookKeys. Applied via
-			// the original extractValueString calls after the table parse.
 			{ "regenHealthMult", sp::FieldKind::Value, RACE_F(regenHealthMult) },
 			{ "regenStaminaMult", sp::FieldKind::Value, RACE_F(regenStaminaMult) },
 			{ "regenMagickaMult", sp::FieldKind::Value, RACE_F(regenMagickaMult) },
@@ -123,9 +82,6 @@ namespace RACE
 			{ "weightFemale", sp::FieldKind::Value, RACE_F(weightFemale) },
 			{ "heightMale", sp::FieldKind::Value, RACE_F(heightMale) },
 			{ "heightFemale", sp::FieldKind::Value, RACE_F(heightFemale) },
-			// upstream extracts "heightFemale" twice into the same member;
-			// kept as two rows for a literal transliteration (harmless, like
-			// WEAPON's duplicate "soundLevel" rows).
 			{ "heightFemale", sp::FieldKind::Value, RACE_F(heightFemale) },
 			{ "accelerationRate", sp::FieldKind::Value, RACE_F(rateAcceleration) },
 			{ "decelerationRate", sp::FieldKind::Value, RACE_F(rateDeceleration) },
@@ -152,7 +108,6 @@ namespace RACE
 		raceKeyTable().parse(line, &l);
 
 <<<<<<< HEAD
-		// GAP: not on the table -- see the comment above kRaceHookKeys.
 		extractValueString(line, "startingHealthMult\\s*= ([^:]+)", l.startingHealthMult);
 		extractValueString(line, "startingStaminaMult\\s*= ([^:]+)", l.startingStaminaMult);
 		extractValueString(line, "startingMagickaMult\\s*= ([^:]+)", l.startingMagickaMult);
@@ -169,7 +124,6 @@ namespace RACE
 
 		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
 
-		// extract avifs
 		std::regex  avifs_regex("changeStats\\s*=([^:]+)", regex::icase);
 		std::smatch avifs_match;
 		std::regex_search(line, avifs_match, avifs_regex);
@@ -177,7 +131,6 @@ namespace RACE
 		std::vector<float>       avifs_min_values;
 		std::vector<float>       avifs_max_values;
 		if (avifs_match.empty() || avifs_match[1].str().empty()) {
-			//empty
 		} else {
 			std::string          avifs_str = avifs_match[1];
 			std::regex           avifs_list_regex("([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", regex::icase);
@@ -201,9 +154,6 @@ namespace RACE
 				}
 				std::string val1 = ((*avifs_iterator)[2]);
 				std::string val2 = ((*avifs_iterator)[3] != "") ? ((*avifs_iterator)[3]) : ((*avifs_iterator)[2]);
-				//logger::info(FMT_STRING("avif: {}"), avif);
-				//logger::info(FMT_STRING("value1: {}"), val1);
-				//logger::info(FMT_STRING("value2: {}"), val2);
 				++avifs_iterator;
 			}
 			l.avifs = avifs_before_eq;
@@ -266,35 +216,9 @@ namespace RACE
 		extractValueString(line, "voiceTypeMale\\s*=([^:]+)", l.voiceTypeMale);
 >>>>>>> origin/new-main
 		logger::debug(FMT_STRING("races: {}  keywords: {}  avifs: {} keywordsToAdd: {} spellsToAdd {}"), l.object.size(), l.keywords.size(), l.avifs.size(), l.keywordsToAdd.size(), l.spellsToAdd.size());
-		//logger::info("returning patch instructions");
 		return l;
 	}
 
-	// ==================================================================
-	// PHASE 2 -- RACE's rule compiler, for the MAIN (scan) path only.
-	//
-	// PARTIAL CONVERSION, deliberately. Compiled into a
-	// formfilter::MatchProgram: filterByRaces (an own-formID compare, i.e.
-	// Op::ObjectId), the EditorID pair, the keyword pair and the catch-all.
-	//
-	// LEFT INLINE, because the opcode table has no equivalent:
-	//   * filterByMaleModelContains / filterByFemaleModelContains --
-	//     Op::ModelContains exists but reads `npc->race->skeletonModels[kMale]`
-	//     and passes VACUOUSLY for a raceless NPC. Here the subject IS the
-	//     race, both sexes are filtered, and there is no vacuous case. Using
-	//     it would mean widening an opcode three verified types share.
-	//   * filterByVoiceTypeOr -- Op::VoiceType reads `npc->voiceType`; a race
-	//     has TWO (defaultVoiceTypes[kMale] and [kFemale]) and either may
-	//     match.
-	// Both are still hoisted: the needles are normalised once per rule
-	// (upstream re-ran normalizePath(trim(toLowerCase(needle))) on every
-	// (pair, needle)), the race's own model path is computed once per pair
-	// (upstream re-ran it on every needle), and the voice types are resolved
-	// once per rule.
-	//
-	// The HOOK path (LoadRaceDataHook::Hook_InitItemImpl, below) is NOT
-	// converted -- see the note there.
-	// ==================================================================
 	namespace
 	{
 		formfilter::MatchProgram compileRaceRule(const patch_instruction& line)
@@ -305,8 +229,6 @@ namespace RACE
 			formfilter::MatchProgram p;
 			p.modNames = &line.modNames;
 
-			// filterByRaces, re-tested inside the scan: `curobj->formID ==
-			// namedRace->formID` for any identifier that resolves to a Race.
 			if (!line.object.empty()) {
 				const std::size_t first = p.preds.size();
 				formfilter::addPred(p, Op::ObjectId, Mode::Or,
@@ -314,11 +236,6 @@ namespace RACE
 				formfilter::pushDisjunct(p, p.positive, first);
 			}
 
-			// DRIFT, PRESERVED: the inert `formID != 0x000007` player guard.
-			// It is only reached when the corresponding list is EMPTY, so it
-			// can only matter when exactly one of the two is present -- which
-			// is exactly Predicate::skipIfPlayer. A TESRace can never carry
-			// the player NPC's formID.
 			const bool playerGuard =
 				line.filterByEditorIdContains.empty() != line.filterByEditorIdContainsOr.empty();
 			std::size_t first = p.preds.size();
@@ -355,7 +272,7 @@ namespace RACE
 
 		struct RaceRuleExtras
 		{
-			std::vector<std::string> maleNeedles;    // normalizePath(trim(toLowerCase(...)))
+			std::vector<std::string> maleNeedles;
 			std::vector<std::string> femaleNeedles;
 			std::vector<RE::FormID>  voiceTypes;
 			bool                     playerGuard = false;
@@ -407,7 +324,6 @@ namespace RACE
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Race) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = (RE::TESRace*)currentform;
 						patch(line, curobj);
 					}
@@ -415,12 +331,9 @@ namespace RACE
 			}
 
 			if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterByVoiceTypeOr.empty() && line.filterByMaleModelContains.empty() && line.filterByFemaleModelContains.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
-				//logger::info("continue");
 				continue;
 			}
 
-			//logger::info("processing config line");
-			// PROTOTYPE: one view per rule, not per (rule, race) pair.
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
@@ -428,7 +341,6 @@ namespace RACE
 				line.filterByEditorIdContainsExcluded, line.objectExcluded
 			};
 
-			// PHASE 1 + 2: the rule is resolved and compiled ONCE.
 			const formfilter::MatchProgram          program = compileRaceRule(line);
 			const RaceRuleExtras                    extra = compileRaceExtras(line);
 			const formfilter::ResolvedCommonFilters resolved =
@@ -437,12 +349,9 @@ namespace RACE
 			formfilter::MatchScratch scratch;
 			formfilter::MatchTarget  target;
 
-			// The two skeleton paths are memoised per PAIR: upstream rebuilt
-			// normalizePath(trim(toLowerCase(...))) inside the needle loop.
 			std::string maleModel, femaleModel;
 
 			for (const auto& curobj : RaceArray) {
-				//logger::info("processing npc");
 				if (!curobj || curobj->IsDeleted()) {
 					continue;
 				}
@@ -455,18 +364,13 @@ namespace RACE
 				target.kf = curobj;
 				target.isPlayer = extra.playerGuard && curobj->formID == 0x000007;
 
-				// filterByRaces + EditorID pair + keyword pair + catch-all.
 				bool found = formfilter::runProgram(program, target, scratch);
 
-				// --- filters the opcode table does not cover ----------------
-				// All three only ever write `found = true`, so evaluating them
-				// after the program computes the same OR upstream did.
 				if (!found && !extra.maleNeedles.empty()) {
 					maleModel = normalizePath(trim(toLowerCase(curobj->skeletonModels[RE::SEXES::kMale].model.c_str())));
 					for (const auto& searchModel : extra.maleNeedles) {
 						if (maleModel.find(searchModel) != std::string::npos) {
 							found = true;
-							//logger::info("found model");
 							break;
 						}
 					}
@@ -477,7 +381,6 @@ namespace RACE
 					for (const auto& searchModel : extra.femaleNeedles) {
 						if (femaleModel.find(searchModel) != std::string::npos) {
 							found = true;
-							//logger::info("found model");
 							break;
 						}
 					}
@@ -492,9 +395,7 @@ namespace RACE
 					}
 				}
 
-				// --- negative stage, in upstream source order ---------------
 				if (!line.keywordsExcluded.empty() && found) {
-					//logger::info("keywords not empty");
 					if (formfilter::hasExcludedKeyword(resolved, curobj, nullptr)) {
 						found = false;
 					}
@@ -503,11 +404,6 @@ namespace RACE
 
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty")
-					// Migration fix: was previously RE::FormType::Keyword (copy-paste
-					// bug), which made this exclusion never match any race. The hook
-					// path's copy of this same filter (below) always used the correct
-					// RE::FormType::Race.
 					if (formfilter::isObjectExcluded(resolved, curobj)) {
 						found = false;
 					}
@@ -526,25 +422,19 @@ namespace RACE
 				if (found) {
 					patch(line, curobj);
 				}
-
-				//
 			}
 		}
 	}
 
-	//
 <<<<<<< HEAD
 	void hookpatch(const RACE::patch_instruction& line, RE::TESRace* curobj)
 =======
 	void hookpatch(const RACE::patch_instruction& line, RE::TESRace* curobj)
 >>>>>>> origin/new-main
 	{
-		//logger::debug("start Patch race {:08X}", curobj->formID);
 		if (!line.addedObjects.empty()) {
-			//bool               key = true;
 			RE::BGSAttackData* newAttackData = RE::BGSAttackData::Create();
 			newAttackData->IncRefCount();
-			//newAttackData->event = "attackStart";
 			newAttackData->data.damageMult = 1;
 			newAttackData->data.attackChance = 1;
 			newAttackData->data.attackSpell = nullptr;
@@ -556,9 +446,7 @@ namespace RACE
 			newAttackData->data.recoveryTime = 0;
 			newAttackData->data.staminaMult = 1;
 			newAttackData->data.flags = RE::AttackData::AttackFlag::kNone;
-			//logger::debug("attackData size before {}", curobj->attackDataMap.get()->attackDataMap.size());
 			curobj->attackDataMap->attackDataMap.insert({ newAttackData->event, RE::NiPointer(newAttackData) });
-			//logger::debug("attackData size after {}", curobj->attackDataMap.get()->attackDataMap.size());
 
 			for (auto objectArr : line.addedObjects) {
 				for (auto object : objectArr) {
@@ -639,8 +527,6 @@ namespace RACE
 								newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kOverrideData);
 								logger::debug(FMT_STRING("race formid: {:08X} attackData - flag disabled OverrideData"), curobj->formID);
 							} else {
-								// Handle the case where an invalid flag is provided
-								// You might want to add error handling or logging here
 							}
 						}
 
@@ -669,13 +555,9 @@ namespace RACE
 								newAttackData->data.flags.set(RE::AttackData::AttackFlag::kOverrideData);
 								logger::debug(FMT_STRING("race formid: {:08X} attackData - flag enabled OverrideData"), curobj->formID);
 							} else {
-								// Handle the case where an invalid flag is provided
-								// You might want to add error handling or logging here
 							}
 						}
 					} else {
-						// Handle the case where the keyword is not recognized
-						// You may want to log an error or take appropriate action
 						logger::debug("Unrecognized keyword: {}", object[0]);
 					}
 				}
@@ -684,14 +566,11 @@ namespace RACE
 
 		if (!line.removeAttackData.empty()) {
 			for (auto attackData : line.removeAttackData) {
-				//logger::debug("string {}", attackData);
 				for (auto it = curobj->attackDataMap->attackDataMap.begin(); it != curobj->attackDataMap->attackDataMap.end();) {
-					//logger::debug("for {}", it->second.get()->event.c_str());
 					if (toLowerCase(it->second.get()->event.c_str()) == toLowerCase(attackData)) {
 						logger::debug("race formid: {:08X} removing attackData with event {} ", curobj->formID, it->second.get()->event.c_str());
 						it = curobj->attackDataMap->attackDataMap.erase(it);
 					} else {
-						// Move to the next iterator
 						++it;
 					}
 				}
@@ -699,7 +578,6 @@ namespace RACE
 		}
 
 		if (!line.attackDataToChange.empty()) {
-			//logger::debug("attackDataMap size {}", curobj->attackDataMap->attackDataMap.size());
 			for (auto& attackData : curobj->attackDataMap->attackDataMap) {
 				
 				if (!attackData.second)
@@ -708,24 +586,15 @@ namespace RACE
 				auto newAttackData = attackData.second.get();
 				if (!newAttackData)
 					continue;
-				//logger::debug("processing: {}", newAttackData->event.c_str());
-				//logger::debug("attackDataToChange size {}", line.attackDataToChange.size());
 				for (auto& objectArr : line.attackDataToChange) {
-					//attackData loop from race
-
-
 					bool key = true;
-					//line from ini
-					//logger::debug("processing attackMap {} objectArr {} ", newAttackData->event.c_str(), objectArr.size());
 					for (auto& object : objectArr) {
-						//logger::debug("object-> 0 {} 1 {}", object[0], object[1]);
 						if (object.size() < 2) {
 							continue;
 						}
 
 						if (key) {
 							if (!(newAttackData->event.c_str() == object[1])) {
-								//logger::debug("race formid: {:08X} attackData change - entry not found ", curobj->formID);
 								break;
 							} else {
 								logger::debug("race formid: {:08X} attackData change - entry found {}", curobj->formID, newAttackData->event.c_str());
@@ -808,8 +677,6 @@ namespace RACE
 									newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kOverrideData);
 									logger::debug(FMT_STRING("race formid: {:08X} attackData - flag disabled OverrideData"), curobj->formID);
 								} else {
-									// Handle the case where an invalid flag is provided
-									// You might want to add error handling or logging here
 								}
 							}
 
@@ -838,37 +705,27 @@ namespace RACE
 									newAttackData->data.flags.set(RE::AttackData::AttackFlag::kOverrideData);
 									logger::debug(FMT_STRING("race formid: {:08X} attackData - flag enabled OverrideData"), curobj->formID);
 								} else {
-									// Handle the case where an invalid flag is provided
-									// You might want to add error handling or logging here
 								}
 							}
 						} else {
-							// Handle the case where the keyword is not recognized
-							// You may want to log an error or take appropriate action
 							logger::debug("Unrecognized keyword: {}", object[0]);
 						}
 					}
 				}
 			}
 
-			//
-
 			for (auto attackData : line.removeAttackData) {
-				//logger::debug("string {}", attackData);
 				for (auto it = curobj->attackDataMap->attackDataMap.begin(); it != curobj->attackDataMap->attackDataMap.end();) {
-					//logger::debug("for {}", it->second.get()->event.c_str());
 					if (toLowerCase(it->second.get()->event.c_str()) == toLowerCase(attackData)) {
 						logger::debug("race formid: {:08X} removing attackData with event {} ", curobj->formID, it->second.get()->event.c_str());
 						it = curobj->attackDataMap->attackDataMap.erase(it);
 					} else {
-						// Move to the next iterator
 						++it;
 					}
 				}
 			}
 		}
 	}
-	//
 
 <<<<<<< HEAD
 	void patch(const RACE::patch_instruction& line, RE::TESRace* curobj)
@@ -877,15 +734,11 @@ namespace RACE
 >>>>>>> origin/new-main
 	{
 		if (!line.avifs.empty()) {
-			//logger::info("found! patching values");
-			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.avifs.size(); i++) {
 				std::string  string_form = line.avifs[i];
 
-				//logger::info("avif valid!");
 				float randomValue = 0;
 				if (!line.values1.empty() && !line.values2.empty()) {
-					//std::srand(std::time(nullptr));
 					randomValue = floor((std::rand() / static_cast<float>(RAND_MAX)) * (line.values2[i] - line.values1[i] + 1) + line.values1[i]);
 				}
 
@@ -904,8 +757,6 @@ namespace RACE
 		}
 
 		if (!line.keywordsToAdd.empty()) {
-			//logger::info("found! patching values");
-			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.keywordsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.keywordsToAdd[i];
@@ -918,8 +769,6 @@ namespace RACE
 		}
 
 		if (!line.keywordsToAddIfKeywordsEIDDoNotContain.empty()) {
-			//logger::info("found! patching values");
-			//for (const auto& avifstring : line.avifs)
 			for (const auto& objectToAdd : line.keywordsToAddIfKeywordsEIDDoNotContain) {
 				if (objectToAdd.size() < 2) {
 					continue;
@@ -929,15 +778,11 @@ namespace RACE
 				RE::TESForm* currentform = nullptr;
 				bool               addKeyword = true;
 				currentform = GetFormFromIdentifier(keywordString);
-				//logger::info("keywordstring {}", keywordString);
 				if (currentform && currentform->formType == RE::FormType::Keyword) {
-					//logger::info("keyword found ");
 					for (std::uint32_t i = 0; i < curobj->numKeywords; ++i) {
 						auto keyword = curobj->keywords[i];
-						//logger::info("loop keywords {} keyword {} search for {} ", i, keyword->formEditorID, eidkeyword);
 						if (keyword && toLowerCase(keyword->formEditorID.c_str()).find(toLowerCase(eidkeyword)) != std::string::npos) {
 							addKeyword = false;
-							//logger::info("keywords has keyword with editor ID ");
 						}
 
 					}
@@ -1323,91 +1168,6 @@ namespace RACE
 			} catch (const std::exception& e) {
 			}
 		}
-
-		//if (!line.addedObjects.empty()) {
-		//	bool               key = true;
-		//	RE::BGSAttackData* newAttackData = RE::BGSAttackData::Create();
-		//	newAttackData->IncRefCount();
-		//	//newAttackData->event = "attackStart";
-		//	newAttackData->data.damageMult = 1;
-		//	newAttackData->data.attackChance = 1;
-		//	newAttackData->data.attackSpell = nullptr;
-		//	newAttackData->data.attackAngle = 0;
-		//	newAttackData->data.strikeAngle = 50;
-		//	newAttackData->data.staggerOffset = 0;
-		//	newAttackData->data.attackType = nullptr;
-		//	newAttackData->data.knockDown = 0;
-		//	newAttackData->data.recoveryTime = 0;
-		//	newAttackData->data.staminaMult = 1;
-		//	newAttackData->data.flags = RE::AttackData::AttackFlag::kNone;
-		//	//logger::debug("attackData size before {}", curobj->attackDataMap.get()->attackDataMap.size());
-		//	curobj->attackDataMap->attackDataMap.insert({ newAttackData->event, RE::NiPointer(newAttackData) });
-		//	//logger::debug("attackData size after {}", curobj->attackDataMap.get()->attackDataMap.size());
-
-		//	for (auto object : line.addedObjects) {
-		//		if (key) {
-		//			newAttackData->event = object[0];
-		//			logger::debug("added event: {}", object[0]);
-		//			key = false;
-		//			continue;
-		//		}
-
-		//		if (toLowerCase(object[0]) == "damagemult") {
-		//			newAttackData->data.damageMult = std::stof(object[1]);
-		//			logger::debug("race formid: {:08X} attackData - damagemult {}", curobj->formID, newAttackData->data.damageMult);
-		//		} else if (toLowerCase(object[0]) == "attackchance") {
-		//			newAttackData->data.attackChance = std::stof(object[1]);
-		//			logger::debug("race formid: {:08X} attackData - attackchance {}", curobj->formID, newAttackData->data.attackChance);
-		//		} else if (toLowerCase(object[0]) == "attackspell") {
-		//			if (object[1] != "null") {
-		//				auto form = GetFormFromIdentifier(object[1]);
-		//				if (form) {
-		//					newAttackData->data.attackSpell = (RE::SpellItem*)form;
-		//					logger::debug("race formid: {:08X} attackData - attackspell {:08X}", curobj->formID, newAttackData->data.attackSpell->formID);
-		//				}
-		//			} else {
-		//				newAttackData->data.attackSpell = nullptr;
-		//				logger::debug("race formid: {:08X} attackData - attackspell nullptr", curobj->formID);
-		//			}
-		//		} else if (toLowerCase(object[0]) == "attackangle") {
-		//			newAttackData->data.attackAngle = std::stof(object[1]);
-		//			logger::debug("race formid: {:08X} attackData - attackangle {}", curobj->formID, newAttackData->data.attackAngle);
-		//		} else if (toLowerCase(object[0]) == "strikeangle") {
-		//			newAttackData->data.strikeAngle = std::stof(object[1]);
-		//			logger::debug("race formid: {:08X} attackData - strikeangle {}", curobj->formID, newAttackData->data.strikeAngle);
-		//		} else if (toLowerCase(object[0]) == "staggeroffset") {
-		//			newAttackData->data.staggerOffset = std::stof(object[1]);
-		//			logger::debug("race formid: {:08X} attackData - staggeroffset {}", curobj->formID, newAttackData->data.staggerOffset);
-		//		} else if (toLowerCase(object[0]) == "attacktype") {
-		//			if (object[1] != "null") {
-		//				auto form = GetFormFromIdentifier(object[1]);
-		//				if (form) {
-		//					newAttackData->data.attackType = (RE::BGSKeyword*)form;
-		//					logger::debug("race formid: {:08X} attackData - attacktype {:08X}", curobj->formID, newAttackData->data.attackType->formID);
-		//				}
-		//			} else {
-		//				newAttackData->data.attackType = nullptr;
-		//				logger::debug("race formid: {:08X} attackData - attacktype nullptr", curobj->formID);
-		//			}
-		//		} else if (toLowerCase(object[0]) == "knockdown") {
-		//			newAttackData->data.knockDown = std::stoi(object[1]);
-		//			logger::debug("race formid: {:08X} attackData - knockdown {}", curobj->formID, newAttackData->data.knockDown);
-		//		} else if (toLowerCase(object[0]) == "recoverytime") {
-		//			newAttackData->data.recoveryTime = std::stoi(object[1]);
-		//			logger::debug("race formid: {:08X} attackData - recoverytime {}", curobj->formID, newAttackData->data.recoveryTime);
-		//		} else if (toLowerCase(object[0]) == "staminamult") {
-		//			newAttackData->data.staminaMult = std::stof(object[1]);
-		//			logger::debug("race formid: {:08X} attackData - staminamult {}", curobj->formID, newAttackData->data.staminaMult);
-		//		} else if (toLowerCase(object[0]) == "flags") {
-		//			newAttackData->data.flags = static_cast<RE::AttackData::AttackFlag>(std::stoi(object[1]));
-		//			logger::debug("race formid: {:08X} attackData - flags ", curobj->formID);
-		//		} else {
-		//			// Handle the case where the keyword is not recognized
-		//			// You may want to log an error or take appropriate action
-		//			logger::debug("Unrecognized keyword: {}", toLowerCase(object[0]));
-		//		}
-		//	}
-		//}
 	}
 
 	void* readConfig(const std::string& folder)
@@ -1520,7 +1280,6 @@ namespace RACE
 									hooktokens.push_back(create_patch_instruction_hook(line));
 								}
 								infile.close();
-								//process_patch_instructions(tokens);
 							}
 						}
 					}
@@ -1539,39 +1298,13 @@ namespace RACE
 		logger::debug("{} Done!", __FUNCTION__);
 	}
 
-	// ==================================================================
-	// PHASE 2 -- the HOOK path is DELIBERATELY NOT CONVERTED.
-	//
-	// Every filter it carries (filterByRaces as a bare formID compare, the
-	// keyword pair, the catch-all, filterByKeywordsExcluded and
-	// filterByRacesExcluded) IS covered by the opcode table, so unlike the
-	// scan path above this one could be converted in full. It is not, for two
-	// reasons:
-	//
-	//  1. A MatchProgram amortises rule compilation over a FORM LOOP. There is
-	//     no form loop here -- Hook_InitItemImpl is called once per TESRace
-	//     and matches that ONE race against every hooktoken. Compiling per
-	//     invocation would add an allocation per (race, rule) and buy nothing.
-	//
-	//  2. Compiling once and caching would be a real behaviour change.
-	//     GetFormFromIdentifier runs here DURING form loading, and upstream
-	//     re-resolves on every invocation; a cache would freeze the answers
-	//     the first hooked race saw. Whether a later-loading form resolves is
-	//     exactly what this path can observe.
-	//
-	// It is also the one filter path in this file that `match_rate` does NOT
-	// cover: the apply harness drives process_patch_instructions, not the
-	// vtable hook. An unmeasured rewrite of it is what this project avoids.
-	// ==================================================================
 	bool LoadRaceDataHook::Hook_InitItemImpl(RE::TESRace* curobj)
 	{
 
 		auto result = func(curobj);
 		if (result) {
 
-			//logger::info("processing npc {:08X} {}", curobj->formID, clib_util::editorID::get_editorID(curobj));
 			for (const auto& line : hooktokens) {
-				//logger::info("processing config line");
 				bool found = false;
 				bool keywordAnd = false;
 				bool keywordOr = false;
@@ -1580,9 +1313,6 @@ namespace RACE
 					return result;
 				}
 
-				// PROTOTYPE: one view per rule (curobj is already fixed for this
-				// hook invocation, so there is no separate per-form loop to hoist
-				// the view out of).
 				const formfilter::CommonFilterView view{
 					line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 					line.keywords, line.keywordsOr, line.keywordsExcluded,
@@ -1595,94 +1325,52 @@ namespace RACE
 				}
 
 				if (!line.object.empty()) {
-					//logger::debug("objects size {}", line.object.size());
 					for (const auto& npcstring : line.object) {
 						RE::TESForm* currentform = nullptr;
 
 						std::string string_form = npcstring;
-						//logger::info("looking up npc {:08X} {} {}", curobj->formID, clib_util::editorID::get_editorID(curobj), string_form);
 						currentform = GetFormFromIdentifier(string_form);
 						if (currentform) {
 							if (curobj->formID == currentform->formID) {
-								//logger::debug("found objects curobj {:08X} currentform {:08X} string {}", curobj->formID, currentform->formID, string_form);
 								found = true;
 								break;
 							}
-								
-								//hookpatch(line, curobj);
-							//continue;
 						}
 					}
 				}
 
-				//if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty()) {
-				//	//logger::info("continue");
-				//	continue;
-				//}
-
-				//if (!line.object.empty()) {
-				//	//logger::info("npc not empty");
-				//	for (const auto& npcstring : line.object) {
-				//		RE::TESForm* currentform = nullptr;
-				//		RE::TESRace* npc = nullptr;
-
-				//		std::string string_form = npcstring;
-				//		currentform = GetFormFromIdentifier(string_form);
-				//		if (currentform && currentform->formType == RE::FormType::Race) {
-				//			npc = (RE::TESRace*)currentform;
-
-				//			if (curobj->formID == npc->formID) {
-				//				found = true;
-				//				//logger::info("NPC found.");
-				//				break;
-				//			}
-				//		}
-				//	}
-				//}
 				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
 					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
 					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
 				}
 
 				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching race by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
-					//logger::debug("found keywords");
 				}
 
 				if (!found && line.object.empty() && line.keywords.empty() && line.keywordsOr.empty()) {
 					found = true;
-					//logger::debug("found line.object.empty() && line.keywords.empty() && line.keywordsOr.empty()");
 				}
 
 				if (!line.keywordsExcluded.empty() && found) {
-					//logger::info("keywords not empty");
 					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
 						found = false;
 					}
 				}
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
-					// Already used the correct RE::FormType::Race here (unlike the
-					// main path's copy of this filter, fixed above).
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Race)) {
 						found = false;
 					}
 				}
 
 				if (found) {
-					//logger::debug("hookpatch");
 					hookpatch(line, curobj);
 				}
 			}

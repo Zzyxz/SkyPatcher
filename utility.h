@@ -6,7 +6,6 @@ using namespace std;
 #include "PCH.h"
 #include <string>
 
-// Function to reset all flags
 template <typename Enum>
 Enum& resetAllFlags(Enum& flags)
 {

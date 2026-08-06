@@ -3,21 +3,6 @@
 #include <unordered_map>
 
 namespace {
-// Config parsing runs single-threaded at kDataLoaded, and every call site passes
-// a string literal, so the cache is bounded by the number of distinct patterns
-// in the source (~400 across all parsers).
-//
-// Thread-safety note: this cache is safe only because parsing is single-threaded.
-// If parallelism is ever introduced here, this becomes a data race and would need
-// a lock or a thread-local cache instead.
-//
-// The cache key is the pattern text alone, not (pattern, flags): every call site's
-// pattern already embeds a unique key name (e.g. "setEssential\\s*=([^:]+)"), so two
-// sites never share a pattern string with different flags in practice — verified by
-// grepping every extract*() call site across the SkyPatcher source tree, including
-// extractValueString's lone non-icase caller. If a future call site ever reuses an
-// existing pattern string with different flags, it will silently get the first
-// caller's compiled regex (and thus the first caller's flags) instead of its own.
 const std::regex& cached_regex(const std::string& pattern, std::regex::flag_type flags)
 {
 	static std::unordered_map<std::string, std::regex> cache;
@@ -28,66 +13,18 @@ const std::regex& cached_regex(const std::string& pattern, std::regex::flag_type
 	return it->second;
 }
 
-// ---------------------------------------------------------------------------
-// modName -> load-order entry memo.
-//
-// RE::TESDataHandler::LookupModByName (CommonLibSSE-NG, TESDataHandler.cpp:187) walks the
-// load order as a singly-linked BSSimpleList, calling strlen() on every node before it can
-// even try _strnicmp. GetFormFromIdentifier used to trigger that walk TWICE per identifier:
-// once directly for the IsLight() test, and once again inside LookupForm -> LookupFormID.
-// On a ~2000-plugin modlist (ESLs push the count well past the 255 regular-plugin cap) that
-// is ~4000 strlen+compare steps for every single form reference in every config line.
-//
-// Lifetime / threading assumption -- the same shape as cached_regex above, and stated here
-// for the same reason: config parsing and patching both run single-threaded at kDataLoaded,
-// and the load order is fixed for the session (the game does not add or remove a TESFile
-// after kDataLoaded). If either ever stops being true this becomes a data race and/or a
-// stale cache, and would need a lock plus an invalidation hook.
-//
-// The key is deliberately COMPLETE: it is (data handler, ASCII-folded modName) -- every
-// input LookupModByName actually consumes. cached_regex above keys on the pattern text while
-// its call sites pass differing flags, which is a latent footgun; that shape is not repeated
-// here. The handler pointer is stored next to the map and the map is cleared if it ever
-// changes, so one handler's answers can never be served for another's.
-//
-// Case folding: LookupModByName compares with _strnicmp, so an un-folded key would make
-// "Skyrim.esm" and "skyrim.esm" two separate entries (a wasted walk, not a wrong answer).
-// The fold here is ASCII-only. That is deliberately no LOOSER than _strnicmp under any
-// locale: SkyPatcher never calls setlocale, so in the "C" locale the two agree exactly, and
-// under any other locale ASCII folding can only distinguish MORE strings than _strnicmp
-// would. Over-partitioning costs at worst one redundant walk; under-partitioning would hand
-// back a different plugin's TESFile*, and this fold cannot do that.
-//
-// Negative results are cached too, and that is the point rather than an afterthought: a
-// modName that is NOT in the load order is LookupModByName's worst case -- it walks every
-// node and returns nullptr -- and a real config referencing a plugin the user has not
-// installed pays that once per identifier occurrence. Here `file == nullptr` is a cached
-// answer, not a cache miss.
 struct ModLookupEntry
 {
-	const RE::TESFile* file = nullptr;  // exactly what LookupModByName returned (may be null)
-	RE::FormID         prefix = 0;      // LookupFormID(0, modName) -- see below
-	bool               usable = false;  // false <=> LookupFormID returns 0 for every local ID
+	const RE::TESFile* file = nullptr;
+	RE::FormID         prefix = 0;
+	bool               usable = false;
 };
 
-// `prefix` is obtained by asking LookupFormID itself for the zero-local-ID case rather than
-// by re-deriving its arithmetic here, so the equivalence below does not depend on this file
-// tracking CommonLibSSE's runtime-specific branches. Writing L for the local FormID:
-//
-//   LookupFormID(L, m) = 0                                  if !file || compileIndex == 0xFF
-//                      = (L & 0xFFFFFF) | (ci << 24)        VR without a compiled-file collection
-//                      = (ci << 24) + (small << 12) + L     otherwise
-//
-// and therefore prefix = LookupFormID(0, m) = 0 / (ci << 24) / ((ci << 24) + (small << 12)).
-// Every caller below masks L to 0xFFFFFF or 0xFFF, so 0 <= L <= 0xFFFFFF, which makes
-// (L & 0xFFFFFF) == L and makes L's bits disjoint from (ci << 24) -- so `|` and `+` agree.
-// In both live branches LookupFormID(L, m) == prefix + L exactly, for regular plugins
-// (ci <= 0xFD, small == 0) and for light ones (ci == 0xFE, small == the ESL index) alike.
 const ModLookupEntry& cached_mod_lookup(RE::TESDataHandler* dataHandler, std::string_view modName)
 {
 	static RE::TESDataHandler*                            owner = nullptr;
 	static std::unordered_map<std::string, ModLookupEntry> cache;
-	static std::string                                    key;  // reused: no allocation per call
+	static std::string                                    key;
 
 	if (owner != dataHandler) {
 		cache.clear();
@@ -111,7 +48,7 @@ const ModLookupEntry& cached_mod_lookup(RE::TESDataHandler* dataHandler, std::st
 	}
 	return it->second;
 }
-}  // namespace
+}
 
 RE::BIPED_MODEL::BipedObjectSlot getBipedObjectSlot(int slot)
 {
@@ -224,49 +161,23 @@ bool IsPluginInstalled(const char* name)
 	return false;
 }
 
-//RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
-//{
-//	auto dataHandler = RE::TESDataHandler::GetSingleton();
-//	auto delimiter = identifier.find('|');
-//	if (delimiter != std::string::npos) {
-//		std::string modName = identifier.substr(0, delimiter);
-//		std::string modForm = identifier.substr(delimiter + 1);
-//		uint32_t    formID = std::stoul(modForm, nullptr, 16) & 0xFFFFFF;
-//		auto*       mod = dataHandler->LookupModByName(modName.c_str());
-//		if (mod && mod->IsLight())
-//			formID = std::stoul(modForm, nullptr, 16) & 0xFFF;
-//		return dataHandler->LookupForm(formID, modName.c_str());
-//	}
-//	return nullptr;
-//}
-
 <<<<<<< HEAD
 RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
 {
 	auto dataHandler = RE::TESDataHandler::GetSingleton();
 	auto delimiter = identifier.find('|');
 	if (delimiter != std::string::npos) {
-		// Handle the case when '|' is present in the identifier
 		const std::string_view modName{ identifier.data(), delimiter };
 		const std::string      modForm = identifier.substr(delimiter + 1);
 
-		// std::stoul used to be called twice on the identical string (once for the regular
-		// mask, once for the light mask). Same argument, same result -- and the same throw
-		// behaviour, because it was always the first call that would have thrown.
 		const uint32_t rawFormID = static_cast<uint32_t>(std::stoul(modForm, nullptr, 16));
 
-		// One load-order walk per DISTINCT modName for the whole session, instead of two per
-		// identifier occurrence. See cached_mod_lookup above for the equivalence argument.
 		const ModLookupEntry& mod = cached_mod_lookup(dataHandler, modName);
 
 		uint32_t formID = rawFormID & 0xFFFFFF;
 		if (mod.file && mod.file->IsLight())
 			formID = rawFormID & 0xFFF;
 
-		// Was: return dataHandler->LookupForm(formID, modName), i.e.
-		//      id = LookupFormID(formID, modName); return id ? LookupByID(id) : nullptr;
-		// !usable reproduces LookupFormID's `!file || compileIndex == 0xFF` early-out, which
-		// yields 0 and hence a null return.
 		if (!mod.usable)
 			return nullptr;
 		const RE::FormID fullFormID = mod.prefix + formID;
@@ -293,7 +204,6 @@ RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
 	try {
 		auto delimiter = identifier.find('|');
 		if (delimiter != std::string::npos) {
-			// Handle the case when '|' is present in the identifier
 			std::string modName = identifier.substr(0, delimiter);
 			std::string modForm = identifier.substr(delimiter + 1);
 			uint32_t    formID = std::stoul(modForm, nullptr, 16) & 0xFFFFFF;
@@ -359,7 +269,6 @@ std::string toLowerCase(std::string pString)
 	return pString;
 }
 
-// Function to replace backslashes with forward slashes
 std::string normalizePath(const std::string& path)
 {
 	std::string normalized = path;
@@ -399,11 +308,8 @@ std::vector<std::string> splitRelationNumber(const std::string& input)
 	return result;
 }
 
-//extract functions
 void extractValueString(const std::string& line, const std::string& regex_pattern_str, std::string& target_value)
 {
-	// No std::regex::icase here — preserved exactly as-is; this is the one extractor
-	// that matches case-sensitively, and changing that is a separate behavior change.
 	const std::regex& regex_pattern = cached_regex(regex_pattern_str, std::regex::ECMAScript);
 	std::smatch match;
 	std::regex_search(line, match, regex_pattern);
@@ -413,10 +319,8 @@ void extractValueString(const std::string& line, const std::string& regex_patter
 	} else {
 		std::string value = match[1].str();
 
-		// Remove leading whitespaces
 		value.erase(value.begin(), std::find_if_not(value.begin(), value.end(), ::isspace));
 
-		// Remove trailing whitespaces
 		value.erase(std::find_if_not(value.rbegin(), value.rend(), ::isspace).base(), value.end());
 		target_value = value;
 	}
@@ -430,11 +334,8 @@ void extractToArr2D(const std::string& line, const std::string& regex_pattern_st
 	std::vector<std::string> arr;
 
 	if (match.empty() || match[1].str().empty()) {
-		// Empty
 	} else {
 		std::string valueLine = match[1].str();
-		//logger::debug("valueLine {}", valueLine);
-		// Exclude the part after "=" from the first string
 		size_t      startPos = valueLine.find("=") + 1;
 		size_t      pos = 0;
 		std::string token;
@@ -481,37 +382,26 @@ void moveEffectToPosition0(RE::BSTArray<RE::Effect*>& effects, const RE::Effect*
 
 void addAltTexture(RE::TESModelTextureSwap* curobj, RE::TESModelTextureSwap::AlternateTexture newTex)
 {
-	// Calculate the new size
 	const auto newSize = curobj->numAlternateTextures + 1;
 
-		//	const auto newData = calloc<ContainerObject*>(newSize);
-	// Allocate memory for the new array
 	RE::MemoryManager mm = *RE::MemoryManager::GetSingleton();
 	auto              newTextures = RE::calloc<RE::TESModelTextureSwap::AlternateTexture>(newSize);
-			//auto newTextures = calloc<RE::TESModelTextureSwap::AlternateTexture*>(newSize, sizeof(RE::TESModelTextureSwap::AlternateTexture));
 
 	if (!newTextures) {
-		// Handle allocation failure, e.g., by throwing an exception or returning an error code
 		return;
 	}
 
-// Copy existing elements
 	if (curobj->alternateTextures && curobj->numAlternateTextures > 0) {
 		std::copy(curobj->alternateTextures, curobj->alternateTextures + curobj->numAlternateTextures, newTextures);
-		//RE::free(curobj->alternateTextures);
 	}
 
 
-	// Add the new element
-	//newTextures[curobj->numAlternateTextures] = newTex;
 	newTextures[newSize - 1] = newTex;
 
-	// Sort the array based on index3D
 	std::sort(newTextures, newTextures + newSize, [](const RE::TESModelTextureSwap::AlternateTexture& a, const RE::TESModelTextureSwap::AlternateTexture& b) {
 		return a.index3D < b.index3D;
 	});
 
-	// Update the object with the new array and size
 	curobj->alternateTextures = newTextures;
 	curobj->numAlternateTextures = newSize;
 }
@@ -519,62 +409,10 @@ void addAltTexture(RE::TESModelTextureSwap* curobj, RE::TESModelTextureSwap::Alt
 void clearAltTextures(RE::TESModelTextureSwap* curobj)
 {
 	if (curobj->numAlternateTextures > 0) {
-		// Free the memory allocated for the alternateTextures array
-		//RE::free(curobj->alternateTextures);
-
-		// Reset the pointers and size
 		curobj->alternateTextures = nullptr;
 		curobj->numAlternateTextures = 0;
 	}
 }
-
-//bool removeAltTextureByTextureSet(RE::TESModelTextureSwap* curobj, RE::BGSTextureSet* textureSetToRemove)
-//{
-//	if (!curobj->alternateTextures || curobj->numAlternateTextures == 0) {
-//		// No textures to remove
-//		return false;
-//	}
-//
-//	// Find the iterator pointing to the element to remove
-//	auto iterToRemove = std::remove_if(curobj->alternateTextures,
-//		curobj->alternateTextures + curobj->numAlternateTextures,
-//		[textureSetToRemove](const RE::TESModelTextureSwap::AlternateTexture& altTex) {
-//			return altTex.textureSet == textureSetToRemove;
-//		});
-//
-//	// Check if the element was found
-//	if (iterToRemove != curobj->alternateTextures + curobj->numAlternateTextures) {
-//		// Element found, update the size
-//		curobj->numAlternateTextures = static_cast<std::size_t>(std::distance(curobj->alternateTextures, iterToRemove));
-//
-//		if (curobj->numAlternateTextures > 0) {
-//			// Allocate memory for the new array
-//			auto newTextures = reinterpret_cast<RE::TESModelTextureSwap::AlternateTexture*>(calloc(curobj->numAlternateTextures, sizeof(RE::TESModelTextureSwap::AlternateTexture)));
-//
-//			if (!newTextures) {
-//				// Handle allocation failure, e.g., by throwing an exception or returning an error code
-//				return false;
-//			}
-//
-//			// Copy existing elements excluding the removed one
-//			std::copy(curobj->alternateTextures, iterToRemove, newTextures);
-//			std::copy(iterToRemove + 1, curobj->alternateTextures + curobj->numAlternateTextures, newTextures);
-//
-//			// Free the old array
-//			RE::free(curobj->alternateTextures);
-//
-//			// Update the object with the new array
-//			curobj->alternateTextures = newTextures;
-//			return true;
-//		} else {
-//			// No remaining textures, free the old array
-//			std::free(curobj->alternateTextures);
-//			curobj->alternateTextures = nullptr;
-//			return true;
-//		}
-//	}
-//	return false;
-//}
 
 bool removeAltTextureByTextureSet(RE::TESModelTextureSwap* curobj, RE::BGSTextureSet* textureSetToRemove)
 {
@@ -609,7 +447,6 @@ bool removeAltTextureByTextureSet(RE::TESModelTextureSwap* curobj, RE::BGSTextur
 
 	std::copy(begin, newEnd, newTextures);
 
-	// altes array absichtlich nicht free'n, ownership unklar
 	curobj->alternateTextures = newTextures;
 	curobj->numAlternateTextures = newSize;
 	return true;
@@ -618,18 +455,15 @@ bool removeAltTextureByTextureSet(RE::TESModelTextureSwap* curobj, RE::BGSTextur
 bool findTextureSet(RE::TESModelTextureSwap* curobj, RE::BGSTextureSet* textureSetToFind)
 {
 	if (!curobj->alternateTextures || curobj->numAlternateTextures == 0) {
-		// No textures to find
 		return false;
 	}
 
-	// Use std::find_if to search for the texture set
 	auto iter = std::find_if(curobj->alternateTextures,
 		curobj->alternateTextures + curobj->numAlternateTextures,
 		[textureSetToFind](const RE::TESModelTextureSwap::AlternateTexture& altTex) {
 			return altTex.textureSet == textureSetToFind;
 		});
 
-	// Return true if the texture set was found, false otherwise
 	return iter != curobj->alternateTextures + curobj->numAlternateTextures;
 }
 
@@ -641,7 +475,6 @@ RE::TESClass* copyClass(RE::TESClass* aobj)
 	RE::FormID newForm = newClass->GetFormID();
 	memcpy(newClass, form, sizeof(*form));
 	newClass->formID = newForm;
-	//logger::debug("newClass {:08X}",newClass->formID);
 	return newClass;
 }
 
@@ -650,10 +483,7 @@ RE::BGSKeyword* createKeyword()
 
 	auto       factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::BGSKeyword>();
 	auto       newKeyword = factory->Create();
-	//RE::FormID newForm = newKeyword->GetFormID();
-	//newKeyword->formID = newForm;
 	newKeyword->formEditorID = "SkyPatcher_RandomVisualStyleAssigned";
-	//logger::debug("newClass {:08X}",newClass->formID);
 	return newKeyword;
 }
 
@@ -778,8 +608,7 @@ RE::BGSKeyword* createKeyword()
 		return it->second;
 	}
 
-	// Return a default value or handle the error as necessary
-	return RE::ActorValue::kNone; // Example default value
+	return RE::ActorValue::kNone;
 }
 
 
@@ -804,39 +633,4 @@ RE::FIGHT_REACTION GetFightReaction(const std::string& value)
 	return RE::FIGHT_REACTION::kNeutral;
 }
 
-
-
-//void TESContainer::CopyObjectList(const std::vector<ContainerObject*>& a_copiedData)
-//{
-//	const auto oldData = containerObjects;
-//
-//	const auto newSize = a_copiedData.size();
-//	const auto newData = calloc<ContainerObject*>(newSize);
-//	std::ranges::copy(a_copiedData, newData);
-//
-//	numContainerObjects = static_cast<std::uint32_t>(newSize);
-//	containerObjects = newData;
-//
-//	free(oldData);
-//}
-//
-//bool AddTextures(RE::TESModelTextureSwap::AlternateTexture* a_object)
-//{
-//	bool added = false;
-//	for (std::uint32_t i = 0; i < numContainerObjects; ++i) {
-//		if (const auto entry = containerObjects[i]; entry && entry->obj == a_object) {
-//			entry->count += a_count;
-//			added = true;
-//			break;
-//		}
-//	}
-//	if (!added) {
-//		std::vector<ContainerObject*> copiedData{ containerObjects, containerObjects + numContainerObjects };
-//		const auto                    newObj = new ContainerObject(a_object, a_count, a_owner);
-//		copiedData.push_back(newObj);
-//		CopyObjectList(copiedData);
-//		return true;
-//	}
-//	return added;
-//}
 

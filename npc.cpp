@@ -3,8 +3,6 @@
 #include "parsetable.h"
 #include <algorithm>
 #include <unordered_map>
-//#include <execution>
-//#include <memory>
 
 namespace NPC
 {
@@ -13,23 +11,6 @@ namespace NPC
 	ActorData aData;
 	bool      bEnableSetLevelDirectlyByPCMult = false;
 
-	// ==================================================================
-	// PHASE 2 -- NPC's key table.
-	//
-	// This replaces 97 extract*() calls, each of which ran its own
-	// std::regex_search over the whole line. See parsetable.h for the
-	// equivalence argument; the table below is a transliteration of the old
-	// call list, one row per call, IN THE SAME ORDER, so the two can be
-	// diffed by eye.
-	//
-	// Rows that look redundant are not:
-	//   * "ObjectsToRemove" and "objectsToRemove" are two separate upstream
-	//     extractData calls writing two different members, and because both
-	//     patterns are case-INsensitive a line carrying either key fills
-	//     BOTH. Removing one would change the golden snapshots.
-	//   * "spellsToAdd" also fires on "levSpellsToAdd" for the same reason,
-	//     which is why both rows exist and why neither can be made exact.
-	// ==================================================================
 	namespace
 	{
 #define NPC_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -151,64 +132,15 @@ namespace NPC
 	}
 
 
-	// ======================================================================
-	// PHASE 3 -- the rule index for NPC. See formfilter.h for the general
-	// argument; what follows is the NPC-specific reading of findObject.
-	//
-	// findObject sets `found = true` at exactly these places:
-	//   * the keyword pair            (keywords AND / keywordsOr OR)
-	//   * filterByRaces               (OR over view.races)
-	//   * filterByDefaultOutfits      (OR over view.outfits)
-	//   * filterByClass               (OR over view.classes)
-	//   * filterByCombatStyle         (OR over view.combatStyles)
-	//   * filterByPCLevelMult / filterByAutoCalc / filterByEssential /
-	//     filterByProtected -- each of which sets `found` with NO `!found`
-	//     guard, so it can turn a non-match into a match on its own
-	//   * the faction pair            (filterFactions AND / filterFactionsOr OR)
-	//   * the EditorID-substring pair
-	//   * the "no identifying filter at all" catch-all at npc.cpp:2670
-	// Everything after that point (isFemale, every keywordsExcluded /
-	// factionsExcluded / classExclude / objectExcluded / skillRestrict /
-	// restrictTo* block) is guarded by `found` or only ever writes
-	// `found = false`, so none of it can add a match.
-	// ======================================================================
 	namespace
 	{
-		// A scalar filter whose block actually runs: upstream guards each of
-		// them with `!empty() && != "none"`.
 		bool liveScalarFilter(const std::string& a_value)
 		{
 			return !a_value.empty() && a_value != "none";
 		}
 
-		// PHASE 2: npcRuleSignals used to live here -- a second, hand-written
-		// reading of findObject's positive disjuncts, kept in sync with
-		// findObject by hand. It is now formfilter::programSignals, which reads
-		// the SAME MatchProgram findObject executes, so the two cannot drift.
-
-		// patch() writes the very attributes the index is keyed on, and a rule
-		// applied earlier in the list can therefore change whether a LATER rule
-		// matches a form. Every write site in NPC::patch to an indexed
-		// attribute -- race, npcClass, defaultOutfit, the keyword array, the
-		// faction array -- is guarded by one of these setters:
-		//
-		//   keywordsToAdd / keywordsToRemove   -> AddKeyword / RemoveKeyword
-		//   factionsToAdd / factionsToRemove   -> factions.push_back / erase
-		//   outfitDefault                      -> curobj->defaultOutfit =
-		//   race                               -> curobj->race =
-		//   Class / clearClassFromAttributes   -> curobj->npcClass =
-		//
-		// (combatStyle is never written by patch; copyVisualStyle touches only
-		// head/tint/body data.) Once such a rule has been seen the index is
-		// stale, so every rule from that point on scans in full. The rule's own
-		// `object` loop patches before its scan, so the mark is applied BEFORE
-		// the rule is classified, not after.
 		bool npcRuleInvalidatesIndex(const patch_instruction& line)
 		{
-			// The scalars come from extractValueString, which writes the literal
-			// "none" when the key is ABSENT -- so `!empty()` is true for every
-			// rule ever parsed, and the test has to be the same
-			// `!empty() && != "none"` guard the patch() sites use.
 			return !line.keywordsToAdd.empty() || !line.keywordsToRemove.empty() ||
 				!line.factionsToAdd.empty() || !line.factionsToRemove.empty() ||
 				liveScalarFilter(line.outfitDefault) || liveScalarFilter(line.race) ||
@@ -225,8 +157,6 @@ namespace NPC
 				}
 				formfilter::addKeywordSignals(a_index, static_cast<const RE::BGSKeywordForm*>(npc), i);
 				if (npc->race) {
-					// The race is both a filterByRaces target and, for the
-					// keyword test, a second keyword holder.
 					a_index.add(formfilter::sigForm(npc->race->formID), i);
 					formfilter::addKeywordSignals(a_index, static_cast<const RE::BGSKeywordForm*>(npc->race), i);
 				}
@@ -248,7 +178,6 @@ namespace NPC
 		}
 	}
 
-	//void process_patch_instructions(const patch_instruction& line)
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
 		const auto start_time{ std::chrono::system_clock::now() };
@@ -262,9 +191,6 @@ namespace NPC
 
 		logger::debug("NPC count: {}", NPCArray.size());
 
-		// Built on first use: a config made up entirely of rules that name an
-		// explicit NPC and nothing else never reaches the form loop at all, and
-		// must not pay for an index.
 		formfilter::FormSignalIndex index;
 		bool                        indexBuilt = false;
 		bool                        indexStale = false;
@@ -272,8 +198,6 @@ namespace NPC
 		std::vector<std::uint32_t>  candidates;
 
 		for (const auto& line : tokens) {
-			// Applied before this rule is classified: its own `object` loop
-			// patches before its scan runs.
 			indexStale = indexStale || npcRuleInvalidatesIndex(line);
 
 			if (!line.object.empty()) {
@@ -287,9 +211,7 @@ namespace NPC
 
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
-					//logger::debug("NPC Patcher - before if {:08X}", currentform->formID);
 					if (currentform && currentform->formType == RE::FormType::NPC) {
-						//logger::debug("NPC Patcher");
 						curobj = (RE::TESNPC*)currentform;
 						patch(line, curobj);
 					}
@@ -303,16 +225,8 @@ namespace NPC
 			}
 
 <<<<<<< HEAD
-			// PHASE 1 + 2: every filter value this rule carries is resolved
-			// ONCE, here, into the flat predicate program findObject executes.
 			const formfilter::MatchProgram program = makeFilterView(line);
 
-			// PHASE 3: restrict the scan to the NPCs that carry at least one of
-			// the signals this rule's filters name. `keyed == false` means the
-			// rule has a filter with no finite key set and still scans
-			// everything; an empty candidate list means the rule's filters all
-			// resolved to nothing and it can never match. The key set is now
-			// read straight off the program's opcodes.
 			const bool keyed = !indexStale && formfilter::programSignals(program, keys);
 			if (keyed) {
 				if (!indexBuilt) {
@@ -323,7 +237,6 @@ namespace NPC
 				index.gather(keys, candidates);
 			}
 			const std::uint32_t scanCount = static_cast<std::uint32_t>(keyed ? candidates.size() : NPCArray.size());
-			// Diagnostics only; see formfilter::IndexStats.
 			if (keyed) {
 				++formfilter::stats().rulesKeyed;
 				formfilter::stats().candidateVisits += scanCount;
@@ -371,24 +284,6 @@ namespace NPC
 
 
 <<<<<<< HEAD
-	// =====================================================================
-	// PHASE 4 -- NPC's action tables. See formfilter.h "PHASE 4".
-	//
-	// NPC carried the two worst shapes in patch():
-	//
-	//   * five std::unordered_map<std::string, enum> literals built at static
-	//     init and hashed per patched NPC (aggression, confidence, assistance,
-	//     morality, mood), plus TWO 22-row and TWO 14-row flag maps written
-	//     out twice each -- and `removeTemplateFlags`' std::map is NOT static,
-	//     so upstream rebuilds a fourteen-node red-black tree for EVERY
-	//     patched NPC;
-	//   * an 18-rung `changeSkills` ladder and a 12-rung `changeStats` ladder,
-	//     both over a token that is fixed at load.
-	//
-	// Every one of them is a fixed map from a config token to a small
-	// integer, i.e. a table. The rows below are exact transcriptions, in rung
-	// order, including the log wording each rung used.
-	// =====================================================================
 	namespace
 	{
 		using formfilter::ActionRow;
@@ -433,14 +328,12 @@ namespace NPC
 			{ "disgusted", static_cast<std::uint32_t>(RE::ACTOR_MOOD::kDisgusted) },
 		};
 
-		// `value` is the index into aiData.aggroRadius; `label` the log wording.
 		constexpr ActionRow kAggroRadiusRows[] = {
 			{ "attack", static_cast<std::uint32_t>(RE::ACTOR_AGGRO_RADIUS::kAttack), 0, "attack" },
 			{ "warn", static_cast<std::uint32_t>(RE::ACTOR_AGGRO_RADIUS::kWarn), 0, "warn" },
 			{ "attackandwarn", static_cast<std::uint32_t>(RE::ACTOR_AGGRO_RADIUS::kWarnAndAttack), 0, "attack and warn" },
 		};
 
-		// `value` is the index into playerSkills.values.
 		constexpr ActionRow kSkillRows[] = {
 			{ "onehanded", RE::TESNPC::Skills::kOneHanded },
 			{ "twohanded", RE::TESNPC::Skills::kTwoHanded },
@@ -462,9 +355,6 @@ namespace NPC
 			{ "enchanting", RE::TESNPC::Skills::kEnchanting },
 		};
 
-		// setTemplateFlags and removeTemplateFlags were the same fourteen
-		// entries written twice -- once as a static unordered_map, once as a
-		// per-call std::map.
 		constexpr ActionRow kTemplateFlagRows[] = {
 			{ "traits", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kTraits) },
 			{ "stats", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kStats) },
@@ -482,10 +372,6 @@ namespace NPC
 			{ "copiedtemplate", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kCopiedTemplate) },
 		};
 
-		// setFlags and removeFlags, likewise: the same twenty-two entries
-		// written twice. "calcfalltemplates" is upstream's spelling of
-		// kCalcForAllTemplates and is kept -- a config that says
-		// "calcforalltemplates" does not match upstream either.
 		constexpr ActionRow kBaseFlagRows[] = {
 			{ "female", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kFemale) },
 			{ "essential", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kEssential) },
@@ -510,10 +396,6 @@ namespace NPC
 			{ "isghost", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kIsGhost) },
 			{ "invulnerable", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kInvulnerable) },
 		};
-		// `changeStats`. The eleven rungs of the avif ladder are eleven
-		// (SLOT, MODE) pairs: which of the three attributes is written, and
-		// how the value is derived. There is no `byclasshealth` rung
-		// upstream, so the table has no such row either.
 		enum class StatSlot : std::uint32_t
 		{
 			Health,
@@ -522,10 +404,10 @@ namespace NPC
 		};
 		enum class StatMode : std::uint8_t
 		{
-			Set,      // the level-interpolated / random `finalValue`
-			Mult,     // the CURRENT offset times values1[i]
-			Calc,     // calculateAttributePoints, plus the per-slot bonus
-			ByClass   // finalValue if the class weights the slot, else 0
+			Set,
+			Mult,
+			Calc,
+			ByClass
 		};
 		constexpr ActionRow kStatRows[] = {
 			{ "health", static_cast<std::uint32_t>(StatSlot::Health), static_cast<std::uint8_t>(StatMode::Set) },
@@ -540,10 +422,6 @@ namespace NPC
 			{ "byclassstamina", static_cast<std::uint32_t>(StatSlot::Stamina), static_cast<std::uint8_t>(StatMode::ByClass) },
 			{ "byclassmagicka", static_cast<std::uint32_t>(StatSlot::Magicka), static_cast<std::uint8_t>(StatMode::ByClass) },
 		};
-		// `attackDataToAdd` / `attackDataToChange` each carry a `setflags`
-		// and a `removeflags` ladder over the same seven AttackData flags --
-		// the same seven rungs written out FOUR times. The log lines spell
-		// the flag in CamelCase, which is what `label` carries.
 		constexpr ActionRow kAttackFlagRows[] = {
 			{ "ignoreweapon", static_cast<std::uint32_t>(RE::AttackData::AttackFlag::kIgnoreWeapon), 0, "IgnoreWeapon" },
 			{ "bashattack", static_cast<std::uint32_t>(RE::AttackData::AttackFlag::kBashAttack), 0, "BashAttack" },
@@ -773,12 +651,10 @@ namespace NPC
 
 <<<<<<< HEAD
 		if (!line.setRandomVisualStyle.empty()) {
-			//logger::debug(" line.setRandomVisualStyle {}", line.setRandomVisualStyle);
 			RE::TESForm* currentform = nullptr;
 			currentform = GetFormFromIdentifier(line.setRandomVisualStyle[0][0]);
 =======
 		if (!line.setRandomVisualStyle.empty()) {
-			//logger::debug(" line.setRandomVisualStyle {}", line.setRandomVisualStyle);
 			if (line.setRandomVisualStyle.front().empty()) {
 				logger::warn("NPC {:08X}: ignoring empty random visual style entry", curobj->formID);
 			} else {
@@ -791,7 +667,6 @@ namespace NPC
 
 				if (line.setRandomVisualStyle[0].size() > 1) {
 					logger::debug(FMT_STRING("NPC {:08X} {} will get random visual style from {:08X} with a chance of {}%"), curobj->formID, curobj->fullName, currentform->formID, line.setRandomVisualStyle[0][1]);
-					//auto tempkywd = (RE::BGSKeyword*)GetFormFromIdentifier(line.setRandomVisualStyle[0][1]);
 					aData.npcData[curobj->formID].styleChance = std::stoi(line.setRandomVisualStyle[0][1]);
 				}
 				else {
@@ -809,7 +684,6 @@ namespace NPC
 		}
 
 		if (!line.addRandomVisualStyle.empty()) {
-			//logger::debug(" line.addRandomVisualStyle {}", line.addRandomVisualStyle);
 			RE::TESForm* currentform = nullptr;
 			currentform = GetFormFromIdentifier(line.addRandomVisualStyle[0][0]);
 =======
@@ -822,7 +696,6 @@ namespace NPC
 		}
 
 		if (!line.addRandomVisualStyle.empty()) {
-			//logger::debug(" line.addRandomVisualStyle {}", line.addRandomVisualStyle);
 			if (line.addRandomVisualStyle.front().empty()) {
 				logger::warn("NPC {:08X}: ignoring empty added random visual style entry", curobj->formID);
 			} else {
@@ -841,13 +714,9 @@ namespace NPC
 				else {
 					for (auto tForm : ((RE::BGSListForm*)currentform)->forms) {
 						if (tForm) {
-							// Check if the form already exists before adding
 							auto& targetForms = aData.npcData[curobj->formID].npcVisualStyleList->forms;
 							if (std::find(targetForms.begin(), targetForms.end(), tForm) == targetForms.end()) {
 								added++;
-								//logger::debug("add to formlist {:08X} count {} size {} from list {:08X} - Form {:08X}",
-								//	aData.npcData[curobj->formID].npcVisualStyleList->formID, added,
-								//	aData.npcData[curobj->formID].npcVisualStyleList->forms.size(), currentform->formID, tForm->formID);
 								targetForms.push_back(tForm);
 							}
 						}
@@ -873,8 +742,6 @@ namespace NPC
 		}
 
 		if (!line.keywordsToAdd.empty()) {
-			//logger::info("found! patching values");
-			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.keywordsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.keywordsToAdd[i]);
@@ -895,23 +762,6 @@ namespace NPC
 				}
 			}
 		}
-
-		//if (!line.factionsToRemove.empty()) {
-		//	for (size_t i = 0; i < line.factionsToRemove.size(); i++) {
-		//		RE::TESForm* currentform = nullptr;
-		//		std::string  string_form = line.factionsToRemove[i];
-		//		currentform = GetFormFromIdentifier(string_form);
-		//		if (currentform && currentform->formType == RE::FormType::Faction) {
-		//			for (auto& faction : curobj->factions) {
-		//				if (faction.faction && faction.faction->formID && faction.faction->formID == currentform->formID) {
-		//					curobj->factions.erase(&faction);
-		//					logger::debug(FMT_STRING("npc formid: {:08X} removed faction {:08X} {} "), curobj->formID, ((RE::TESFaction*)currentform)->formID, ((RE::TESFaction*)currentform)->fullName);
-		//					break;
-		//				}
-		//			}
-		//		}
-		//	}
-		//}
 
 		if (!line.factionsToRemove.empty()) {
 			for (size_t i = 0; i < line.factionsToRemove.size(); i++) {
@@ -934,23 +784,16 @@ namespace NPC
 			}
 		}
 
-		//curobj->InitItem
-
 		if (!line.factionsToAdd.empty()) {
-			//logger::debug("factionsToAdd 1");
 			for (size_t i = 0; i < line.factionsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.factionsToAdd[i]);
-				//logger::debug("factionsToAdd 2");
 				if (currentform && currentform->formType == RE::FormType::Faction) {
-					//logger::debug("factionsToAdd 3");
 					float finalValue = 0;
 					bool factionFound = false;
 					for (auto& faction : curobj->factions) {
-						//logger::debug("factionsToAdd 4");
 						if (faction.faction && faction.faction->formID && faction.faction->formID == currentform->formID) {
 							factionFound = true;
-							//logger::debug("factionsToAdd 5");
 							break;
 						}
 					}
@@ -966,41 +809,32 @@ namespace NPC
 		}
 
 		if (!line.avifs.empty()) {
-			//logger::info("found! patching values");
-			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.avifs.size(); i++) {
 				std::string  string_form = line.avifs[i];
 				const std::string lowerAvif = toLowerCase(string_form);
 
-				//logger::info("avif valid!");
 				float finalValue = 0;
 
 				if (line.level_min == "none") {
 					if (!line.values1.empty() && !line.values2.empty()) {
 						unsigned seed = static_cast<unsigned>(std::time(nullptr)) + static_cast<unsigned>(std::clock());
 						std::srand(seed);
-						//int random_value = std::rand() % 501 + 500;
 						finalValue = floor((std::rand() / static_cast<float>(RAND_MAX)) * (line.values2[i] - line.values1[i] + 1) + line.values1[i]);
 					}
 
 				}
 				else if (line.level_min != "none" && line.level_max != "none" && line.level_min != line.level_max && line.values1[i] != line.values2[i]) {
-					int level_min = std::stoi(line.level_min);  // minimum level
-					int level_max = std::stoi(line.level_max);  // maximum level
+					int level_min = std::stoi(line.level_min);
+					int level_max = std::stoi(line.level_max);
 					if (level_min < level_max) {
-						int avif_min = line.values1[i];  // minimum health
-						int avif_max = line.values2[i];  // maximum health
-						//logger::info(FMT_STRING("lvl min {} level max {} avif min {} avif max {} "), level_min, level_max, line.values1[i], line.values2[i]);
-						// Calculate proportional increase
+						int avif_min = line.values1[i];
+						int avif_max = line.values2[i];
 						float health_increase = avif_max - avif_min;
 						float level_increase = level_max - level_min;
 						float proportional_increase = health_increase / level_increase;
 
-						// Calculate health at level 50
 						int target_level = curobj->actorData.level;
 						finalValue = avif_min;
-
-						//logger::info(FMT_STRING("lvl min {} level max {} avif min {} avif max {} "), level_min, level_max, line.values1[i], line.values2[i]);
 
 						if (target_level >= level_min && target_level <= level_max) {
 							float level_difference = target_level - level_min;
@@ -1017,13 +851,11 @@ namespace NPC
 						finalValue = line.values1[i];
 						logger::info(FMT_STRING("Error: Level Min > Level Max  using default value for av {}"), finalValue);
 					}
-					//logger::info(FMT_STRING("lvl min {} level max {} avif min {} avif max {} target_level {} healthinc {} levelinc {} propIncrease {} finalValue {}"), level_min, level_max, line.values1[i], line.values2[i], target_level,health_increase, level_increase, proportional_increase, finalValue);
 
 				}
 				else {
 					finalValue = line.values1[i];
 				}
-				//logger::info(FMT_STRING("Stringform {}"), string_form);
 				StatWeights sw;
 				if (curobj->npcClass) {
 					sw.healthWeight = curobj->npcClass->data.attributeWeights.health;
@@ -1038,15 +870,6 @@ namespace NPC
 
 				auto it2 = aData.npcData.find(curobj->formID);
 
-				// ------------------------------------------------------------
-				// The eleven-rung avif ladder, as a table lookup plus one
-				// switch per STEP. Every attribute member patch() can write
-				// is still named exactly once here, and each mode's value
-				// arithmetic keeps upstream's intermediate TYPES: `Set`
-				// assigns a float straight to the int16 offset, the other
-				// three go through an int first, and float->int and
-				// float->int16 do not always agree.
-				// ------------------------------------------------------------
 				if (const auto* statRow = formfilter::findActionLowered(kStatRows, lowerAvif)) {
 					const auto slot = static_cast<StatSlot>(statRow->value);
 					const auto mode = static_cast<StatMode>(statRow->mode);
@@ -1068,7 +891,6 @@ namespace NPC
 						slot == StatSlot::Stamina ? "stamina" :
 													"magicka";
 
-					// The one place the three attributes are written.
 					const auto assignOffset = [&](auto a_value) {
 						switch (slot) {
 						case StatSlot::Health:
@@ -1092,8 +914,6 @@ namespace NPC
 							return curobj->actorData.magickaOffset;
 						}
 					};
-					// SetBaseActorValue + playerSkills + the aData cache, which
-					// every rung ran in this order with this value.
 					const auto commit = [&]() {
 						switch (slot) {
 						case StatSlot::Health:
@@ -1137,8 +957,6 @@ namespace NPC
 						break;
 
 					case StatMode::Mult:
-						// The log line reports the OLD offset, and runs before
-						// the write, exactly as the three *mult rungs did.
 						logger::debug(FMT_STRING("npc formid: {:08X} {} multiplied {} to {} * {} = {}"), curobj->formID, curobj->fullName, slotName, oldOffset, line.values1[i], oldOffset * line.values1[i]);
 						assignOffset(oldOffset * line.values1[i]);
 						commit();
@@ -1163,9 +981,6 @@ namespace NPC
 					}
 
 					default: {
-						// ByClass. tempResult's member is an int, so the
-						// float->int narrowing happens BEFORE the int->int16
-						// one; that is upstream's order and it is kept.
 						int points = 0;
 
 						if (weight > 0) {
@@ -1195,8 +1010,6 @@ namespace NPC
 		}
 
 		if (!line.perksToAdd.empty()) {
-			//logger::info("found! patching values");
-			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.perksToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.perksToAdd[i]);
@@ -1220,7 +1033,6 @@ namespace NPC
 			currentform = GetFormFromIdentifier(line.outfitDefault);
 			if (currentform && currentform->formType == RE::FormType::Outfit) {
 				curobj->defaultOutfit = (RE::BGSOutfit*)currentform;
-				//curobj->defOutfit->outfitItems.add
 				logger::debug(FMT_STRING("npc formid: {:08X} changed outfit default to {:08X} "), curobj->formID, ((RE::BGSOutfit*)currentform)->formID);
 			}
 		}
@@ -1302,14 +1114,6 @@ namespace NPC
 			}
 		}
 
-		//if (found && !line.xpValueOffset.empty() && line.xpValueOffset != "none") {
-		//	try {
-		//		curobj->actorData. = std::stof(line.xpValueOffset);
-		//		logger::debug(FMT_STRING("npc formid: {:08X} {} changed xpValueOffset to {}"), curobj->formID, curobj->fullName, curobj->actorData.xpValueOffset);
-		//	} catch (const std::exception& e) {
-		//	}
-		//}
-
 		if (!line.weight.empty() && line.weight != "none") {
 			try {
 				curobj->weight = std::stof(line.weight);
@@ -1358,8 +1162,6 @@ namespace NPC
 		}
 
 		if (!line.spellsToAdd.empty()) {
-			//logger::info(FMT_STRING("Processing Spell list size {}"), line.spellsToAdd.size());
-			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.spellsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.spellsToAdd[i]);
@@ -1378,8 +1180,6 @@ namespace NPC
 		}
 
 		if (!line.spellsToRemove.empty()) {
-			//logger::info(FMT_STRING("Processing Spell list size {}"), line.spellsToAdd.size());
-			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.spellsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.spellsToRemove[i]);
@@ -1447,14 +1247,11 @@ namespace NPC
 		}
 
 		if (!line.clearInventory.empty() && line.clearInventory != "none") {
-			//logger::info("found! patching values");
 			curobj->RemoveAllObjectFromContainer();
 			logger::debug(FMT_STRING("npc formid: {:08X} removed all objects "), curobj->formID);
 		}
 
 		if (!line.objectsToRemove.empty()) {
-			//logger::info("found! patching values");
-			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.objectsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.objectsToRemove[i]);
@@ -1469,8 +1266,6 @@ namespace NPC
 		}
 
 		if (!line.objectsToRemoveNew.empty()) {
-			//logger::info("found! patching values");
-			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.objectsToRemoveNew.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.objectsToRemoveNew[i]);
@@ -1489,7 +1284,6 @@ namespace NPC
 		if (!line.removeContainerObjectsByCount.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjectsByCount) {
 				if (objectToAdd.size() < 2) { logger::warn("npc {:08X}: invalid removeContainerObjectsByCount entry, expected 2 values", curobj->formID); continue; }
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				uint32_t            count = std::stoi(objectToAdd[1]);
 				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(objectToAdd[0]);
 
@@ -1505,7 +1299,6 @@ namespace NPC
 
 		if (!line.removeContainerObjectsByKeyword.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjectsByKeyword) {
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				RE::BGSKeyword* addForm = (RE::BGSKeyword*)GetFormFromIdentifier(objectToAdd);
 				if (addForm) {
 					curobj->RemoveObjectFromContainerByKeyword(addForm);
@@ -1518,8 +1311,6 @@ namespace NPC
 		}
 
 		if (!line.objectsToAdd.empty()) {
-			//logger::info("found! patching values");
-			//for (const auto& avifstring : line.avifs)
 			for (size_t i = 0; i < line.objectsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.objectsToAdd[i]);
@@ -1544,15 +1335,12 @@ namespace NPC
 				uint32_t            count = std::stoi(objectToAdd[1]);
 				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(objectToAdd[0]);
 				if (addForm) {
-					// Check if addForm already exists in the container
 					bool formExists = curobj->CountObjectsInContainer(addForm) != 0;
 					if (!formExists) {
-						// addForm not found in the container, add it
 						curobj->AddObjectToContainer(addForm, count, nullptr);
 						logger::debug(FMT_STRING("npc {:08X} added once Form  {:08X}"), curobj->formID, addForm->formID);
 					}
 					else {
-						// addForm already exists in the container, log a message or handle it accordingly
 						logger::debug(FMT_STRING("npc {:08X} Form {:08X} already exists"), curobj->formID, addForm->formID);
 					}
 				}
@@ -1565,7 +1353,6 @@ namespace NPC
 		if (!line.objectsToReplace.empty()) {
 			for (const auto& objectToAdd : line.objectsToReplace) {
 				if (objectToAdd.size() < 2) { logger::warn("npc {:08X}: invalid objectsToReplace entry, expected 2 values", curobj->formID); continue; }
-				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string         object1 = objectToAdd[0];
 				std::string         object2 = objectToAdd[1];
 				RE::TESBoundObject* oldObject = (RE::TESBoundObject*)GetFormFromIdentifier(object1);
@@ -1616,7 +1403,6 @@ namespace NPC
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
 				else {
-					//std::cerr << "Unknown skill: " << skill << std::endl;
 				}
 			}
 
@@ -1646,7 +1432,6 @@ namespace NPC
 			for (const auto& setFlag : line.setTemplateFlags) {
 				if (const auto* row = formfilter::findAction(kTemplateFlagRows, setFlag)) {
 					curobj->actorData.templateUseFlags.set(static_cast<RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG>(row->value));
-					//aData.npcData[curobj->formID].updateFlags = true;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} template flag enabled {}"), curobj->formID, curobj->fullName, setFlag);
 					aData.npcData[curobj->formID].updateTemplateFlags = true;
 				}
@@ -1664,14 +1449,11 @@ namespace NPC
 					aData.npcData[curobj->formID].updateTemplateFlags = true;
 				}
 				else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}
 
 		if (!line.removeFlags.empty()) {
-			// Iterate through the removeFlags and apply the respective changes
 			for (const auto& removeFlag : line.removeFlags) {
 				std::string lowerFlag = toLowerCase(removeFlag);
 				if (const auto* row = formfilter::findActionLowered(kBaseFlagRows, lowerFlag)) {
@@ -1680,7 +1462,6 @@ namespace NPC
 					aData.npcData[curobj->formID].updateFlags = true;
 				}
 				else {
-					// Handle the case where an invalid flag is provided
 					logger::warn(FMT_STRING("npc formid: {:08X} {} invalid flag: {}"), curobj->formID, curobj->fullName, lowerFlag);
 				}
 			}
@@ -1734,48 +1515,9 @@ namespace NPC
 			}
 		}
 
-		/*if (!line.overlayToAdd.empty()) {
-			for (const auto& objectToAdd : line.overlayToAdd) {
-				if (objectToAdd.size() < 6) {
-					logger::error("Invalid overlay entry. Expected 6 elements (Index, Alpha, R, G, B, Preset) but got {}", objectToAdd.size());
-					continue;
-				}
-
-				const uint16_t tintIndex = static_cast<uint16_t>(std::stoi(objectToAdd[0]));
-				const uint8_t  alpha = static_cast<uint8_t>(std::stoi(objectToAdd[1]));
-				const uint8_t  red = static_cast<uint8_t>(std::stoi(objectToAdd[2]));
-				const uint8_t  green = static_cast<uint8_t>(std::stoi(objectToAdd[3]));
-				const uint8_t  blue = static_cast<uint8_t>(std::stoi(objectToAdd[4]));
-				const uint16_t preset = static_cast<uint16_t>(std::stoi(objectToAdd[5]));
-
-				const RE::Color newColor(red, green, blue, alpha);
-
-				TintLayerOverlay newOverlay{
-					.tintIndex = tintIndex,
-					.color = newColor,
-					.interpolationValue = static_cast<uint16_t>(alpha),
-					.preset = preset
-				};
-
-				aData.npcData[curobj->formID].overlaysToAdd.push_back(newOverlay);
-
-				logger::debug("NPC {:08X} - Queued overlay index {} with color {} preset {} for later",
-					curobj->formID, tintIndex, newColor.ToHex(), preset);
-			}
-		}*/
-
-
-
-
-		////////////////////////////////////////////////////
-
-
-			//logger::debug("start Patch race {:08X}", curobj->formID);
 		if (!line.addedAttackData.empty()) {
-			//bool               key = true;
 			RE::BGSAttackData* newAttackData = RE::BGSAttackData::Create();
 			newAttackData->IncRefCount();
-			//newAttackData->event = "attackStart";
 			newAttackData->data.damageMult = 1;
 			newAttackData->data.attackChance = 1;
 			newAttackData->data.attackSpell = nullptr;
@@ -1787,9 +1529,7 @@ namespace NPC
 			newAttackData->data.recoveryTime = 0;
 			newAttackData->data.staminaMult = 1;
 			newAttackData->data.flags = RE::AttackData::AttackFlag::kNone;
-			//logger::debug("attackData size before {}", curobj->attackDataMap.get()->attackDataMap.size());
 			curobj->attackDataMap->attackDataMap.insert({ newAttackData->event, RE::NiPointer(newAttackData) });
-			//logger::debug("attackData size after {}", curobj->attackDataMap.get()->attackDataMap.size());
 
 			for (const auto& objectArr : line.addedAttackData) {
 				for (const auto& object : objectArr) {
@@ -1867,8 +1607,6 @@ namespace NPC
 								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled {}"), curobj->formID, row->label);
 							}
 							else {
-								// Handle the case where an invalid flag is provided
-								// You might want to add error handling or logging here
 							}
 						}
 
@@ -1880,14 +1618,10 @@ namespace NPC
 								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled {}"), curobj->formID, row->label);
 							}
 							else {
-								// Handle the case where an invalid flag is provided
-								// You might want to add error handling or logging here
 							}
 						}
 					}
 					else {
-						// Handle the case where the keyword is not recognized
-						// You may want to log an error or take appropriate action
 						logger::debug("Unrecognized keyword: {}", object[0]);
 					}
 				}
@@ -1896,16 +1630,13 @@ namespace NPC
 
 		if (!line.removeAttackData.empty()) {
 			for (const auto& attackData : line.removeAttackData) {
-				//logger::debug("string {}", attackData);
 				const std::string lowerAttackData = toLowerCase(attackData);
 				for (auto it = curobj->attackDataMap->attackDataMap.begin(); it != curobj->attackDataMap->attackDataMap.end();) {
-					//logger::debug("for {}", it->second.get()->event.c_str());
 					if (toLowerCase(it->second.get()->event.c_str()) == lowerAttackData) {
 						logger::debug("npc formid: {:08X} removing attackData with event {} ", curobj->formID, it->second.get()->event.c_str());
 						it = curobj->attackDataMap->attackDataMap.erase(it);
 					}
 					else {
-						// Move to the next iterator
 						++it;
 					}
 				}
@@ -1913,7 +1644,6 @@ namespace NPC
 		}
 
 		if (!line.attackDataToChange.empty()) {
-			//logger::debug("attackDataMap size {}", curobj->attackDataMap->attackDataMap.size());
 			for (auto& attackData : curobj->attackDataMap->attackDataMap) {
 
 				if (!attackData.second)
@@ -1922,24 +1652,15 @@ namespace NPC
 				auto newAttackData = attackData.second.get();
 				if (!newAttackData)
 					continue;
-				//logger::debug("processing: {}", newAttackData->event.c_str());
-				//logger::debug("attackDataToChange size {}", line.attackDataToChange.size());
 				for (auto& objectArr : line.attackDataToChange) {
-					//attackData loop from race
-
-
 					bool key = true;
-					//line from ini
-					//logger::debug("processing attackMap {} objectArr {} ", newAttackData->event.c_str(), objectArr.size());
 					for (auto& object : objectArr) {
-						//logger::debug("object-> 0 {} 1 {}", object[0], object[1]);
 						if (object[1].empty()) {
 							continue;
 						}
 
 						if (key) {
 							if (!(newAttackData->event.c_str() == object[1])) {
-								//logger::debug("race formid: {:08X} attackData change - entry not found ", curobj->formID);
 								break;
 							}
 							else {
@@ -2019,8 +1740,6 @@ namespace NPC
 									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled {}"), curobj->formID, row->label);
 								}
 								else {
-									// Handle the case where an invalid flag is provided
-									// You might want to add error handling or logging here
 								}
 							}
 
@@ -2032,33 +1751,24 @@ namespace NPC
 									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled {}"), curobj->formID, row->label);
 								}
 								else {
-									// Handle the case where an invalid flag is provided
-									// You might want to add error handling or logging here
 								}
 							}
 						}
 						else {
-							// Handle the case where the keyword is not recognized
-							// You may want to log an error or take appropriate action
 							logger::debug("Unrecognized keyword: {}", object[0]);
 						}
 					}
 				}
 
 
-				//
-
 				for (const auto& attackData : line.removeAttackData) {
-					//logger::debug("string {}", attackData);
 					const std::string lowerAttackData = toLowerCase(attackData);
 					for (auto it = curobj->attackDataMap->attackDataMap.begin(); it != curobj->attackDataMap->attackDataMap.end();) {
-						//logger::debug("for {}", it->second.get()->event.c_str());
 						if (toLowerCase(it->second.get()->event.c_str()) == lowerAttackData) {
 							logger::debug("npc formid: {:08X} removing attackData with event {} ", curobj->formID, it->second.get()->event.c_str());
 							it = curobj->attackDataMap->attackDataMap.erase(it);
 						}
 						else {
-							// Move to the next iterator
 							++it;
 						}
 					}
@@ -2071,10 +1781,6 @@ namespace NPC
 
 			}
 		}
-
-		///////////////////////////////////////////////////
-
-		//curobj->outfit
 	}
 
 	ActorData readConfig(const std::string& folder)
@@ -2133,10 +1839,8 @@ namespace NPC
 								}
 								infile.close();
 
-								// Convert std::list to std::vector
 								std::vector<patch_instruction> tokensVector(tokens.begin(), tokens.end());
 								process_patch_instructions(tokens);
-								//std::for_each(std::execution::par, tokens.begin(), tokens.end(), process_patch_instructions);
 							}
 						}
 					}
@@ -2195,7 +1899,6 @@ namespace NPC
 									hooktokens.push_back(create_patch_instruction(line));
 								}
 								infile.close();
-								//process_patch_instructions(tokens);
 							}
 						}
 					}
@@ -2211,35 +1914,14 @@ namespace NPC
 	void setbEnableSetLevelDirectlyByPCMult()
 	{
 		bEnableSetLevelDirectlyByPCMult = true;
-		//return;
 	}
 
 <<<<<<< HEAD
-	// =====================================================================
-	// PHASE 2 -- NPC's rule compiler.
-	//
-	// findObject used to be ~590 lines of `if` blocks that re-asked, on every
-	// (NPC, rule) pair, which filters the rule even carries. Those questions
-	// are answered once, here, and the answer is a formfilter::MatchProgram --
-	// a flat predicate list over one flat operand pool. findObject is now
-	// formfilter::runProgram.
-	//
-	// The stage structure is a transcription of upstream's control flow; see
-	// formfilter.h for why the positive stages may be reordered and the rest
-	// may not. The `formID != 0x000007` guards upstream sprinkles over SOME
-	// (not all) of its blocks survive as the per-predicate `skipIfPlayer` bit:
-	// filterByDefaultOutfits, filterByClass, filterByCombatStyle and every
-	// flag/restrictTo filter genuinely have no player guard upstream, and the
-	// player therefore can match through them.
-	// =====================================================================
 	namespace
 =======
 	bool findObject(const patch_instruction& line, RE::TESNPC* curobj, const std::string& lowerEditorID)
 >>>>>>> origin/new-main
 	{
-		// "true"/"false" and "female"/"male" are the only two vocabularies
-		// upstream's scalar flag filters recognise; anything else makes the
-		// whole block a no-op, so no predicate is emitted at all.
 		bool flagPolarity(const std::string& a_lower, const char* a_set, const char* a_clear, bool& a_expectSet)
 		{
 			if (a_lower == a_set) {
@@ -2311,7 +1993,6 @@ namespace NPC
 			return m;
 		}
 
-		// The 18-arm if/else chain findObject used to run per pair, as a table.
 		bool lookupSkill(const std::string& a_lower, std::uint64_t& a_out)
 		{
 			static const std::unordered_map<std::string, std::uint64_t> m = {
@@ -2346,7 +2027,6 @@ namespace NPC
 
 
 		if (!found && !line.filterClass.empty()) {
-			//logger::info("npc not empty");
 			for (const auto& npcstring : line.filterClass) {
 				RE::TESForm* currentform = nullptr;
 				RE::TESClass* npc = nullptr;
@@ -2358,7 +2038,6 @@ namespace NPC
 
 					if (curobj->npcClass && curobj->npcClass->formID == npc->formID) {
 						found = true;
-						//logger::info("NPC found.");
 						break;
 					}
 				}
@@ -2366,7 +2045,6 @@ namespace NPC
 		}
 
 		if (!found && !line.filterCombatStyle.empty()) {
-			//logger::info("npc not empty");
 			for (const auto& npcstring : line.filterCombatStyle) {
 				RE::TESForm* currentform = nullptr;
 				RE::TESCombatStyle* npc = nullptr;
@@ -2378,7 +2056,6 @@ namespace NPC
 
 					if (curobj->combatStyle && curobj->combatStyle->formID == npc->formID) {
 						found = true;
-						//logger::info("NPC found.");
 						break;
 					}
 				}
@@ -2467,7 +2144,6 @@ namespace NPC
 
 
 		if (!found && !line.filterFactions.empty() && curobj->formID != 0x000007) {
-			//logger::info("filterByFaction not empty");
 			for (const auto& filterByFactiontring : line.filterFactions) {
 				RE::TESForm* currentform = nullptr;
 				RE::TESFaction* keyword = nullptr;
@@ -2482,20 +2158,16 @@ namespace NPC
 					}
 					else {
 						factionAnd = false;
-						//logger::debug(FMT_STRING("KeywordAnd npc does not have all filterByFaction"));
 						break;
 					}
-					//logger::debug(FMT_STRING("KeywordAnd npc true"));
 				}
 			}
 		}
 		else if (curobj->formID != 0x000007) {
-			//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 			factionAnd = true;
 		}
 
 		if (!found && !line.filterFactionsOr.empty() && curobj->formID != 0x000007) {
-			//logger::info("keywords not empty");
 			for (const auto& keywordstring : line.filterFactionsOr) {
 				RE::TESForm* currentform = nullptr;
 				RE::TESFaction* keyword = nullptr;
@@ -2507,15 +2179,12 @@ namespace NPC
 
 					if (curobj->HasFaction(keyword)) {
 						factionOr = true;
-						//logger::debug(FMT_STRING("NPC has faction {:08X}"), curobj->formID, curobj->fullName);
-						//logger::info("Keyword found.");
 						break;
 					}
 				}
 			}
 		}
 		else if (curobj->formID != 0x000007) {
-			//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 			factionOr = true;
 		}
 
@@ -2535,7 +2204,6 @@ namespace NPC
 		}
 
 		if (!found && !line.filterByEditorIdContainsOr.empty() && curobj->formID != 0x000007) {
-			//logger::info("keywords not empty");
 			for (const auto& editorString : line.filterByEditorIdContainsOr) {
 				if (lowerEditorID.find(toLowerCase(editorString)) != std::string::npos) {
 					containsOr = true;
@@ -2548,18 +2216,15 @@ namespace NPC
 		}
 
 		if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-			//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 			found = true;
 		}
 
 		if (!found && (!line.filterFactions.empty() || !line.filterFactionsOr.empty()) && factionAnd && factionOr) {
-			//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 			found = true;
 		}
 
 		if (!found && line.object.empty() && line.races.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterClass.empty() && line.filterCombatStyle.empty() && line.filterFactions.empty() && line.filterFactionsOr.empty() && line.filterByOutfit.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && curobj->formID != 0x000007) {
 			found = true;
-			//logger::debug(FMT_STRING("Patch Everything but skip Player {:08X}"), curobj->formID);
 		}
 
 		if (!line.isFemale.empty() && found && line.isFemale != "none") {
@@ -2569,27 +2234,22 @@ namespace NPC
 			if ((lowercaseIsFemale == "female")) {
 				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kFemale) {
 					found = true;
-					//logger::debug(FMT_STRING("is female {:08X} {}"), curobj->formID, curobj->fullName);
 				}
 				else {
 					found = false;
-					//logger::debug(FMT_STRING("is not female {:08X} {}"), curobj->formID, curobj->fullName);
 				}
 			}
 			else if ((lowercaseIsFemale == "male")) {
 				if (!(curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kFemale)) {
-					//logger::debug(FMT_STRING("is male {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 				else {
-					//logger::debug(FMT_STRING("is not male {:08X} {}"), curobj->formID, curobj->fullName);
 					found = false;
 				}
 			}
 		}
 
 		if (!line.keywordsExcluded.empty() && found && curobj->formID != 0x000007) {
-			//logger::info("keywords not empty");
 			for (const auto& keywordstring : line.keywordsExcluded) {
 				RE::TESForm* currentform = nullptr;
 				RE::BGSKeyword* keyword = nullptr;
@@ -2606,7 +2266,6 @@ namespace NPC
 		}
 
 		if (!line.filterFactionsExcluded.empty() && found && curobj->formID != 0x000007) {
-			//logger::info("factions not empty");
 			for (const auto& factionstring : line.filterFactionsExcluded) {
 				RE::TESForm* currentform = nullptr;
 				RE::TESFaction* keyword = nullptr;
@@ -2618,8 +2277,6 @@ namespace NPC
 
 					if (curobj->HasFaction(keyword)) {
 						found = false;
-						//logger::debug(FMT_STRING("KeywordExcluded has a keyword that is excluded.{:08X}"), keyword->formID);
-						//logger::info("Keyword found.");
 						break;
 					}
 				}
@@ -2627,7 +2284,6 @@ namespace NPC
 		}
 
 		if (!line.filterByEditorIdContainsExcluded.empty() && found && curobj->formID != 0x000007) {
-			//logger::info("factions not empty");
 			for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
 				if (lowerEditorID.find(toLowerCase(editorString)) != std::string::npos) {
 					found = false;
@@ -2638,7 +2294,6 @@ namespace NPC
 
 
 		if (!line.filterClassExclude.empty() && found) {
-			//logger::info("npc not empty");
 			for (const auto& npcstring : line.filterClassExclude) {
 				RE::TESForm* currentform = nullptr;
 				RE::TESClass* npc = nullptr;
@@ -2650,7 +2305,6 @@ namespace NPC
 
 					if (curobj->npcClass->formID == npc->formID) {
 						found = false;
-						//logger::info("NPC found.");
 						break;
 					}
 				}
@@ -2658,7 +2312,6 @@ namespace NPC
 		}
 
 		if (!line.objectExcluded.empty() && found) {
-			//logger::info("npc not empty");
 			for (const auto& npcstring : line.objectExcluded) {
 				RE::TESForm* currentform = nullptr;
 				RE::TESNPC* npc = nullptr;
@@ -2670,7 +2323,6 @@ namespace NPC
 
 					if (curobj->formID == npc->formID) {
 						found = false;
-						//logger::info("NPC found.");
 						break;
 					}
 				}
@@ -2742,12 +2394,10 @@ namespace NPC
 					value = curobj->playerSkills.values[RE::TESNPC::Skills::kEnchanting];
 				}
 				else {
-					//std::cerr << "Unknown skill: " << skill << std::endl;
 				}
 
 				if (value >= 0 && value1 >= 0 && value2 >= 0) {
 					if (value >= value1 && value <= value2) {
-						//logger::debug(FMT_STRING("npc formid: {:08X} {} invalid value found: {} {} {}"), curobj->formID, curobj->fullName, value, value1, value2);
 					}
 					else {
 						found = false;
@@ -2772,7 +2422,6 @@ namespace NPC
 					}
 					else {
 						found = false;
-						//break;
 					}
 				}
 
@@ -2785,21 +2434,15 @@ namespace NPC
 
 			if ((lowercaseIsFemale == "female")) {
 				if (curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kFemale) {
-					//found = true;
-					//logger::debug(FMT_STRING("is female {:08X} {}"), curobj->formID, curobj->fullName);
 				}
 				else {
 					found = false;
-					//logger::debug(FMT_STRING("is not female {:08X} {}"), curobj->formID, curobj->fullName);
 				}
 			}
 			else if ((lowercaseIsFemale == "male")) {
 				if (!(curobj->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kFemale)) {
-					//logger::debug(FMT_STRING("is male {:08X} {}"), curobj->formID, curobj->fullName);
-					//found = true;
 				}
 				else {
-					//logger::debug(FMT_STRING("is not male {:08X} {}"), curobj->formID, curobj->fullName);
 					found = false;
 				}
 			}
@@ -2829,12 +2472,11 @@ namespace NPC
 
 				auto it = flagMap.find(lowerFlag);
 				if (it != flagMap.end()) {
-					// Check if the flag is set on the NPC
 					if (!curobj->actorData.templateUseFlags.any(it->second)) {
 						found = false;
 						logger::debug(FMT_STRING("npc formid: {:08X} {} is missing required flag: {}"),
 							curobj->formID, curobj->fullName, lowerFlag);
-						break; // Stop checking once we find a missing flag
+						break;
 					}
 				}
 				else {
@@ -2876,12 +2518,11 @@ namespace NPC
 
 				auto it = flagMap.find(lowerFlag);
 				if (it != flagMap.end()) {
-					// Check if the flag is set on the NPC
 					if (!curobj->actorData.actorBaseFlags.any(it->second)) {
 						found = false;
 						logger::debug(FMT_STRING("npc formid: {:08X} {} is missing required flag: {}"),
 							curobj->formID, curobj->fullName, lowerFlag);
-						break; // Stop checking once we find a missing flag
+						break;
 					}
 				}
 				else {
@@ -2968,9 +2609,7 @@ namespace NPC
 			}
 			if (!hasObject) {
 				found = false;
-				//logger::debug("not found");
 			}
-			//logger::debug("found");
 		}
 
 
@@ -2988,7 +2627,6 @@ namespace NPC
 		formfilter::MatchProgram p;
 		p.modNames = &line.modNames;
 
-		// ---- positive stage A: the disjuncts upstream evaluates first ------
 		std::size_t first = p.preds.size();
 		if (!line.keywords.empty()) {
 			formfilter::addPred(p, Op::Keyword, Mode::And, formfilter::ptrOperands(line.keywords, RE::FormType::Keyword), true);
@@ -3020,10 +2658,6 @@ namespace NPC
 		}
 		formfilter::sortCheapestFirst(p.positive);
 
-		// ---- the four filters that ASSIGN found, in source order -----------
-		// Each is unguarded upstream, so it can both create and destroy a
-		// match; they are the reason NPC needs a stage of its own here, and
-		// the reason a rule carrying any of them cannot be indexed.
 		struct
 		{
 			const std::string&        raw;
@@ -3038,10 +2672,6 @@ namespace NPC
 			if (!liveScalarFilter(a.raw)) {
 				continue;
 			}
-			// Phase 3 refused to index a rule carrying ANY live one of these,
-			// even one whose value is neither "true" nor "false" and is
-			// therefore a no-op. Preserved exactly so the bucket distribution
-			// stays comparable with Phase 3's measurement.
 			p.unkeyable = true;
 			bool expectSet = false;
 			if (flagPolarity(toLowerCase(a.raw), "true", "false", expectSet)) {
@@ -3049,7 +2679,6 @@ namespace NPC
 			}
 		}
 
-		// ---- positive stage B: the two pairs upstream evaluates last -------
 		first = p.preds.size();
 		if (!line.filterByEditorIdContains.empty()) {
 			formfilter::addPred(p, Op::EditorId, Mode::And, formfilter::needleOperands(p, line.filterByEditorIdContains), true);
@@ -3074,7 +2703,6 @@ namespace NPC
 			line.filterFactions.empty() && line.filterFactionsOr.empty() && line.filterByOutfit.empty() &&
 			line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty();
 
-		// ---- negative stage: source order, never reordered -----------------
 		bool expectSet = false;
 		if (liveScalarFilter(line.isFemale) &&
 			flagPolarity(toLowerCase(line.isFemale), "female", "male", expectSet)) {
@@ -3103,14 +2731,11 @@ namespace NPC
 		if (!line.skillRestrict.empty()) {
 			std::vector<std::uint64_t> ranges;
 			for (const auto& skillArr : line.skillRestrict) {
-				// std::stoi still throws on a malformed bound; the throw has
-				// moved from the first NPC the loop reached to rule-build time.
-				// Both terminate the process and nothing catches either.
 				const int lo = std::stoi(skillArr[1]);
 				const int hi = std::stoi(skillArr[2]);
 				std::uint64_t skill = 0;
 				if (!lookupSkill(toLowerCase(skillArr[0]), skill) || lo < 0 || hi < 0) {
-					continue;  // upstream: value stays -99, so the entry does nothing
+					continue;
 				}
 				ranges.push_back(skill);
 				ranges.push_back(static_cast<std::uint64_t>(lo));
@@ -3129,8 +2754,6 @@ namespace NPC
 			addFlagPredicate(p, p.negative, RE::ACTOR_BASE_DATA::Flag::kFemale, expectSet);
 		}
 		if (!line.restrictToTemplateFlags.empty()) {
-			// An unrecognised name only produced a logger::warn upstream and
-			// left `found` alone; resolving here drops that per-pair warning.
 			std::vector<std::uint64_t> bits;
 			for (const auto& s : line.restrictToTemplateFlags) {
 				const auto it = templateFlagMap().find(toLowerCase(s));
@@ -3181,9 +2804,6 @@ namespace NPC
 
 	bool findObject(const patch_instruction&, const formfilter::MatchProgram& program, RE::TESNPC* curobj)
 	{
-		// Reused across the whole form loop so the three derived strings
-		// allocate once, not once per pair. SkyPatcher parses and patches
-		// single-threaded at kDataLoaded (see utility.cpp's memo note).
 		static formfilter::MatchScratch scratch;
 
 		formfilter::MatchTarget t;
@@ -3208,8 +2828,6 @@ namespace NPC
 		auto result = func(curobj, a_mod);
 		if (result) {
 
-			//logger::debug("NPC {:08X} {} {}", a_race->formID, a_race->fullName, clib_util::editorID::get_editorID(a_race));
-
 			for (const auto& line : hooktokens) {
 				bool found = false;
 				if (curobj->IsDeleted()) {
@@ -3229,11 +2847,9 @@ namespace NPC
 				}
 
 				if (!line.object.empty()) {
-					//logger::debug("objects size {}", line.object.size());
 					for (const auto& npcstring : line.object) {
 						RE::TESForm* currentform = nullptr;
 						std::string string_form = npcstring;
-						//logger::info("looking up npc {:08X} {} {}", curobj->formID, clib_util::editorID::get_editorID(curobj), string_form);
 						currentform = GetFormFromIdentifier(string_form);
 						if (currentform) {
 							if (curobj->formID == currentform->formID) {

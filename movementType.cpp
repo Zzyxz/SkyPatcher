@@ -11,14 +11,6 @@
 namespace MOVETYPE
 {
 
-	// ==================================================================
-	// PHASE 2 -- MOVETYPE's key table. One row per upstream extract*()
-	// call, in the same order. See parsetable.h.
-	//
-	// NOTE: upstream's `filterByModNames` extract call is commented out,
-	// so `modNames` is never populated; no row is added for it here,
-	// preserving that (dead) behaviour exactly.
-	// ==================================================================
 	namespace
 	{
 #define MOVE_F(member) static_cast<std::uint16_t>(offsetof(patch_instruction, member))
@@ -53,7 +45,7 @@ namespace MOVETYPE
 		patch_instruction l;
 		moveTypeKeyTable().parse(line, &l);
 		return l;
-	}  //endStruct
+	}
 
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
@@ -74,7 +66,6 @@ namespace MOVETYPE
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::MovementType) {
-						//logger::debug("Form {:08X} ", currentform->formID);
 						curobj = (RE::BGSMovementType*)currentform;
 						patch(line, curobj);
 					}
@@ -82,11 +73,9 @@ namespace MOVETYPE
 			}
 
 			if (!line.object.empty()  ) {
-				//logger::info("continue");
 				continue;
 			}
 
-			// PROTOTYPE: one view per rule, not per (rule, movementType) pair.
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
@@ -95,7 +84,6 @@ namespace MOVETYPE
 			};
 
 			for (const auto& curobj : ObjectArray) {
-				//logger::info("processing npc");
 				bool found = false;
 
 
@@ -112,10 +100,8 @@ namespace MOVETYPE
 				}
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::MovementType)) {
 						found = false;
-						//logger::info("MovementType Excluded.");
 					}
 				}
 
@@ -204,7 +190,6 @@ namespace MOVETYPE
 
 		if (!line.walkLeft.empty() && line.walkLeft != "none") {
 			try {
-				//logger::debug(FMT_STRING("movementType formid: {:08X} before walkLeft {}"), curobj->formID, curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kLeft][RE::Movement::MaxSpeeds::kWalk]);
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kLeft][RE::Movement::MaxSpeeds::kWalk] = std::stof(line.walkLeft);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed walkLeft {}"), curobj->formID, line.walkLeft);
 			} catch (const std::exception& e) {
@@ -212,7 +197,6 @@ namespace MOVETYPE
 		}
 		if (!line.runLeft.empty() && line.runLeft != "none") {
 			try {
-				//logger::debug(FMT_STRING("movementType formid: {:08X} before runLeft {}"), curobj->formID, curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kLeft][RE::Movement::MaxSpeeds::kRun]);
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kLeft][RE::Movement::MaxSpeeds::kRun] = std::stof(line.runLeft);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed runLeft {}"), curobj->formID, line.runLeft);
 			} catch (const std::exception& e) {
@@ -261,19 +245,15 @@ namespace MOVETYPE
 			}
 		}
 
-		//
 		if (!line.rotateWhileMovingRun.empty() && line.rotateWhileMovingRun != "none") {
 			try {
-				//logger::debug(FMT_STRING("movementType formid: {:08X} before rotateWhileMovingRun {}"), curobj->formID, curobj->movementTypeData.defaultData.rotateWhileMovingRun);
 				curobj->movementTypeData.defaultData.rotateWhileMovingRun = std::stof(line.rotateWhileMovingRun) * (M_PI / 180);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed rotateWhileMovingRun {}"), curobj->formID, curobj->movementTypeData.defaultData.rotateWhileMovingRun);
 			} catch (const std::exception& e) {
 			}
 		}
-		//
 		if (!line.rotateInPlaceWalk.empty() && line.rotateInPlaceWalk != "none") {
 			try {
-				//logger::debug(FMT_STRING("movementType formid: {:08X} before rotateInPlaceWalk {}"), curobj->formID, curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::kRotations][RE::Movement::MaxSpeeds::kWalk]);
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::kRotations][RE::Movement::MaxSpeeds::kWalk] = std::stof(line.rotateInPlaceWalk) * (M_PI / 180);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed rotateInPlaceWalk {}"), curobj->formID, curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::kRotations][RE::Movement::MaxSpeeds::kWalk]);
 			} catch (const std::exception& e) {
@@ -281,7 +261,6 @@ namespace MOVETYPE
 		}
 		if (!line.rotateInPlaceRun.empty() && line.rotateInPlaceRun != "none") {
 			try {
-				//logger::debug(FMT_STRING("movementType formid: {:08X} before rotateInPlaceRun {}"), curobj->formID, curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::kRotations][RE::Movement::MaxSpeeds::kRun]);
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::kRotations][RE::Movement::MaxSpeeds::kRun] = std::stof(line.rotateInPlaceRun) * (M_PI / 180);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed rotateInPlaceRun {}"), curobj->formID, curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::kRotations][RE::Movement::MaxSpeeds::kRun]);
 			} catch (const std::exception& e) {

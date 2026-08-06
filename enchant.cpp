@@ -3,10 +3,6 @@
 #include "parsetable.h"
 namespace ENCH
 {
-	// ==================================================================
-	// PHASE 2 -- ENCH's key table. One row per upstream extract*() call,
-	// in the same order. See parsetable.h.
-	// ==================================================================
 	namespace
 	{
 #define ENCH_F(member) static_cast<std::uint16_t>(offsetof(line_content, member))
@@ -70,7 +66,6 @@ namespace ENCH
 <<<<<<< HEAD
 		auto& objectSpellArray = dataHandler->GetFormArray<RE::EnchantmentItem>();
 =======
-		//RE::BSTArray<RE::AlchemyItem*> objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
 		const auto& objectSpellArray = dataHandler->GetFormArray<RE::EnchantmentItem>();
 >>>>>>> origin/new-main
 		for (const auto& line : tokens) {
@@ -83,7 +78,6 @@ namespace ENCH
 						std::string string_form = npcstring;
 						currentform = GetFormFromIdentifier(string_form);
 						if (currentform && currentform->formType == RE::FormType::Enchantment) {
-							//logger::debug("Form {:08X} ", currentform->formID);
 							curobj = (RE::EnchantmentItem*)currentform;
 							patch(line, curobj);
 						}
@@ -94,7 +88,6 @@ namespace ENCH
 					continue;
 				}
 
-			// PROTOTYPE: one view per rule, not per (rule, enchantment) pair.
 			const formfilter::CommonFilterView view{
 				line.modNames, formfilter::noStrings(), formfilter::noStrings(),
 				line.keywords, line.keywordsOr, line.keywordsExcluded,
@@ -119,10 +112,6 @@ namespace ENCH
 					continue;
 				}
 
-				// PROTOTYPE: preserved verbatim -- unlike weapon/book/alch,
-				// these three conditions are missing a leading `!found &&`.
-				// Currently inert (this runs before anything else can set
-				// `found`), so behaviour is unchanged; not "fixed" here.
 				if (!line.filterByEditorIdContains.empty()) {
 					contains = formfilter::matchesEditorIdAnd(view, curobj);
 				} else {
@@ -130,14 +119,12 @@ namespace ENCH
 				}
 
 				if (!line.filterByEditorIdContainsOr.empty()) {
-					//logger::info("keywords not empty");
 					containsOr = formfilter::matchesEditorIdOr(view, curobj);
 				} else {
 					containsOr = true;
 				}
 
 				if ( (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					//logger::debug(FMT_STRING("Found a matching npc by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -163,22 +150,17 @@ namespace ENCH
 
 
 				if (!line.keywords.empty()) {
-					//logger::info("keywords not empty");
 					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
-					//logger::info("keywords not empty");
 					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
 				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					keywordOr = true;
 				}
 
 				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by keywords. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -209,7 +191,6 @@ namespace ENCH
 						mgefAnd = true;
 					}
 				} else {
-					//logger::debug(FMT_STRING("KeywordAnd is empty, we pass true."));
 					mgefAnd = true;
 				}
 				if (!line.mgefsOr.empty()) {
@@ -225,8 +206,6 @@ namespace ENCH
 							for (const auto& effect : curobj->effects) {
 								if (effect && effect->baseEffect->formID == keyword->formID) {
 									mgefOr = true;
-									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-									//logger::info("Keyword found.");
 									break;
 								}
 							}
@@ -236,12 +215,10 @@ namespace ENCH
 						}
 					}
 				} else {
-					//logger::debug(FMT_STRING("KeywordOr is empty, we pass true."));
 					mgefOr = true;
 				}
 
 				if ((!line.mgefs.empty() || !line.mgefsOr.empty()) && mgefAnd && mgefOr) {
-					//logger::debug(FMT_STRING("Found a matching weapon by mgefs. {:08X} {}"), curobj->formID, curobj->fullName);
 					found = true;
 				}
 
@@ -250,14 +227,12 @@ namespace ENCH
 				}
 
 				if (!line.keywordsExcluded.empty() && found) {
-					//logger::info("keywords not empty");
 					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
 						found = false;
 					}
 				}
 
 				if (!line.mgefsExcluded.empty() && found) {
-					//logger::info("mgefs not empty");
 					for (const auto& mgefstring : line.mgefsExcluded) {
 						RE::TESForm* currentform = nullptr;
 						RE::EffectSetting* keyword = nullptr;
@@ -269,8 +244,6 @@ namespace ENCH
 							for (const auto& effect : curobj->effects) {
 								if (effect && effect->baseEffect->formID == keyword->formID) {
 									found = false;
-									//logger::debug(FMT_STRING("KeywordOr has at least one keyword true {:08X} {}"), curobj->formID, curobj->fullName);
-									//logger::info("Keyword found.");
 									break;
 								}
 							}
@@ -279,11 +252,6 @@ namespace ENCH
 				}
 
 				if (!line.objectExcluded.empty() && found) {
-					//logger::info("npc not empty");
-					// PROTOTYPE: was RE::FormType::Spell -- objectExcluded on
-					// an enchantment patcher could never match, making the
-					// filter dead code. Fixed to Enchantment as part of the
-					// migration.
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Enchantment)) {
 						found = false;
 						logger::debug(FMT_STRING("enchantment {:08X} {} excluded."), curobj->formID, curobj->fullName);
@@ -291,7 +259,6 @@ namespace ENCH
 				}
 
 				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-					//logger::info("factions not empty");
 					if (formfilter::hasExcludedEditorId(view, curobj)) {
 						found = false;
 					}
@@ -607,7 +574,7 @@ namespace ENCH
 			objectToAdd.resize(5, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
-				if (addForm) {  // Only proceed if addForm is not null
+				if (addForm) {
 					float magnitude = 0.0f;
 					if (objectToAdd[1] != "null") {
 						magnitude = std::stof(objectToAdd[1]);
@@ -658,7 +625,7 @@ namespace ENCH
 			objectToAdd.resize(4, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
-				if (addForm) {  // Only proceed if addForm is not null
+				if (addForm) {
 					float magnitude = 0.0f;
 					if (objectToAdd[1] != "null") {
 						magnitude = std::stof(objectToAdd[1]);
@@ -827,7 +794,6 @@ namespace ENCH
 			}
 		}
 
-		//logger::debug("Spell Found True {}",line.chargeTime);
 		if ( !line.chargeTime.empty() && line.chargeTime != "none") {
 			curobj->data.chargeTime = std::stof(line.chargeTime);
 			logger::debug(FMT_STRING("enchantment formid: {:08X} {} changed chargeTime to {}"), curobj->formID, curobj->fullName, line.chargeTime);
@@ -835,7 +801,6 @@ namespace ENCH
 
 		if ( !line.setFlags.empty()) {
 			for (const auto& setFlag : line.setFlags) {
-				//logger::debug(FMT_STRING("spell formid: {:08X} {} flag {}"), curobj->formID, curobj->fullName, setFlag);
 				if (toLowerCase(setFlag) == "costoverride") {
 					curobj->data.flags.set(RE::EnchantmentItem::EnchantmentFlag::kCostOverride);
 					logger::debug(FMT_STRING("enchantment formid: {:08X} {} flag enabled costoverride"), curobj->formID, curobj->fullName);
@@ -846,8 +811,6 @@ namespace ENCH
 					curobj->data.flags.set(RE::EnchantmentItem::EnchantmentFlag::kExtendDuration);
 					logger::debug(FMT_STRING("enchantment formid: {:08X} {} flag enabled extendduration"), curobj->formID, curobj->fullName);
 				} else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}
@@ -864,8 +827,6 @@ namespace ENCH
 					curobj->data.flags.reset(RE::EnchantmentItem::EnchantmentFlag::kExtendDuration);
 					logger::debug(FMT_STRING("enchantment formid: {:08X} {} flag disabled extendduration"), curobj->formID, curobj->fullName);
 				} else {
-					// Handle the case where an invalid flag is provided
-					// You might want to add error handling or logging here
 				}
 			}
 		}
