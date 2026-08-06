@@ -94,7 +94,18 @@ namespace CONTAINER
 					continue;
 				}
 
-				if (line.containerObjects.empty() && findObject(line, view, curobj)) {
+				// The `line.containerObjects.empty() &&` that used to guard this
+				// call made the whole loop dead for every rule that names
+				// explicit containers AND carries an editorId filter -- the one
+				// shape the `continue` above deliberately lets through. findObject
+				// already applies that exact test itself, in the only place it
+				// belongs: its "no filters at all, so match everything" fallback.
+				// Duplicating it here also suppressed the editorId match, which is
+				// the reason such a rule reaches this loop in the first place.
+				// Hook_InitItemImpl below calls the same findObject unguarded, and
+				// every sibling patcher (encounterzone.cpp, cobj.cpp, npc.cpp)
+				// patches on the filter result alone.
+				if (findObject(line, view, curobj)) {
 					patchContainer(line, curobj);
 				}
 
