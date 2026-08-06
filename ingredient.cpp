@@ -57,11 +57,7 @@ namespace INGR
 	{
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& objectIngredientArray = dataHandler->GetFormArray<RE::IngredientItem>();
-=======
-		const auto& objectIngredientArray = dataHandler->GetFormArray<RE::IngredientItem>();
->>>>>>> origin/new-main
 		for (const auto& line : tokens) {
 			
 			if (!line.objects.empty()) {
@@ -304,11 +300,7 @@ namespace INGR
 		}
 	}
 
-<<<<<<< HEAD
 	void patch(const INGR::line_content& line, RE::IngredientItem* curobj) {
-=======
-	void patch(const INGR::line_content& line, RE::IngredientItem* curobj) {
->>>>>>> origin/new-main
 		
 
 		if ( !line.keywordsToAdd.empty()) {

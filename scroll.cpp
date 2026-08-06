@@ -212,11 +212,7 @@ namespace SCROLL
 	{
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& objectSpellArray = dataHandler->GetFormArray<RE::ScrollItem>();
-=======
-		const auto& objectSpellArray = dataHandler->GetFormArray<RE::ScrollItem>();
->>>>>>> origin/new-main
 		for (const auto& line : tokens) {
 			
 			
@@ -469,11 +465,7 @@ namespace SCROLL
 		}
 	}
 
-<<<<<<< HEAD
 	void* patch(const SCROLL::line_content& line, RE::ScrollItem* curobj) {
-=======
-	void* patch(const SCROLL::line_content& line, RE::ScrollItem* curobj) {
->>>>>>> origin/new-main
 		if (!line.keywordsToAdd.empty()) {
 			for (size_t i = 0; i < line.keywordsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;

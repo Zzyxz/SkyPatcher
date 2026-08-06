@@ -87,11 +87,7 @@ namespace MISC
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
-<<<<<<< HEAD
 	void* patch(const MISC::patch_instruction& line, RE::TESObjectMISC* curobj);
-=======
-	void* patch(const MISC::patch_instruction& line, RE::TESObjectMISC* curobj);
->>>>>>> origin/new-main
 }
 
 #endif

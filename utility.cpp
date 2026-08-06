@@ -161,7 +161,6 @@ bool IsPluginInstalled(const char* name)
 	return false;
 }
 
-<<<<<<< HEAD
 RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
 {
 	auto dataHandler = RE::TESDataHandler::GetSingleton();
@@ -187,41 +186,6 @@ RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
 	}
 	return nullptr;
 }
-=======
-RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
-{
-	static std::unordered_map<std::string, RE::TESForm*> formCache;
-	if (const auto it = formCache.find(identifier); it != formCache.end()) {
-		return it->second;
-	}
-
-	auto dataHandler = RE::TESDataHandler::GetSingleton();
-	if (!dataHandler) {
-		return nullptr;
-	}
-
-	RE::TESForm* result = nullptr;
-	try {
-		auto delimiter = identifier.find('|');
-		if (delimiter != std::string::npos) {
-			std::string modName = identifier.substr(0, delimiter);
-			std::string modForm = identifier.substr(delimiter + 1);
-			uint32_t    formID = std::stoul(modForm, nullptr, 16) & 0xFFFFFF;
-			auto*       mod = dataHandler->LookupModByName(modName.c_str());
-			if (mod && mod->IsLight())
-				formID = std::stoul(modForm, nullptr, 16) & 0xFFF;
-			result = dataHandler->LookupForm(formID, modName.c_str());
-		} else {
-			result = RE::TESForm::LookupByEditorID(identifier);
-		}
-	} catch (const std::exception& e) {
-		logger::warn("Invalid form identifier '{}': {}", identifier, e.what());
-	}
-
-	formCache.emplace(identifier, result);
-	return result;
-}
->>>>>>> origin/new-main
 
 RE::FormID BuildFormIDFromIdentifier(const std::string& identifier)
 {
@@ -611,6 +575,62 @@ RE::BGSKeyword* createKeyword()
 	return RE::ActorValue::kNone;
 }
 
+
+bool replaceObjectInContainer(RE::TESContainer& container, RE::TESBoundObject* oldObject, RE::TESBoundObject* newObject)
+{
+	bool changed = false;
+	container.ForEachContainerObject([&](RE::ContainerObject& entry) {
+		if (entry.obj == oldObject) {
+			entry.obj = newObject;
+			changed = true;
+		}
+		return RE::BSContainer::ForEachResult::kContinue;
+	});
+	return changed;
+}
+
+bool changeContainerObjectCount(RE::TESContainer& container, RE::TESBoundObject* object, std::int32_t count)
+{
+	bool changed = false;
+	container.ForEachContainerObject([&](RE::ContainerObject& entry) {
+		if (!object || entry.obj == object) {
+			entry.count = count;
+			changed = true;
+		}
+		return RE::BSContainer::ForEachResult::kContinue;
+	});
+	return changed;
+}
+
+bool multiplyContainerObjectCount(RE::TESContainer& container, RE::TESBoundObject* object, float multiplier)
+{
+	bool changed = false;
+	container.ForEachContainerObject([&](RE::ContainerObject& entry) {
+		if (!object || entry.obj == object) {
+			entry.count = static_cast<std::int32_t>(std::round(static_cast<float>(entry.count) * multiplier));
+			changed = true;
+		}
+		return RE::BSContainer::ForEachResult::kContinue;
+	});
+	return changed;
+}
+
+void setMoralityLevel(RE::TESNPC* npc, RE::ACTOR_MORALITY level)
+{
+	if (!npc) return;
+	const auto value = static_cast<std::uint8_t>(level);
+	npc->aiData.morality1 = (value & 1) != 0;
+	npc->aiData.morality2 = (value & 2) != 0;
+}
+
+void setMoodLevel(RE::TESNPC* npc, RE::ACTOR_MOOD level)
+{
+	if (!npc) return;
+	const auto value = static_cast<std::uint8_t>(level);
+	npc->aiData.mood1 = (value & 1) != 0;
+	npc->aiData.mood2 = (value & 2) != 0;
+	npc->aiData.mood3 = (value & 4) != 0;
+}
 
 RE::FIGHT_REACTION GetFightReaction(const std::string& value)
 {

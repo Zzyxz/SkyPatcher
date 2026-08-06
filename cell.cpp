@@ -82,84 +82,7 @@ namespace CELL
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-<<<<<<< HEAD
 		cellKeyTable().parse(line, &l);
-=======
-
-		extractData(line, "filterByCells\\s*=([^:]+)", l.object);
-		extractData(line, "filterByCellsExcluded\\s*=([^:]+)", l.objectExcluded);
-		extractValueString(line, "fogNear\\s*=([^:]+)", l.fogNear);
-		extractValueString(line, "fogFar\\s*=([^:]+)", l.fogFar);
-		extractValueString(line, "fogPower\\s*=([^:]+)", l.fogPower);
-		extractValueString(line, "clipDist\\s*=([^:]+)", l.clipDist);
-
-		extractValueString(line, "ambientRed\\s*=([^:]+)", l.ambientRed);
-		extractValueString(line, "ambientGreen\\s*=([^:]+)", l.ambientGreen);
-		extractValueString(line, "ambientBlue\\s*=([^:]+)", l.ambientBlue);
-
-		extractValueString(line, "directionalRed\\s*=([^:]+)", l.directionalRed);
-		extractValueString(line, "directionalGreen\\s*=([^:]+)", l.directionalGreen);
-		extractValueString(line, "directionalBlue\\s*=([^:]+)", l.directionalBlue);
-
-		extractValueString(line, "fogColorNearRed\\s*=([^:]+)", l.fogColorNearRed);
-		extractValueString(line, "fogColorNearGreen\\s*=([^:]+)", l.fogColorNearGreen);
-		extractValueString(line, "fogColorNearBlue\\s*=([^:]+)", l.fogColorNearBlue);
-
-		extractValueString(line, "directionalAmbientXMinRed\\s*=([^:]+)", l.directionalAmbientXMinRed);
-		extractValueString(line, "directionalAmbientXMinGreen\\s*=([^:]+)", l.directionalAmbientXMinGreen);
-		extractValueString(line, "directionalAmbientXMinBlue\\s*=([^:]+)", l.directionalAmbientXMinBlue);
-		extractValueString(line, "directionalAmbientXMaxRed\\s*=([^:]+)", l.directionalAmbientXMaxRed);
-		extractValueString(line, "directionalAmbientXMaxGreen\\s*=([^:]+)", l.directionalAmbientXMaxGreen);
-		extractValueString(line, "directionalAmbientXMaxBlue\\s*=([^:]+)", l.directionalAmbientXMaxBlue);
-
-		extractValueString(line, "directionalAmbientYMinRed\\s*=([^:]+)", l.directionalAmbientYMinRed);
-		extractValueString(line, "directionalAmbientYMinGreen\\s*=([^:]+)", l.directionalAmbientYMinGreen);
-		extractValueString(line, "directionalAmbientYMinBlue\\s*=([^:]+)", l.directionalAmbientYMinBlue);
-		extractValueString(line, "directionalAmbientYMaxRed\\s*=([^:]+)", l.directionalAmbientYMaxRed);
-		extractValueString(line, "directionalAmbientYMaxGreen\\s*=([^:]+)", l.directionalAmbientYMaxGreen);
-		extractValueString(line, "directionalAmbientYMaxBlue\\s*=([^:]+)", l.directionalAmbientYMaxBlue);
-
-		extractValueString(line, "directionalAmbientZMinRed\\s*=([^:]+)", l.directionalAmbientZMinRed);
-		extractValueString(line, "directionalAmbientZMinGreen\\s*=([^:]+)", l.directionalAmbientZMinGreen);
-		extractValueString(line, "directionalAmbientZMinBlue\\s*=([^:]+)", l.directionalAmbientZMinBlue);
-		extractValueString(line, "directionalAmbientZMaxRed\\s*=([^:]+)", l.directionalAmbientZMaxRed);
-		extractValueString(line, "directionalAmbientZMaxGreen\\s*=([^:]+)", l.directionalAmbientZMaxGreen);
-		extractValueString(line, "directionalAmbientZMaxBlue\\s*=([^:]+)", l.directionalAmbientZMaxBlue);
-
-		extractValueString(line, "directionalAmbientSpecularRed\\s*=([^:]+)", l.directionalAmbientSpecularRed);
-		extractValueString(line, "directionalAmbientSpecularGreen\\s*=([^:]+)", l.directionalAmbientSpecularGreen);
-		extractValueString(line, "directionalAmbientSpecularBlue\\s*=([^:]+)", l.directionalAmbientSpecularBlue);
-
-		extractDataStrings(line, "setInheritanceFlags\\s*=([^:]+)", l.setInheritanceFlags);
-		extractDataStrings(line, "removeInheritanceFlags\\s*=([^:]+)", l.removeInheritanceFlags);
-
-		extractDataStrings(line, "setCellFlags\\s*=([^:]+)", l.setCellFlags);
-		extractDataStrings(line, "removeCellFlags\\s*=([^:]+)", l.removeCellFlags);
-
-		extractValueString(line, "lightingTemplate\\s*=([^:]+)", l.lightingTemplate);
-
-		extractDataStrings(line, "skipRecordByLightingTemplateFromMod\\s*=([^:]+)", l.skipLT);
-		extractDataStrings(line, "skipRecordByModNameContains\\s*=([^:]+)", l.skipByModContains);
-
-		extractValueString(line, "acousticSpace\\s*=([^:]+)", l.acousticSpace);
-		extractValueString(line, "musicType\\s*=([^:]+)", l.musicType);
-		extractValueString(line, "skyRegion\\s*=([^:]+)", l.skyRegion);
-		extractValueString(line, "imageSpace\\s*=([^:]+)", l.imageSpace);
-
-		extractData(line, "filterByAcousticSpace\\s*=([^:]+)", l.filterByAcousticSpace);
-		extractData(line, "filterByLocations\\s*=([^:]+)", l.filterByLocation);
-		extractData(line, "filterByMusicType\\s*=([^:]+)", l.filterByMusicType);
-		extractData(line, "filterBySkyRegion\\s*=([^:]+)", l.filterBySkyRegion);
-		extractData(line, "filterByImageSpace\\s*=([^:]+)", l.filterByImageSpace);
-		extractValueString(line, "encounterZone\\s*=([^:]+)", l.encounterZone);
-		extractValueString(line, "waterHeight\\s*=([^:]+)", l.waterHeight);
-		extractValueString(line, "waterType\\s*=([^:]+)", l.waterType);
-		extractValueString(line, "location\\s*=([^:]+)", l.location);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-
-		extractValueString(line, "directionalXY\\s*=([^:]+)", l.directionalXY);
-		extractValueString(line, "directionalZ\\s*=([^:]+)", l.directionalZ);
->>>>>>> origin/new-main
 
 		return l;
 	}
@@ -168,11 +91,7 @@ namespace CELL
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectCELL>();
-=======
-		const auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectCELL>();
->>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			const formfilter::CommonFilterView view{
@@ -412,11 +331,7 @@ namespace CELL
 		}
 	}
 
-<<<<<<< HEAD
 	void* patch(const CELL::patch_instruction& line, RE::TESObjectCELL* curobj)
-=======
-	void* patch(const CELL::patch_instruction& line, RE::TESObjectCELL* curobj)
->>>>>>> origin/new-main
 	{
 
 

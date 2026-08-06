@@ -46,11 +46,7 @@ namespace CONTAINER
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectCONT>();
-=======
-		const auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectCONT>();
->>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 
@@ -227,11 +223,7 @@ namespace CONTAINER
 
 
 
-<<<<<<< HEAD
 	void patchContainer(const CONTAINER::line_content& line, RE::TESObjectCONT* curobj)
-=======
-	void patchContainer(const CONTAINER::line_content& line, RE::TESObjectCONT* curobj)
->>>>>>> origin/new-main
 	{
 
 
@@ -376,7 +368,7 @@ namespace CONTAINER
 				int          count = 0;
 				RE::TESForm* formToReplace = GetFormFromIdentifier(formToReplaceString);
 				if (formToReplace && formToReplace->IsBoundObject() && curobj->CountObjectsInContainer(formToReplace->As<RE::TESBoundObject>()) > 0) {
-					count = curobj->MultObjectCountInContainer(formToReplace->As<RE::TESBoundObject>(), multiplier);
+					count = multiplyContainerObjectCount(*curobj, formToReplace->As<RE::TESBoundObject>(), multiplier);
 					logger::debug(FMT_STRING("container {:08X} all matching forms of {:08X} have their count multiplied by {}"), curobj->formID, formToReplace->formID, multiplier, count);
 				}
 			}
@@ -395,7 +387,7 @@ namespace CONTAINER
 				RE::TESBoundObject* newObject = (RE::TESBoundObject*)GetFormFromIdentifier(object2);
 
 				if (oldObject && newObject) {
-					curobj->ReplaceObjectInContainer(oldObject, newObject);
+				replaceObjectInContainer(*curobj, oldObject, newObject);
 					logger::debug(FMT_STRING("container formid: {:08X} replaced Form {:08X} with Form {:08X} "), curobj->formID, oldObject->formID, newObject->formID);
 				}
 			}
@@ -408,11 +400,7 @@ namespace CONTAINER
 	}
 
 
-<<<<<<< HEAD
 	bool findObject(const line_content& line, const formfilter::CommonFilterView& view, RE::TESObjectCONT* curobj)
-=======
-	bool findObject(const line_content& line, RE::TESObjectCONT* curobj)
->>>>>>> origin/new-main
 	{
 		bool found = false;
 		bool contains = false;

@@ -29,23 +29,7 @@ namespace FACTION
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-<<<<<<< HEAD
 		factionKeyTable().parse(line, &l);
-=======
-
-		extractData(line, "filterByFactions\\s*=([^:]+)", l.object);
-
-		extractData(line, "filterByFactionsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-
-		extractToArr2D(line, "relationshipToAdd\\s*=([^:]+)", l.rsAdd);
-		extractToArr2D(line, "relationshipToChange\\s*=([^:]+)", l.rsChange);
-		extractData(line, "relationshipToRemove\\s*=([^:]+)", l.rsRemove);
-
->>>>>>> origin/new-main
 		return l;
 	}
 
@@ -53,11 +37,7 @@ namespace FACTION
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESFaction>();
-=======
-		const auto& ObjectArray = dataHandler->GetFormArray<RE::TESFaction>();
->>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -190,11 +170,7 @@ namespace FACTION
 		}
 	}
 
-<<<<<<< HEAD
 	void* patch(const FACTION::patch_instruction& line, RE::TESFaction* curobj)
-=======
-	void* patch(const FACTION::patch_instruction& line, RE::TESFaction* curobj)
->>>>>>> origin/new-main
 	{
 
 

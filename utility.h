@@ -46,12 +46,12 @@ bool                             findTextureSet(RE::TESModelTextureSwap* curobj,
 RE::TESClass*                    copyClass(RE::TESClass* aobj);
 RE::BGSKeyword*					 createKeyword();
 std::string                      normalizePath(const std::string& path);
-<<<<<<< HEAD
-
-=======
-std::string                      toHex(const std::string& str);
-RE::TESObjectREFR*               createREFR();
 RE::FIGHT_REACTION               GetFightReaction(const std::string& value);
->>>>>>> origin/new-main
+bool                              replaceObjectInContainer(RE::TESContainer& container, RE::TESBoundObject* oldObject, RE::TESBoundObject* newObject);
+bool                              changeContainerObjectCount(RE::TESContainer& container, RE::TESBoundObject* object, std::int32_t count);
+bool                              multiplyContainerObjectCount(RE::TESContainer& container, RE::TESBoundObject* object, float multiplier);
+void                              setMoralityLevel(RE::TESNPC* npc, RE::ACTOR_MORALITY level);
+void                              setMoodLevel(RE::TESNPC* npc, RE::ACTOR_MOOD level);
+
 
 #endif

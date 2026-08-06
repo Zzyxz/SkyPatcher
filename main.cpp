@@ -218,18 +218,7 @@ public:
 		}
 	}
 
-<<<<<<< HEAD
-	void updateNPCVisualsController(RE::Actor* a_this)
-=======
-	void updateREFRAndDisable(RE::FormID refrID)
-	{
-		if (auto* refr = lookupReference(refrID)) {
-			refr->Disable();
-		}
-	}
-
 	void updateNPCVisualsController(RE::FormID actorID)
->>>>>>> origin/new-main
 	{
 		updateNPCVisuals(actorID);
 	}
@@ -239,14 +228,6 @@ public:
 		updateNPCVisualsByEnable(actorID);
 	}
 
-<<<<<<< HEAD
-=======
-	void disableREFR(RE::FormID refrID)
-	{
-		updateREFRAndDisable(refrID);
-	}
-
->>>>>>> origin/new-main
 	void startUpdate(RE::Actor* a_this)
 	{
 		if (!a_this) {
@@ -259,21 +240,6 @@ public:
 			});
 	}
 
-<<<<<<< HEAD
-=======
-	void disableAndUpdate(RE::TESObjectREFR* a_this)
-	{
-		if (!a_this) {
-			return;
-		}
-		const auto refrID = a_this->formID;
-		SKSE::GetTaskInterface()->AddTask([this, refrID]() {
-			std::jthread t(&UpdateClass::disableREFR, this, refrID);
-			t.detach();
-			});
-	}
-
->>>>>>> origin/new-main
 	void startUpdateByEnable(RE::Actor* a_this)
 	{
 		if (!a_this) {

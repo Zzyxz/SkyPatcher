@@ -100,13 +100,8 @@ namespace RACE
 	void                     process_patch_instructions(const std::list<patch_instruction>& tokens);
 	void*                    readConfig(const std::string& folder);
 	void*                    readConfigHook(const std::string& folder);
-<<<<<<< HEAD
 	void					 patch(const RACE::patch_instruction& line, RE::TESRace* curobj);
 	void                     hookpatch(const RACE::patch_instruction& line, RE::TESRace* curobj);
-=======
-	void					 patch(const RACE::patch_instruction& line, RE::TESRace* curobj);
-	void                     hookpatch(const RACE::patch_instruction& line, RE::TESRace* curobj);
->>>>>>> origin/new-main
 }
 
 #endif

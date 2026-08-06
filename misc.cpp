@@ -56,11 +56,7 @@ namespace MISC
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectMISC>();
-=======
-		const auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectMISC>();
->>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -248,11 +244,7 @@ namespace MISC
 		}
 	}
 
-<<<<<<< HEAD
 	void* patch(const MISC::patch_instruction& line, RE::TESObjectMISC* curobj)
-=======
-	void* patch(const MISC::patch_instruction& line, RE::TESObjectMISC* curobj)
->>>>>>> origin/new-main
 	{
 		
 		if (!line.weight.empty() && line.weight != "none") {

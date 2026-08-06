@@ -248,11 +248,7 @@ namespace SPELL
 	{
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& objectSpellArray = dataHandler->GetFormArray<RE::SpellItem>();
-=======
-		const auto& objectSpellArray = dataHandler->GetFormArray<RE::SpellItem>();
->>>>>>> origin/new-main
 		for (const auto& line : tokens) {
 
 
@@ -529,11 +525,7 @@ namespace SPELL
 
 	
 
-<<<<<<< HEAD
 	void patch(const SPELL::line_content& line, RE::SpellItem* curobj) {
-=======
-	void patch(const SPELL::line_content& line, RE::SpellItem* curobj) {
->>>>>>> origin/new-main
 		if (!line.keywordsToAdd.empty()) {
 			for (size_t i = 0; i < line.keywordsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;

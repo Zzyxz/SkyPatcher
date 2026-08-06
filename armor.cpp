@@ -288,107 +288,7 @@ namespace ARMOR
 	struct patch_instruction_armor create_patch_instruction_armor(const std::string& line)
 	{
 		patch_instruction_armor l;
-<<<<<<< HEAD
 		armorKeyTable().parse(line, &l);
-=======
-
-		extractData(line, "filterByArmors\\s*=([^:]+)", l.object);
-
-		extractData(line, "filterByArmorsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-		extractValueString(line, "mirrorArmor\\s*=([^:]+)", l.mirrorArmor);
-		extractValueString(line, "damageResist\\s*=([^:]+)", l.damageResist);
-		extractValueString(line, "damageResistMatch\\s*=([^:]+)", l.damageResistMatch);
-
-		extractValueString(line, "damageResistMultiply\\s*=([^:]+)", l.damageResistMult);
-
-		extractValueString(line, "health\\s*=([^:]+)", l.health);
-
-		extractValueString(line, "objectEffect\\s*=([^:]+)", l.objectEffect);
-
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-
-		extractDataStrings(line, "filterByBipedSlots\\s*=([^:]+)", l.bipedSlot);
-
-		extractDataStrings(line, "filterByBipedSlotsOr\\s*=([^:]+)", l.bipedSlotOr);
-
-		extractDataStrings(line, "filterByBipedSlotsExcluded\\s*=([^:]+)", l.bipedSlotExcluded);
-
-		extractDataStrings(line, "bipedSlotsToAdd\\s*=([^:]+)", l.setBipedSlot);
-
-		extractDataStrings(line, "bipedSlotsToRemove\\s*=([^:]+)", l.removeBipedSlot);
-
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-
-		extractValueString(line, "modelFemale\\s*=([^:]+)", l.modelFemale);
-		extractValueString(line, "modelMale\\s*=([^:]+)", l.modelMale);
-		extractValueString(line, "value\\s*=([^:]+)", l.value);
-		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
-		extractValueString(line, "armorType\\s*=([^:]+)", l.armorType);
-		
-
-		extractValueString(line, "pickUpSound\\s*=([^:]+)", l.pickUpSound);
-		extractValueString(line, "putDownSound\\s*=([^:]+)", l.putDownSound);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractDataStrings(line, "filterByArmorTypes\\s*=([^:]+)", l.filterByArmorType);
-		extractDataStrings(line, "filterByArmorTypesExcluded\\s*=([^:]+)", l.filterByArmorTypeExcluded);
-		extractValueString(line, "altBlockMaterialType\\s*=([^:]+)", l.altBlockMaterialType);
-		extractValueString(line, "blockBashImpactDataSet\\s*=([^:]+)", l.blockBashImpactDataSet);
-		extractValueString(line, "equipSlot\\s*=([^:]+)", l.equipSlot);
-		extractValueString(line, "enchantAmount\\s*=([^:]+)", l.enchantAmount);
-
-		extractDataStrings(line, "filterByNameContains\\s*=([^:]+)", l.filterByNameContains);
-		extractDataStrings(line, "filterByNameContainsOr\\s*=([^:]+)", l.filterByNameContainsOr);
-		extractDataStrings(line, "filterByNameContainsExcluded\\s*=([^:]+)", l.filterByNameContainsExcluded);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-		extractToArr2D(line, "reCalcArmorRating\\s*=([^:]+)", l.reCalcArmorRating);
-		extractToArr2D(line, "reCalcArmorRatingv2\\s*=([^:]+)", l.reCalcArmorRatingv2);
-		
-		
-		extractDataStrings(line, "filterByArmorAddons\\s*=([^:]+)", l.filterByArmorAddons);
-		extractDataStrings(line, "filterByArmorAddonsOr\\s*=([^:]+)", l.filterByArmorAddonsOr);
-		extractDataStrings(line, "filterByArmorAddonsExcluded\\s*=([^:]+)", l.filterByArmorAddonsExcluded);
-		
-		extractData(line, "armorAddonsToAdd\\s*=([^:]+)", l.armorAddonToAdd);
-		extractData(line, "armorAddonsToRemove\\s*=([^:]+)", l.armorAddonToRemove);
-		extractValueString(line, "clearArmorAddons\\s*=([^:]+)", l.clearArmorAddons);
-		
-		extractValueString(line, "templateArmor\\s*=([^:]+)", l.templateArmor);
-		
-		extractValueString(line, "minX\\s*=([^:]+)", l.minX);
-		extractValueString(line, "minY\\s*=([^:]+)", l.minY);
-		extractValueString(line, "minZ\\s*=([^:]+)", l.minZ);
-		extractValueString(line, "maxX\\s*=([^:]+)", l.maxX);
-		extractValueString(line, "maxY\\s*=([^:]+)", l.maxY);
-		extractValueString(line, "maxZ\\s*=([^:]+)", l.maxZ);
-
-		extractValueString(line, "valueMatch\\s*=([^:]+)", l.valueMatch);
-		extractValueString(line, "dwMatch\\s*=([^:]+)", l.dwMatch);
-		extractValueString(line, "modelMatch\\s*=([^:]+)", l.modelMatch);
-
-		extractDataStrings(line, "hasPlugins\\s*=([^:]+)", l.hasPlugin);
-		extractDataStrings(line, "hasPluginsOr\\s*=([^:]+)", l.hasPluginOr);
-
-		extractToArr2D(line, "armaRaceToAdd\\s*=([^:]+)", l.armaRaceToAdd);
-
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-
-		extractData(line, "restrictToKeywords\\s*=([^:]+)", l.restrictKeywords);
-		extractData(line, "restrictToBipedSlots\\s*=([^:]+)", l.restrictSlots);
-
->>>>>>> origin/new-main
 		return l;
 	}
 
@@ -397,7 +297,6 @@ namespace ARMOR
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& ArmorArray = dataHandler->GetFormArray<RE::TESObjectARMO>();
 
 		formfilter::FormSignalIndex index;
@@ -406,9 +305,6 @@ namespace ARMOR
 		std::vector<std::uint64_t>  keys;
 		std::vector<std::uint32_t>  candidates;
 
-=======
-		const auto& ArmorArray = dataHandler->GetFormArray<RE::TESObjectARMO>();
->>>>>>> origin/new-main
 		for (const auto& line : tokens) {
 			indexStale = indexStale || armorRuleInvalidatesIndex(line);
 
@@ -545,7 +441,6 @@ namespace ARMOR
 		}
 	}
 
-<<<<<<< HEAD
 	namespace
 	{
 		using formfilter::ActionRow;
@@ -565,9 +460,6 @@ namespace ARMOR
 	}
 
 	void* patch(const ARMOR::patch_instruction_armor& line, RE::TESObjectARMO* curobj)
-=======
-	void* patch(const ARMOR::patch_instruction_armor& line, RE::TESObjectARMO* curobj)
->>>>>>> origin/new-main
 	{
 
 		if (!line.mirrorArmor.empty() && line.mirrorArmor != "none") {

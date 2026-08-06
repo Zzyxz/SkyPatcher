@@ -37,9 +37,6 @@ namespace REFERENCE
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
 		logger::debug("processing patch instructions");
-<<<<<<< HEAD
-=======
->>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.objects.empty()) {
@@ -122,11 +119,7 @@ namespace REFERENCE
 		return rData;
 	}
 
-<<<<<<< HEAD
 	void* patch(const REFERENCE::patch_instruction& line, RE::FormID curobj)
-=======
-	void* patch(const REFERENCE::patch_instruction& line, RE::FormID curobj)
->>>>>>> origin/new-main
 	{
 		if (!line.baseobject.empty() && line.baseobject != "none") {
 

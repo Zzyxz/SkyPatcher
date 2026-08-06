@@ -259,104 +259,7 @@ namespace WEAPON
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
-<<<<<<< HEAD
 		weaponKeyTable().parse(line, &l);
-=======
-
-
-		extractData(line, "filterByWeapons\\s*=([^:]+)", l.object);
-
-		extractDataStrings(line, "filterBySkills\\s*=([^:]+)", l.embeddedAVs);
-
-		extractDataStrings(line, "restrictToFlags\\s*=([^:]+)", l.filterByWFlags);
-		extractDataStrings(line, "restrictToSkills\\s*=([^:]+)", l.restrictToSkill);
-
-		extractData(line, "filterByWeaponsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-
-		extractValueString(line, "attackDamage\\s*=([^:]+)", l.attackDamage);
-		extractValueString(line, "attackDamageToAdd\\s*=([^:]+)", l.attackDamageToAdd);
-
-
-		extractValueString(line, "critDamageToAdd\\s*=([^:]+)", l.critDamageToAdd);
-		extractValueString(line, "critDamageSetToBase\\s*=([^:]+)", l.critDamageSetToBase);
-		extractValueString(line, "critDamageMult\\s*=([^:]+)", l.critDamageMult);
-		extractValueString(line, "critPercentMult\\s*=([^:]+)", l.critPercentMult);
-		extractValueString(line, "critDamage\\s*=([^:]+)", l.critDamage);
-
-		extractValueString(line, "model\\s*=([^:]+)", l.model);
-		extractValueString(line, "mirrorWeapon\\s*=([^:]+)", l.mirrorWeapon);
-		extractValueString(line, "speed\\s*=([^:]+)", l.speed);
-		extractValueString(line, "speedMult\\s*=([^:]+)", l.speedMult);
-		extractValueString(line, "reach\\s*=([^:]+)", l.reach);
-		extractValueString(line, "rangeMin\\s*=([^:]+)", l.rangeMin);
-		extractValueString(line, "rangeMax\\s*=([^:]+)", l.rangeMax);
-		extractValueString(line, "stagger\\s*=([^:]+)", l.stagger);
-
-		extractValueString(line, "impactDataSet\\s*=([^:]+)", l.impactDataSet);
-		extractValueString(line, "equipSound\\s*=([^:]+)", l.equipSound);
-		extractValueString(line, "unequipSound\\s*=([^:]+)", l.unequipSound);
-		extractValueString(line, "attackFailSound\\s*=([^:]+)", l.failSound);
-		extractValueString(line, "soundLevel\\s*=([^:]+)", l.soundlevel);
-		
-
-		extractValueString(line, "attackDamageMult\\s*=([^:]+)", l.attackDamageMult);
-		extractValueString(line, "attackDamageMatch\\s*=([^:]+)", l.attackDamageMatch);
-		extractValueString(line, "modelFirstPerson\\s*=([^:]+)", l.modelFirstPerson);
-		extractValueString(line, "value\\s*=([^:]+)", l.value);
-		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
-		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
-		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
-		extractValueString(line, "objectEffect\\s*=([^:]+)", l.objectEffect);
-		extractValueString(line, "templateWeapon\\s*=([^:]+)", l.templateWeapon);
-		extractValueString(line, "altBlockMaterialType\\s*=([^:]+)", l.altBlockMaterialType);
-		extractValueString(line, "blockBashImpactDataSet\\s*=([^:]+)", l.blockBashImpactDataSet);
-		extractValueString(line, "equipSlot\\s*=([^:]+)", l.equipSlot);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
-		extractValueString(line, "enchantAmount\\s*=([^:]+)", l.enchantAmount);
-
-		extractDataStrings(line, "filterByAnimationTypeOr\\s*=([^:]+)", l.filterAnimationTypeOr);
-		extractDataStrings(line, "animationType\\s*=([^:]+)", l.setAnimationType);
-		extractDataStrings(line, "skillType\\s*=([^:]+)", l.setSkillType);
-
-		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
-		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
-
-		extractValueString(line, "minX\\s*=([^:]+)", l.minX);
-		extractValueString(line, "minY\\s*=([^:]+)", l.minY);
-		extractValueString(line, "minZ\\s*=([^:]+)", l.minZ);
-		extractValueString(line, "maxX\\s*=([^:]+)", l.maxX);
-		extractValueString(line, "maxY\\s*=([^:]+)", l.maxY);
-		extractValueString(line, "maxZ\\s*=([^:]+)", l.maxZ);
-
-		extractValueString(line, "acswMatch\\s*=([^:]+)", l.acswMatch);
-
-		extractDataStrings(line, "hasPlugins\\s*=([^:]+)", l.hasPlugin);
-		extractDataStrings(line, "hasPluginsOr\\s*=([^:]+)", l.hasPluginOr);
-
-		extractData(line, "filterByFirstPersonModelOr\\s*=([^:]+)", l.filterByFirstPersonModelOr);
-		extractValueString(line, "dwMatch\\s*=([^:]+)", l.dwMatch);
-
-		extractValueString(line, "soundLevel\\s*=([^:]+)", l.soundlevel);
-		extractValueString(line, "weaponHitType\\s*=([^:]+)", l.hittype);
-
-		extractValueString(line, "valueMatch\\s*=([^:]+)", l.valueMatch);
-
->>>>>>> origin/new-main
 		return l;
 	}
 
@@ -365,7 +268,6 @@ namespace WEAPON
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectWEAP>();
 
 		formfilter::FormSignalIndex index;
@@ -373,9 +275,6 @@ namespace WEAPON
 		bool                        indexStale = false;
 		std::vector<std::uint64_t>  keys;
 		std::vector<std::uint32_t>  candidates;
-=======
-		const auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectWEAP>();
->>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			indexStale = indexStale || weaponRuleInvalidatesIndex(line);
@@ -437,273 +336,10 @@ namespace WEAPON
 					continue;
 				}
 
-<<<<<<< HEAD
 				target.form = curobj;
 				target.kf = static_cast<const RE::BGSKeywordForm*>(curobj);
 				target.weapon = curobj;
 				if (formfilter::runProgram(program, target, scratch)) {
-=======
-				if (!line.hasPlugin.empty()) {
-					bool isPluginMissing = false;
-					for (auto const modName : line.hasPlugin) {
-						if (!IsPluginInstalled(modName.c_str())) {
-							isPluginMissing = true;
-						}
-					}
-					if (isPluginMissing) {
-						continue;
-					}
-				}
-
-				if (!line.hasPluginOr.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.hasPluginOr) {
-						if (IsPluginInstalled(modName.c_str())) {
-							modFound = true;
-						}
-					}
-					if (modFound == false) {
-						continue;
-					}
-				}
-
-				
-
-				if (!line.filterAnimationTypeOr.empty()) {
-					for (const auto& setFlag : line.filterAnimationTypeOr) {
-						if (toLowerCase(setFlag) == "handtohandmelee" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kHandToHandMelee) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "onehandsword" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kOneHandSword) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "onehanddagger" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kOneHandDagger) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "onehandaxe" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kOneHandAxe) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "onehandmace" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kOneHandMace) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "twohandsword" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kTwoHandSword) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "twohandaxe" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kTwoHandAxe) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "bow" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kBow) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "staff" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kStaff) {
-							found = true;
-							break;
-						} else if (toLowerCase(setFlag) == "crossbow" && curobj->weaponData.animationType == RE::WEAPON_TYPE::kCrossbow) {
-							found = true;
-							break;
-						} else {
-						}
-					}
-				}
-
-				if (!line.filterByFirstPersonModelOr.empty()) {
-					for (const auto& keywordstring : line.filterByFirstPersonModelOr) {
-						RE::TESForm*       currentform = nullptr;
-						RE::TESObjectSTAT* fpmodel = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Static) {
-							fpmodel = (RE::TESObjectSTAT*)currentform;
-
-							if (curobj->firstPersonModelObject && curobj->firstPersonModelObject->formID == fpmodel->formID) {
-								found = true;
-								break;
-							}
-						}
-					}
-				}
-
-				if (!line.embeddedAVs.empty()) {
-					for (auto string : line.embeddedAVs) {
-						string = toLowerCase(string);
-						if (string == "onehanded" && curobj->weaponData.skill == RE::ActorValue::kOneHanded) {
-							found = true;
-							break;
-						} else if (string == "twohanded" && curobj->weaponData.skill == RE::ActorValue::kTwoHanded) {
-							found = true;
-							break;
-						} else if (string == "marksman" && curobj->weaponData.skill == RE::ActorValue::kArchery) {
-							found = true;
-							break;
-						} else if (string == "destruction" && curobj->weaponData.skill == RE::ActorValue::kDestruction) {
-							found = true;
-							break;
-						} else if (string == "illusion" && curobj->weaponData.skill == RE::ActorValue::kIllusion) {
-							found = true;
-							break;
-						} else if (string == "conjuration" && curobj->weaponData.skill == RE::ActorValue::kConjuration) {
-							found = true;
-							break;
-						} else if (string == "alteration" && curobj->weaponData.skill == RE::ActorValue::kAlteration) {
-							found = true;
-							break;
-						} else if (string == "restoration" && curobj->weaponData.skill == RE::ActorValue::kRestoration) {
-							found = true;
-							break;
-						}
-					}
-				}
-
-				if (!found && !line.filterByEditorIdContains.empty()) {
-					for (const auto& editorString : line.filterByEditorIdContains) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							contains = true;
-						} else {
-							contains = false;
-							break;
-						}
-					}
-				} else {
-					contains = true;
-				}
-
-				if (!found && !line.filterByEditorIdContainsOr.empty()) {
-					for (const auto& editorString : line.filterByEditorIdContainsOr) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							containsOr = true;
-							break;
-						}
-					}
-				} else {
-					containsOr = true;
-				}
-
-				if (!found && (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty()) && contains && containsOr) {
-					found = true;
-				}
-
-				
-				if (!line.keywords.empty()) {
-					for (const auto& keywordstring : line.keywords) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordAnd = true;
-							} else {
-								keywordAnd = false;
-								break;
-							}
-						}
-					}
-				} else {
-					keywordAnd = true;
-				}
-				if (!line.keywordsOr.empty()) {
-					for (const auto& keywordstring : line.keywordsOr) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								keywordOr = true;
-								break;
-							}
-						}
-					}
-				} else {
-					keywordOr = true;
-				}
-
-				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
-					found = true;
-				}
-
-
-				if (line.object.empty() && line.keywords.empty() && line.filterByWFlags.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.embeddedAVs.empty() && line.filterAnimationTypeOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
-					found = true;
-				}
-
-				if (!line.keywordsExcluded.empty() && found ) {
-					for (const auto& keywordstring : line.keywordsExcluded) {
-						RE::TESForm*    currentform = nullptr;
-						RE::BGSKeyword* keyword = nullptr;
-
-						std::string string_form = keywordstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Keyword) {
-							keyword = (RE::BGSKeyword*)currentform;
-
-							if (curobj->HasKeyword(keyword)) {
-								found = false;
-								break;
-							}
-						}
-					}
-				}
-
-				if (!line.objectExcluded.empty() && found) {
-					for (const auto& npcstring : line.objectExcluded) {
-						RE::TESForm*       currentform = nullptr;
-						RE::TESObjectWEAP* npc = nullptr;
-
-						std::string string_form = npcstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Weapon) {
-							npc = (RE::TESObjectWEAP*)currentform;
-
-							if (curobj->formID == npc->formID) {
-								found = false;
-								break;
-							}
-						}
-					}
-				}
-
-				if (!line.filterByEditorIdContainsExcluded.empty() && found) {
-					for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
-						if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
-							found = false;
-							break;
-						}
-					}
-				}
-
-				if (found && !line.filterByWFlags.empty()) {
-					for (auto string : line.filterByWFlags) {
-						string = toLowerCase(string);
-						if (string == "boundweapon" && curobj->weaponData.flags2 & RE::TESObjectWEAP::Data::Flag2::kBoundWeapon) {
-							break;
-						} else {
-							found = false;
-						}
-					}
-				}
-
-				if (found && !line.restrictToSkill.empty()) {
-					bool foundType = false;
-					for (auto string : line.restrictToSkill) {
-						string = toLowerCase(string);
-						if (curobj->weaponData.skill == StringToActorValue(string)) {
-							foundType = true;
-						}
-					}
-					if (!foundType)
-						found = false;
-				}
-				
-				if (found) {
->>>>>>> origin/new-main
 					patch(line, curobj);
 				}
 			}
@@ -776,11 +412,7 @@ namespace WEAPON
 		}
 	}
 
-<<<<<<< HEAD
 	namespace
-=======
-	void* patch(const WEAPON::patch_instruction& line, RE::TESObjectWEAP* curobj)
->>>>>>> origin/new-main
 	{
 		using formfilter::ActionRow;
 

@@ -55,11 +55,7 @@ namespace PROJECTILE
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSProjectile>();
-=======
-		const auto& ObjectArray = dataHandler->GetFormArray<RE::BGSProjectile>();
->>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -139,11 +135,7 @@ namespace PROJECTILE
 		}
 	}
 
-<<<<<<< HEAD
 	void patch(const PROJECTILE::patch_instruction& line, RE::BGSProjectile* curobj)
-=======
-	void patch(const PROJECTILE::patch_instruction& line, RE::BGSProjectile* curobj)
->>>>>>> origin/new-main
 	{
 
 		if (!line.speed.empty() && line.speed != "none") {

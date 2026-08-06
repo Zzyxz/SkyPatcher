@@ -107,114 +107,10 @@ namespace RACE
 		patch_instruction l;
 		raceKeyTable().parse(line, &l);
 
-<<<<<<< HEAD
 		extractValueString(line, "startingHealthMult\\s*= ([^:]+)", l.startingHealthMult);
 		extractValueString(line, "startingStaminaMult\\s*= ([^:]+)", l.startingStaminaMult);
 		extractValueString(line, "startingMagickaMult\\s*= ([^:]+)", l.startingMagickaMult);
 
-=======
-		extractData(line, "filterByRaces\\s*=([^:]+)", l.object);
-
-		extractData(line, "filterByRacesExcluded\\s*=([^:]+)", l.objectExcluded);
-
-		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
-
-		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
-		extractData(line, "filterByVoiceTypeOr\\s*=([^:]+)", l.filterByVoiceTypeOr);
-
-		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
-
-		std::regex  avifs_regex("changeStats\\s*=([^:]+)", regex::icase);
-		std::smatch avifs_match;
-		std::regex_search(line, avifs_match, avifs_regex);
-		std::vector<std::string> avifs_before_eq;
-		std::vector<float>       avifs_min_values;
-		std::vector<float>       avifs_max_values;
-		if (avifs_match.empty() || avifs_match[1].str().empty()) {
-		} else {
-			std::string          avifs_str = avifs_match[1];
-			std::regex           avifs_list_regex("([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", regex::icase);
-			std::sregex_iterator avifs_iterator(avifs_str.begin(), avifs_str.end(), avifs_list_regex);
-			std::sregex_iterator avifs_end;
-			while (avifs_iterator != avifs_end) {
-				std::string avif = (*avifs_iterator)[1].str();
-				avif.erase(avif.begin(), std::find_if_not(avif.begin(), avif.end(), ::isspace));
-				avif.erase(std::find_if_not(avif.rbegin(), avif.rend(), ::isspace).base(), avif.end());
-
-				if (avif == "none") {
-					break;
-				}
-
-				avifs_before_eq.push_back(avif);
-				avifs_min_values.push_back(std::stof((*avifs_iterator)[2]));
-				if ((*avifs_iterator)[3] != "") {
-					avifs_max_values.push_back(std::stof((*avifs_iterator)[3]));
-				} else {
-					avifs_max_values.push_back(std::stof((*avifs_iterator)[2]));
-				}
-				std::string val1 = ((*avifs_iterator)[2]);
-				std::string val2 = ((*avifs_iterator)[3] != "") ? ((*avifs_iterator)[3]) : ((*avifs_iterator)[2]);
-				++avifs_iterator;
-			}
-			l.avifs = avifs_before_eq;
-			l.values1 = avifs_min_values;
-			l.values2 = avifs_max_values;
-		}
-
-
-		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
-
-		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
-
-		extractDataStrings(line, "filterByMaleModelContains\\s*=([^:]+)", l.filterByMaleModelContains);
-		extractDataStrings(line, "filterByFemaleModelContains\\s*=([^:]+)", l.filterByFemaleModelContains);
-		extractToArr2D(line, "keywordToAddIfKeywordsEIDDoesNotContain\\s*=([^:]+)", l.keywordsToAddIfKeywordsEIDDoNotContain);
-		
-		extractData(line, "spellsToAdd\\s*=([^:]+)", l.spellsToAdd);
-		extractData(line, "spellsToRemove\\s*=([^:]+)", l.spellsToRemove);
-		extractData(line, "shoutsToAdd\\s*=([^:]+)", l.shoutsToAdd);
-		extractData(line, "shoutsToRemove\\s*=([^:]+)", l.shoutsToRemove);
-		extractData(line, "levSpellsToAdd\\s*=([^:]+)", l.levSpellsToAdd);
-		extractData(line, "levSpellsToRemove\\s*=([^:]+)", l.levSpellsToRemove);
-		extractValueString(line, "baseMass\\s*=([^:]+)", l.baseMass);
-		extractValueString(line, "baseCarryweight\\s*=([^:]+)", l.baseCarryweight);
-		extractValueString(line, "skin\\s*=([^:]+)", l.skin);
-		extractValueString(line, "startingHealth\\s*=([^:]+)", l.startingHealth);
-		extractValueString(line, "startingStamina\\s*=([^:]+)", l.startingStamina);
-		extractValueString(line, "startingMagicka\\s*=([^:]+)", l.startingMagicka);
-		extractValueString(line, "regenHealth\\s*=([^:]+)", l.regenHealth);
-		extractValueString(line, "regenStamina\\s*=([^:]+)", l.regenStamina);
-		extractValueString(line, "regenMagicka\\s*=([^:]+)", l.regenMagicka);
-		extractValueString(line, "damageUnarmed\\s*=([^:]+)", l.damageUnarmed);
-		extractValueString(line, "reachUnarmed\\s*=([^:]+)", l.reachUnarmed);
-
-		extractValueString(line, "baseMassMult\\s*=([^:]+)", l.baseMassMult);
-		extractValueString(line, "baseCarryweightMult\\s*=([^:]+)", l.baseCarryweightMult);
-		extractValueString(line, "startingHealthMult\\s*= ([^:]+)", l.startingHealthMult);
-		extractValueString(line, "startingStaminaMult\\s*= ([^:]+)", l.startingStaminaMult);
-		extractValueString(line, "startingMagickaMult\\s*= ([^:]+)", l.startingMagickaMult);
-		extractValueString(line, "regenHealthMult\\s*=([^:]+)", l.regenHealthMult);
-		extractValueString(line, "regenStaminaMult\\s*=([^:]+)", l.regenStaminaMult);
-		extractValueString(line, "regenMagickaMult\\s*=([^:]+)", l.regenMagickaMult);
-		extractValueString(line, "damageUnarmedMult\\s*=([^:]+)", l.damageUnarmedMult);
-		extractValueString(line, "reachUnarmedMult\\s*=([^:]+)", l.reachUnarmedMult);
-
-		extractValueString(line, "weightMale\\s*=([^:]+)", l.weightMale);
-		extractValueString(line, "weightFemale\\s*=([^:]+)", l.weightFemale);
-		extractValueString(line, "heightMale\\s*=([^:]+)", l.heightMale);
-		extractValueString(line, "heightFemale\\s*=([^:]+)", l.heightFemale);
-		extractValueString(line, "heightFemale\\s*=([^:]+)", l.heightFemale);
-		extractValueString(line, "accelerationRate\\s*=([^:]+)", l.rateAcceleration);
-		extractValueString(line, "decelerationRate\\s*=([^:]+)", l.rateDeceleration);
-		extractValueString(line, "accelerationAngularRate\\s*=([^:]+)", l.angularAccelerationRate);
-		extractValueString(line, "aimAngleTolerance\\s*=([^:]+)", l.aimAngleTolerance);
-		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
-		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
-		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
-		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
-		extractValueString(line, "voiceTypeFemale\\s*=([^:]+)", l.voiceTypeFemale);
-		extractValueString(line, "voiceTypeMale\\s*=([^:]+)", l.voiceTypeMale);
->>>>>>> origin/new-main
 		logger::debug(FMT_STRING("races: {}  keywords: {}  avifs: {} keywordsToAdd: {} spellsToAdd {}"), l.object.size(), l.keywords.size(), l.avifs.size(), l.keywordsToAdd.size(), l.spellsToAdd.size());
 		return l;
 	}
@@ -309,11 +205,7 @@ namespace RACE
 	{
 		logger::debug("processing patch instructions");
 		const auto                 dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& RaceArray = dataHandler->GetFormArray<RE::TESRace>();
-=======
-		const auto& RaceArray = dataHandler->GetFormArray<RE::TESRace>();
->>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -426,11 +318,7 @@ namespace RACE
 		}
 	}
 
-<<<<<<< HEAD
 	void hookpatch(const RACE::patch_instruction& line, RE::TESRace* curobj)
-=======
-	void hookpatch(const RACE::patch_instruction& line, RE::TESRace* curobj)
->>>>>>> origin/new-main
 	{
 		if (!line.addedObjects.empty()) {
 			RE::BGSAttackData* newAttackData = RE::BGSAttackData::Create();
@@ -727,11 +615,7 @@ namespace RACE
 		}
 	}
 
-<<<<<<< HEAD
 	void patch(const RACE::patch_instruction& line, RE::TESRace* curobj)
-=======
-	void patch(const RACE::patch_instruction& line, RE::TESRace* curobj)
->>>>>>> origin/new-main
 	{
 		if (!line.avifs.empty()) {
 			for (size_t i = 0; i < line.avifs.size(); i++) {

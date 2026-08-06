@@ -78,11 +78,7 @@ namespace FACTION
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
-<<<<<<< HEAD
 	void* patch(const FACTION::patch_instruction& line, RE::TESFaction* curobj);
-=======
-	void* patch(const FACTION::patch_instruction& line, RE::TESFaction* curobj);
->>>>>>> origin/new-main
 }
 
 #endif

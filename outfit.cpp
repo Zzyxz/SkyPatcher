@@ -62,11 +62,7 @@ namespace OUTFIT
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSOutfit>();
-=======
-		const auto& ObjectArray = dataHandler->GetFormArray<RE::BGSOutfit>();
->>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -258,11 +254,7 @@ namespace OUTFIT
 		}
 	}
 
-<<<<<<< HEAD
 	void patch(const OUTFIT::patch_instruction& line, RE::BGSOutfit* curobj)
-=======
-	void patch(const OUTFIT::patch_instruction& line, RE::BGSOutfit* curobj)
->>>>>>> origin/new-main
 	{
 		
 

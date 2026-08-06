@@ -63,11 +63,7 @@ namespace ENCH
 	{
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& objectSpellArray = dataHandler->GetFormArray<RE::EnchantmentItem>();
-=======
-		const auto& objectSpellArray = dataHandler->GetFormArray<RE::EnchantmentItem>();
->>>>>>> origin/new-main
 		for (const auto& line : tokens) {
 			
 				if (!line.objects.empty()) {
@@ -484,11 +480,7 @@ namespace ENCH
 		}
 	}
 
-<<<<<<< HEAD
 	void patch(const ENCH::line_content& line, RE::EnchantmentItem* curobj) {
-=======
-	void patch(const ENCH::line_content& line, RE::EnchantmentItem* curobj) {
->>>>>>> origin/new-main
 		
 
 		if (!line.keywordsToAdd.empty()) {

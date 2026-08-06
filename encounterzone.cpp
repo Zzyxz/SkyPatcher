@@ -45,11 +45,7 @@ namespace ENCOUNTERZONE
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSEncounterZone>();
-=======
-		const auto& ObjectArray = dataHandler->GetFormArray<RE::BGSEncounterZone>();
->>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -202,11 +198,7 @@ namespace ENCOUNTERZONE
 		}
 	}
 
-<<<<<<< HEAD
 	void* patch(const ENCOUNTERZONE::patch_instruction& line, RE::BGSEncounterZone* curobj)
-=======
-	void* patch(const ENCOUNTERZONE::patch_instruction& line, RE::BGSEncounterZone* curobj)
->>>>>>> origin/new-main
 	{
 
 

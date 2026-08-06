@@ -61,11 +61,7 @@ namespace COBJ
 	{
 		logger::debug("processing patch instructions");
 		const auto                                dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSConstructibleObject>();
-=======
-		const auto& ObjectArray = dataHandler->GetFormArray<RE::BGSConstructibleObject>();
->>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -358,11 +354,7 @@ namespace COBJ
 		}
 	}
 
-<<<<<<< HEAD
 	void* patch(const COBJ::patch_instruction& line, RE::BGSConstructibleObject* curobj)
-=======
-	void* patch(const COBJ::patch_instruction& line, RE::BGSConstructibleObject* curobj)
->>>>>>> origin/new-main
 	{
 
 
@@ -486,7 +478,7 @@ namespace COBJ
 				RE::TESBoundObject* newObject = (RE::TESBoundObject*)GetFormFromIdentifier(object2);
 
 				if (oldObject && newObject) {
-					curobj->requiredItems.ReplaceObjectInContainer(oldObject, newObject);
+					replaceObjectInContainer(curobj->requiredItems, oldObject, newObject);
 					logger::debug(FMT_STRING("cobj formid: {:08X} replaced Form {:08X} with Form {:08X} "), curobj->formID, oldObject->formID, newObject->formID);
 				}
 			}
@@ -517,7 +509,7 @@ namespace COBJ
 				continue;
 			}
 
-			if (curobj->requiredItems.ChangeCOBJsCount(oldObject, newCount)) {
+			if (changeContainerObjectCount(curobj->requiredItems, oldObject, newCount)) {
 				if (oldObject) {
 					logger::debug(FMT_STRING("cobj formid: {:08X} changed count for {:08X} to {}"),
 						curobj->formID, oldObject->formID, newCount);
@@ -558,7 +550,7 @@ namespace COBJ
 				continue;
 			}
 
-			if (curobj->requiredItems.ChangeCOBJsCountByMult(oldObject, multiplier)) {
+			if (multiplyContainerObjectCount(curobj->requiredItems, oldObject, multiplier)) {
 				if (oldObject) {
 					logger::debug(FMT_STRING("cobj formid: {:08X} changed/multiplied count for {:08X} by {}"),
 						curobj->formID, oldObject->formID, multiplier);
@@ -599,12 +591,8 @@ namespace COBJ
 			try {
 				curobj->data.numConstructed = std::stoi(line.count);
 				logger::debug(FMT_STRING("cobj formid: {:08X} changed count {}"), curobj->formID, curobj->data.numConstructed);
-<<<<<<< HEAD
 			} catch (...) {
 				logger::warn(FMT_STRING("Invalid count for cobj: {}"), line.count);
-=======
-			} catch (const std::exception& e) {
->>>>>>> origin/new-main
 			}
 		}
 
@@ -612,12 +600,8 @@ namespace COBJ
 			try {
 				curobj->data.numConstructed = curobj->data.numConstructed * std::stof(line.countMult);
 				logger::debug(FMT_STRING("cobj formid: {:08X} multiplied count {}"), curobj->formID, curobj->data.numConstructed);
-<<<<<<< HEAD
 			} catch (...) {
 				logger::warn(FMT_STRING("Invalid countMult for cobj: {}"), line.countMult);
-=======
-			} catch (const std::exception& e) {
->>>>>>> origin/new-main
 			}
 		}
 

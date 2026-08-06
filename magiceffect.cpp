@@ -270,11 +270,7 @@ namespace MGEF
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::EffectSetting>();
-=======
-		const auto& ObjectArray = dataHandler->GetFormArray<RE::EffectSetting>();
->>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -574,11 +570,7 @@ namespace MGEF
 		}
 	}
 
-<<<<<<< HEAD
 	void* patch(const MGEF::patch_instruction& line, RE::EffectSetting* curobj)
-=======
-	void* patch(const MGEF::patch_instruction& line, RE::EffectSetting* curobj)
->>>>>>> origin/new-main
 	{
 		
 		if (!line.enchantArt.empty() && line.enchantArt != "none") {

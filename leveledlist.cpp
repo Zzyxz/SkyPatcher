@@ -194,11 +194,7 @@ namespace LEVELEDLIST
 			}
 
 			if (!line.noFilterLL.empty() && toLowerCase(line.noFilterLL) == "true") {
-<<<<<<< HEAD
 				auto& objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
-=======
-				const auto& objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
->>>>>>> origin/new-main
 				for (const auto& curobj : objectArray) {
 					if (static_cast<uint32_t>(curobj->numEntries) > 120) {
 						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
@@ -210,7 +206,6 @@ namespace LEVELEDLIST
 			}
 
 			if (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty() || !line.filterByEditorIdContainsExcluded.empty()) {
-<<<<<<< HEAD
 				const formfilter::CommonFilterView view{
 					formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
 					formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
@@ -219,9 +214,6 @@ namespace LEVELEDLIST
 				};
 
 				auto& objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
-=======
-				const auto& objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
->>>>>>> origin/new-main
 				for (const auto& curobj : objectArray) {
 
 					bool contains = false;
@@ -265,11 +257,7 @@ namespace LEVELEDLIST
 
 
 			if (!line.noFilterLLNPC.empty() && toLowerCase(line.noFilterLLNPC) == "true") {
-<<<<<<< HEAD
 				auto& tesLevCharArray = dataHandler->GetFormArray<RE::TESLevCharacter>();
-=======
-				const auto& tesLevCharArray = dataHandler->GetFormArray<RE::TESLevCharacter>();
->>>>>>> origin/new-main
 				for (const auto& curobj : tesLevCharArray) {
 					if (static_cast<uint32_t>(curobj->numEntries) > 120) {
 						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
@@ -353,11 +341,7 @@ namespace LEVELEDLIST
 		}
 	}
 	template <typename T>
-<<<<<<< HEAD
 	void patch(const LEVELEDLIST::line_content& line, T* curobj)
-=======
-	void patch(const LEVELEDLIST::line_content& line, T* curobj)
->>>>>>> origin/new-main
 	{
 
 
