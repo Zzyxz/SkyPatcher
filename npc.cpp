@@ -355,6 +355,192 @@ namespace NPC
 	}
 
 
+	// =====================================================================
+	// PHASE 4 -- NPC's action tables. See formfilter.h "PHASE 4".
+	//
+	// NPC carried the two worst shapes in patch():
+	//
+	//   * five std::unordered_map<std::string, enum> literals built at static
+	//     init and hashed per patched NPC (aggression, confidence, assistance,
+	//     morality, mood), plus TWO 22-row and TWO 14-row flag maps written
+	//     out twice each -- and `removeTemplateFlags`' std::map is NOT static,
+	//     so upstream rebuilds a fourteen-node red-black tree for EVERY
+	//     patched NPC;
+	//   * an 18-rung `changeSkills` ladder and a 12-rung `changeStats` ladder,
+	//     both over a token that is fixed at load.
+	//
+	// Every one of them is a fixed map from a config token to a small
+	// integer, i.e. a table. The rows below are exact transcriptions, in rung
+	// order, including the log wording each rung used.
+	// =====================================================================
+	namespace
+	{
+		using formfilter::ActionRow;
+
+		constexpr ActionRow kAggressionRows[] = {
+			{ "calmed", static_cast<std::uint32_t>(RE::ACTOR_AGGRESSION::kCalmed) },
+			{ "unaggressive", static_cast<std::uint32_t>(RE::ACTOR_AGGRESSION::kUnaggressive) },
+			{ "aggressive", static_cast<std::uint32_t>(RE::ACTOR_AGGRESSION::kAggressive) },
+			{ "veryaggressive", static_cast<std::uint32_t>(RE::ACTOR_AGGRESSION::kVeryAggressive) },
+			{ "frenzied", static_cast<std::uint32_t>(RE::ACTOR_AGGRESSION::kFrenzied) },
+		};
+
+		constexpr ActionRow kConfidenceRows[] = {
+			{ "cowardly", static_cast<std::uint32_t>(RE::ACTOR_CONFIDENCE::kCowardly) },
+			{ "cautious", static_cast<std::uint32_t>(RE::ACTOR_CONFIDENCE::kCautious) },
+			{ "average", static_cast<std::uint32_t>(RE::ACTOR_CONFIDENCE::kAverage) },
+			{ "brave", static_cast<std::uint32_t>(RE::ACTOR_CONFIDENCE::kBrave) },
+			{ "foolhardy", static_cast<std::uint32_t>(RE::ACTOR_CONFIDENCE::kFoolhardy) },
+		};
+
+		constexpr ActionRow kAssistanceRows[] = {
+			{ "helpsnobody", static_cast<std::uint32_t>(RE::ACTOR_ASSISTANCE::kHelpsNobody) },
+			{ "helpsallies", static_cast<std::uint32_t>(RE::ACTOR_ASSISTANCE::kHelpsAllies) },
+			{ "helpsfriends", static_cast<std::uint32_t>(RE::ACTOR_ASSISTANCE::kHelpsFriends) },
+		};
+
+		constexpr ActionRow kMoralityRows[] = {
+			{ "anycrime", static_cast<std::uint32_t>(RE::ACTOR_MORALITY::kAnyCrime) },
+			{ "violenceagainstenemy", static_cast<std::uint32_t>(RE::ACTOR_MORALITY::kViolenceAgainstEnemy) },
+			{ "propertycrimeonly", static_cast<std::uint32_t>(RE::ACTOR_MORALITY::kPropertyCrimeOnly) },
+			{ "nocrime", static_cast<std::uint32_t>(RE::ACTOR_MORALITY::kNoCrime) },
+		};
+
+		constexpr ActionRow kMoodRows[] = {
+			{ "neutral", static_cast<std::uint32_t>(RE::ACTOR_MOOD::kNeutral) },
+			{ "angry", static_cast<std::uint32_t>(RE::ACTOR_MOOD::kAngry) },
+			{ "fear", static_cast<std::uint32_t>(RE::ACTOR_MOOD::kFear) },
+			{ "happy", static_cast<std::uint32_t>(RE::ACTOR_MOOD::kHappy) },
+			{ "sad", static_cast<std::uint32_t>(RE::ACTOR_MOOD::kSad) },
+			{ "surprised", static_cast<std::uint32_t>(RE::ACTOR_MOOD::kSurprised) },
+			{ "puzzled", static_cast<std::uint32_t>(RE::ACTOR_MOOD::kPuzzled) },
+			{ "disgusted", static_cast<std::uint32_t>(RE::ACTOR_MOOD::kDisgusted) },
+		};
+
+		// `value` is the index into aiData.aggroRadius; `label` the log wording.
+		constexpr ActionRow kAggroRadiusRows[] = {
+			{ "attack", static_cast<std::uint32_t>(RE::ACTOR_AGGRO_RADIUS::kAttack), 0, "attack" },
+			{ "warn", static_cast<std::uint32_t>(RE::ACTOR_AGGRO_RADIUS::kWarn), 0, "warn" },
+			{ "attackandwarn", static_cast<std::uint32_t>(RE::ACTOR_AGGRO_RADIUS::kWarnAndAttack), 0, "attack and warn" },
+		};
+
+		// `value` is the index into playerSkills.values.
+		constexpr ActionRow kSkillRows[] = {
+			{ "onehanded", RE::TESNPC::Skills::kOneHanded },
+			{ "twohanded", RE::TESNPC::Skills::kTwoHanded },
+			{ "marksman", RE::TESNPC::Skills::kMarksman },
+			{ "block", RE::TESNPC::Skills::kBlock },
+			{ "smithing", RE::TESNPC::Skills::kSmithing },
+			{ "heavyarmor", RE::TESNPC::Skills::kHeavyArmor },
+			{ "lightarmor", RE::TESNPC::Skills::kLightArmor },
+			{ "pickpocket", RE::TESNPC::Skills::kPickpocket },
+			{ "lockpicking", RE::TESNPC::Skills::kLockpicking },
+			{ "sneak", RE::TESNPC::Skills::kSneak },
+			{ "alchemy", RE::TESNPC::Skills::kAlchemy },
+			{ "speechcraft", RE::TESNPC::Skills::kSpeechcraft },
+			{ "alteration", RE::TESNPC::Skills::kAlteration },
+			{ "conjuration", RE::TESNPC::Skills::kConjuration },
+			{ "destruction", RE::TESNPC::Skills::kDestruction },
+			{ "illusion", RE::TESNPC::Skills::kIllusion },
+			{ "restoration", RE::TESNPC::Skills::kRestoration },
+			{ "enchanting", RE::TESNPC::Skills::kEnchanting },
+		};
+
+		// setTemplateFlags and removeTemplateFlags were the same fourteen
+		// entries written twice -- once as a static unordered_map, once as a
+		// per-call std::map.
+		constexpr ActionRow kTemplateFlagRows[] = {
+			{ "traits", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kTraits) },
+			{ "stats", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kStats) },
+			{ "factions", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kFactions) },
+			{ "spells", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kSpells) },
+			{ "aidata", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIData) },
+			{ "aipackages", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIPackages) },
+			{ "unused", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kUnused) },
+			{ "basedata", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kBaseData) },
+			{ "inventory", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kInventory) },
+			{ "script", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kScript) },
+			{ "aidefpacklist", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIDefPackList) },
+			{ "attackdata", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAttackData) },
+			{ "keywords", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kKeywords) },
+			{ "copiedtemplate", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kCopiedTemplate) },
+		};
+
+		// setFlags and removeFlags, likewise: the same twenty-two entries
+		// written twice. "calcfalltemplates" is upstream's spelling of
+		// kCalcForAllTemplates and is kept -- a config that says
+		// "calcforalltemplates" does not match upstream either.
+		constexpr ActionRow kBaseFlagRows[] = {
+			{ "female", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kFemale) },
+			{ "essential", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kEssential) },
+			{ "ischargenfacepreset", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kIsChargenFacePreset) },
+			{ "respawn", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kRespawn) },
+			{ "autocalcstats", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats) },
+			{ "unique", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kUnique) },
+			{ "doesntaffectstealthmeter", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kDoesntAffectStealthMeter) },
+			{ "pclevelmult", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kPCLevelMult) },
+			{ "usestemplate", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kUsesTemplate) },
+			{ "calcfalltemplates", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kCalcForAllTemplates) },
+			{ "protected", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kProtected) },
+			{ "norumors", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kNoRumors) },
+			{ "summonable", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kSummonable) },
+			{ "doesntbleed", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kDoesntBleed) },
+			{ "bleedoutoverride", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kBleedoutOverride) },
+			{ "oppositegenderanims", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kOppositeGenderAnims) },
+			{ "simpleactor", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kSimpleActor) },
+			{ "loopedscript", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kLoopedScript) },
+			{ "noactivation", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kNoActivation) },
+			{ "loopedaudio", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kLoopedAudio) },
+			{ "isghost", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kIsGhost) },
+			{ "invulnerable", static_cast<std::uint32_t>(RE::ACTOR_BASE_DATA::Flag::kInvulnerable) },
+		};
+		// `changeStats`. The eleven rungs of the avif ladder are eleven
+		// (SLOT, MODE) pairs: which of the three attributes is written, and
+		// how the value is derived. There is no `byclasshealth` rung
+		// upstream, so the table has no such row either.
+		enum class StatSlot : std::uint32_t
+		{
+			Health,
+			Stamina,
+			Magicka
+		};
+		enum class StatMode : std::uint8_t
+		{
+			Set,      // the level-interpolated / random `finalValue`
+			Mult,     // the CURRENT offset times values1[i]
+			Calc,     // calculateAttributePoints, plus the per-slot bonus
+			ByClass   // finalValue if the class weights the slot, else 0
+		};
+		constexpr ActionRow kStatRows[] = {
+			{ "health", static_cast<std::uint32_t>(StatSlot::Health), static_cast<std::uint8_t>(StatMode::Set) },
+			{ "healthmult", static_cast<std::uint32_t>(StatSlot::Health), static_cast<std::uint8_t>(StatMode::Mult) },
+			{ "stamina", static_cast<std::uint32_t>(StatSlot::Stamina), static_cast<std::uint8_t>(StatMode::Set) },
+			{ "staminamult", static_cast<std::uint32_t>(StatSlot::Stamina), static_cast<std::uint8_t>(StatMode::Mult) },
+			{ "magicka", static_cast<std::uint32_t>(StatSlot::Magicka), static_cast<std::uint8_t>(StatMode::Set) },
+			{ "magickamult", static_cast<std::uint32_t>(StatSlot::Magicka), static_cast<std::uint8_t>(StatMode::Mult) },
+			{ "calchealth", static_cast<std::uint32_t>(StatSlot::Health), static_cast<std::uint8_t>(StatMode::Calc) },
+			{ "calcstamina", static_cast<std::uint32_t>(StatSlot::Stamina), static_cast<std::uint8_t>(StatMode::Calc) },
+			{ "calcmagicka", static_cast<std::uint32_t>(StatSlot::Magicka), static_cast<std::uint8_t>(StatMode::Calc) },
+			{ "byclassstamina", static_cast<std::uint32_t>(StatSlot::Stamina), static_cast<std::uint8_t>(StatMode::ByClass) },
+			{ "byclassmagicka", static_cast<std::uint32_t>(StatSlot::Magicka), static_cast<std::uint8_t>(StatMode::ByClass) },
+		};
+		// `attackDataToAdd` / `attackDataToChange` each carry a `setflags`
+		// and a `removeflags` ladder over the same seven AttackData flags --
+		// the same seven rungs written out FOUR times. The log lines spell
+		// the flag in CamelCase, which is what `label` carries.
+		constexpr ActionRow kAttackFlagRows[] = {
+			{ "ignoreweapon", static_cast<std::uint32_t>(RE::AttackData::AttackFlag::kIgnoreWeapon), 0, "IgnoreWeapon" },
+			{ "bashattack", static_cast<std::uint32_t>(RE::AttackData::AttackFlag::kBashAttack), 0, "BashAttack" },
+			{ "powerattack", static_cast<std::uint32_t>(RE::AttackData::AttackFlag::kPowerAttack), 0, "PowerAttack" },
+			{ "chargeattack", static_cast<std::uint32_t>(RE::AttackData::AttackFlag::kChargeAttack), 0, "ChargeAttack" },
+			{ "rotatingattack", static_cast<std::uint32_t>(RE::AttackData::AttackFlag::kRotatingAttack), 0, "RotatingAttack" },
+			{ "continuousattack", static_cast<std::uint32_t>(RE::AttackData::AttackFlag::kContinuousAttack), 0, "ContinuousAttack" },
+			{ "overridedata", static_cast<std::uint32_t>(RE::AttackData::AttackFlag::kOverrideData), 0, "OverrideData" },
+		};
+
+
+	}
+
 	void* patch(const NPC::patch_instruction& line, RE::TESNPC* curobj)
 	{
 
@@ -455,18 +641,10 @@ namespace NPC
 
 		if (!line.setAggression.empty() && line.setAggression != "none") {
 			std::string lowerFlag = toLowerCase(line.setAggression);
-			static const std::unordered_map<std::string, RE::ACTOR_AGGRESSION> aggressionMap = {
-				{"calmed", RE::ACTOR_AGGRESSION::kCalmed},
-				{"unaggressive", RE::ACTOR_AGGRESSION::kUnaggressive},
-				{"aggressive", RE::ACTOR_AGGRESSION::kAggressive},
-				{"veryaggressive", RE::ACTOR_AGGRESSION::kVeryAggressive},
-				{"frenzied", RE::ACTOR_AGGRESSION::kFrenzied}
-			};
-			auto it = aggressionMap.find(lowerFlag);
-			if (it != aggressionMap.end()) {
-				// Set the aggression level on the NPC
-				curobj->SetAggressionLevel(it->second);
-				logger::debug(FMT_STRING("npc formid: {:08X} {} aggression level set to: {}"), curobj->formID, curobj->fullName, lowerFlag);
+			if (const auto* row = formfilter::findActionLowered(kAggressionRows, lowerFlag)) {
+				curobj->SetAggressionLevel(static_cast<RE::ACTOR_AGGRESSION>(row->value));
+				logger::debug(FMT_STRING("npc formid: {:08X} {} aggression level set to: {}"),
+					curobj->formID, curobj->fullName, lowerFlag);
 			}
 			else {
 				logger::warn(FMT_STRING("Unknown aggression level '{}' provided in restrictToTemplateFlags"), lowerFlag);
@@ -475,17 +653,8 @@ namespace NPC
 
 		if (!line.setConfidence.empty() && line.setConfidence != "none") {
 			std::string lowerFlag = toLowerCase(line.setConfidence);
-			static const std::unordered_map<std::string, RE::ACTOR_CONFIDENCE> confidenceMap = {
-				{"cowardly", RE::ACTOR_CONFIDENCE::kCowardly},
-				{"cautious", RE::ACTOR_CONFIDENCE::kCautious},
-				{"average", RE::ACTOR_CONFIDENCE::kAverage},
-				{"brave", RE::ACTOR_CONFIDENCE::kBrave},
-				{"foolhardy", RE::ACTOR_CONFIDENCE::kFoolhardy}
-			};
-			auto it = confidenceMap.find(lowerFlag);
-			if (it != confidenceMap.end()) {
-				// Set the confidence level on the NPC
-				curobj->SetConfidenceLevel(it->second);
+			if (const auto* row = formfilter::findActionLowered(kConfidenceRows, lowerFlag)) {
+				curobj->SetConfidenceLevel(static_cast<RE::ACTOR_CONFIDENCE>(row->value));
 				logger::debug(FMT_STRING("npc formid: {:08X} {} confidence level set to: {}"),
 					curobj->formID, curobj->fullName, lowerFlag);
 			}
@@ -496,14 +665,8 @@ namespace NPC
 
 		if (!line.setAssistance.empty() && line.setAssistance != "none") {
 			std::string lowerFlag = toLowerCase(line.setAssistance);
-			static const std::unordered_map<std::string, RE::ACTOR_ASSISTANCE> assistanceMap = {
-				{"helpsnobody", RE::ACTOR_ASSISTANCE::kHelpsNobody},
-				{"helpsallies", RE::ACTOR_ASSISTANCE::kHelpsAllies},
-				{"helpsfriends", RE::ACTOR_ASSISTANCE::kHelpsFriends}
-			};
-			auto it = assistanceMap.find(lowerFlag);
-			if (it != assistanceMap.end()) {
-				curobj->SetAssistanceLevel(it->second);
+			if (const auto* row = formfilter::findActionLowered(kAssistanceRows, lowerFlag)) {
+				curobj->SetAssistanceLevel(static_cast<RE::ACTOR_ASSISTANCE>(row->value));
 				logger::debug(FMT_STRING("npc formid: {:08X} {} assistance level set to: {}"),
 					curobj->formID, curobj->fullName, lowerFlag);
 			}
@@ -514,15 +677,8 @@ namespace NPC
 
 		if (!line.setMorality.empty() && line.setMorality != "none") {
 			std::string lowerFlag = toLowerCase(line.setMorality);
-			static const std::unordered_map<std::string, RE::ACTOR_MORALITY> moralityMap = {
-				{"anycrime", RE::ACTOR_MORALITY::kAnyCrime},
-				{"violenceagainstenemy", RE::ACTOR_MORALITY::kViolenceAgainstEnemy},
-				{"propertycrimeonly", RE::ACTOR_MORALITY::kPropertyCrimeOnly},
-				{"nocrime", RE::ACTOR_MORALITY::kNoCrime}
-			};
-			auto it = moralityMap.find(lowerFlag);
-			if (it != moralityMap.end()) {
-				curobj->SetMoralityLevel(it->second);
+			if (const auto* row = formfilter::findActionLowered(kMoralityRows, lowerFlag)) {
+				curobj->SetMoralityLevel(static_cast<RE::ACTOR_MORALITY>(row->value));
 				logger::debug(FMT_STRING("npc formid: {:08X} {} morality level set to: {}"),
 					curobj->formID, curobj->fullName, lowerFlag);
 			}
@@ -533,19 +689,8 @@ namespace NPC
 
 		if (!line.setMood.empty() && line.setMood != "none") {
 			std::string lowerFlag = toLowerCase(line.setMood);
-			static const std::unordered_map<std::string, RE::ACTOR_MOOD> moodMap = {
-				{"neutral", RE::ACTOR_MOOD::kNeutral},
-				{"angry", RE::ACTOR_MOOD::kAngry},
-				{"fear", RE::ACTOR_MOOD::kFear},
-				{"happy", RE::ACTOR_MOOD::kHappy},
-				{"sad", RE::ACTOR_MOOD::kSad},
-				{"surprised", RE::ACTOR_MOOD::kSurprised},
-				{"puzzled", RE::ACTOR_MOOD::kPuzzled},
-				{"disgusted", RE::ACTOR_MOOD::kDisgusted}
-			};
-			auto it = moodMap.find(lowerFlag);
-			if (it != moodMap.end()) {
-				curobj->SetMoodLevel(it->second);
+			if (const auto* row = formfilter::findActionLowered(kMoodRows, lowerFlag)) {
+				curobj->SetMoodLevel(static_cast<RE::ACTOR_MOOD>(row->value));
 				logger::debug(FMT_STRING("npc formid: {:08X} {} mood level set to: {}"),
 					curobj->formID, curobj->fullName, lowerFlag);
 			}
@@ -576,7 +721,6 @@ namespace NPC
 					continue;
 				}
 
-				std::string lowerString = toLowerCase(aRanges[0]);
 				int radius = 0;
 
 				try {
@@ -587,17 +731,9 @@ namespace NPC
 					continue;
 				}
 
-				if (lowerString == "attack") {
-					curobj->aiData.aggroRadius[RE::ACTOR_AGGRO_RADIUS::kAttack] = radius;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} set attack radius to {}"), curobj->formID, curobj->fullName, radius);
-				}
-				else if (lowerString == "warn") {
-					curobj->aiData.aggroRadius[RE::ACTOR_AGGRO_RADIUS::kWarn] = radius;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} set warn radius to {}"), curobj->formID, curobj->fullName, radius);
-				}
-				else if (lowerString == "attackandwarn") {
-					curobj->aiData.aggroRadius[RE::ACTOR_AGGRO_RADIUS::kWarnAndAttack] = radius;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} set attack and warn radius to {}"), curobj->formID, curobj->fullName, radius);
+				if (const auto* row = formfilter::findAction(kAggroRadiusRows, aRanges[0])) {
+					curobj->aiData.aggroRadius[row->value] = radius;
+					logger::debug(FMT_STRING("npc formid: {:08X} {} set {} radius to {}"), curobj->formID, curobj->fullName, row->label, radius);
 				}
 			}
 		}
@@ -842,186 +978,153 @@ namespace NPC
 
 				auto it2 = aData.npcData.find(curobj->formID);
 
-				if (lowerAvif == "health") {
-					curobj->actorData.healthOffset = finalValue;
-					if (it2 == aData.npcData.end()) {
-						aData.npcData[curobj->formID].health = finalValue;
-					}
-					else {
-						it2->second.health = finalValue;
-					}
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), curobj->actorData.healthOffset);
-					curobj->SetBaseActorValue(RE::ActorValue::kHealth, curobj->actorData.healthOffset);
-					curobj->playerSkills.health = curobj->actorData.healthOffset;
-				}
-				else if (lowerAvif == "healthmult") {
-					logger::debug(FMT_STRING("npc formid: {:08X} {} multiplied health to {} * {} = {}"), curobj->formID, curobj->fullName, curobj->actorData.healthOffset, line.values1[i], curobj->actorData.healthOffset * line.values1[i]);
-					curobj->actorData.healthOffset = curobj->actorData.healthOffset * line.values1[i];
-					curobj->SetBaseActorValue(RE::ActorValue::kHealth, curobj->actorData.healthOffset);
-					curobj->playerSkills.health = curobj->actorData.healthOffset;
-					if (it2 == aData.npcData.end()) {
-						aData.npcData[curobj->formID].health = curobj->actorData.healthOffset;
-					}
-					else {
-						it2->second.health = curobj->actorData.healthOffset;
+				// ------------------------------------------------------------
+				// The eleven-rung avif ladder, as a table lookup plus one
+				// switch per STEP. Every attribute member patch() can write
+				// is still named exactly once here, and each mode's value
+				// arithmetic keeps upstream's intermediate TYPES: `Set`
+				// assigns a float straight to the int16 offset, the other
+				// three go through an int first, and float->int and
+				// float->int16 do not always agree.
+				// ------------------------------------------------------------
+				if (const auto* statRow = formfilter::findActionLowered(kStatRows, lowerAvif)) {
+					const auto slot = static_cast<StatSlot>(statRow->value);
+					const auto mode = static_cast<StatMode>(statRow->mode);
+
+					const std::int16_t oldOffset =
+						slot == StatSlot::Health ? curobj->actorData.healthOffset :
+						slot == StatSlot::Stamina ? curobj->actorData.staminaOffset :
+													curobj->actorData.magickaOffset;
+					const int weight =
+						slot == StatSlot::Health ? sw.healthWeight :
+						slot == StatSlot::Stamina ? sw.staminaWeight :
+													sw.magickaWeight;
+					const std::string& bonusText =
+						slot == StatSlot::Health ? line.healthBonus :
+						slot == StatSlot::Stamina ? line.staminaBonus :
+													line.magickaBonus;
+					const char* const slotName =
+						slot == StatSlot::Health ? "health" :
+						slot == StatSlot::Stamina ? "stamina" :
+													"magicka";
+
+					// The one place the three attributes are written.
+					const auto assignOffset = [&](auto a_value) {
+						switch (slot) {
+						case StatSlot::Health:
+							curobj->actorData.healthOffset = a_value;
+							break;
+						case StatSlot::Stamina:
+							curobj->actorData.staminaOffset = a_value;
+							break;
+						default:
+							curobj->actorData.magickaOffset = a_value;
+							break;
+						}
+					};
+					const auto readOffset = [&]() -> std::int16_t {
+						switch (slot) {
+						case StatSlot::Health:
+							return curobj->actorData.healthOffset;
+						case StatSlot::Stamina:
+							return curobj->actorData.staminaOffset;
+						default:
+							return curobj->actorData.magickaOffset;
+						}
+					};
+					// SetBaseActorValue + playerSkills + the aData cache, which
+					// every rung ran in this order with this value.
+					const auto commit = [&]() {
+						switch (slot) {
+						case StatSlot::Health:
+							curobj->SetBaseActorValue(RE::ActorValue::kHealth, curobj->actorData.healthOffset);
+							curobj->playerSkills.health = curobj->actorData.healthOffset;
+							if (it2 == aData.npcData.end()) {
+								aData.npcData[curobj->formID].health = curobj->actorData.healthOffset;
+							}
+							else {
+								it2->second.health = curobj->actorData.healthOffset;
+							}
+							break;
+						case StatSlot::Stamina:
+							curobj->SetBaseActorValue(RE::ActorValue::kStamina, curobj->actorData.staminaOffset);
+							curobj->playerSkills.stamina = curobj->actorData.staminaOffset;
+							if (it2 == aData.npcData.end()) {
+								aData.npcData[curobj->formID].stamina = curobj->actorData.staminaOffset;
+							}
+							else {
+								it2->second.stamina = curobj->actorData.staminaOffset;
+							}
+							break;
+						default:
+							curobj->SetBaseActorValue(RE::ActorValue::kMagicka, curobj->actorData.magickaOffset);
+							curobj->playerSkills.magicka = curobj->actorData.magickaOffset;
+							if (it2 == aData.npcData.end()) {
+								aData.npcData[curobj->formID].magicka = curobj->actorData.magickaOffset;
+							}
+							else {
+								it2->second.magicka = curobj->actorData.magickaOffset;
+							}
+							break;
+						}
+					};
+
+					switch (mode) {
+					case StatMode::Set:
+						assignOffset(finalValue);
+						logger::debug(FMT_STRING("npc formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), readOffset());
+						commit();
+						break;
+
+					case StatMode::Mult:
+						// The log line reports the OLD offset, and runs before
+						// the write, exactly as the three *mult rungs did.
+						logger::debug(FMT_STRING("npc formid: {:08X} {} multiplied {} to {} * {} = {}"), curobj->formID, curobj->fullName, slotName, oldOffset, line.values1[i], oldOffset * line.values1[i]);
+						assignOffset(oldOffset * line.values1[i]);
+						commit();
+						break;
+
+					case StatMode::Calc: {
+						auto tempResult = calculateAttributePoints(curobj->actorData.level, sw, line.values1[i]);
+						int  points =
+							slot == StatSlot::Health ? tempResult.health :
+							slot == StatSlot::Stamina ? tempResult.stamina :
+														tempResult.magicka;
+
+						if (!bonusText.empty() && bonusText != "none") {
+							points = points + std::stoi(bonusText);
+							logger::debug(FMT_STRING("npc formid: {:08X} {} added {} bonus of {}"), curobj->formID, curobj->fullName, slotName, bonusText);
+						}
+
+						assignOffset(points);
+						logger::debug(FMT_STRING("npc formid: {:08X} {} calculated {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), readOffset());
+						commit();
+						break;
 					}
 
-				}
-				else if (lowerAvif == "stamina") {
-					curobj->actorData.staminaOffset = finalValue;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), curobj->actorData.staminaOffset);
-					curobj->SetBaseActorValue(RE::ActorValue::kStamina, curobj->actorData.staminaOffset);
-					curobj->playerSkills.stamina = curobj->actorData.staminaOffset;
-					if (it2 == aData.npcData.end()) {
-						aData.npcData[curobj->formID].stamina = curobj->actorData.staminaOffset;
-					}
-					else {
-						it2->second.stamina = curobj->actorData.staminaOffset;
-					}
-				}
-				else if (lowerAvif == "staminamult") {
-					logger::debug(FMT_STRING("npc formid: {:08X} {} multiplied stamina to {} * {} = {}"), curobj->formID, curobj->fullName, curobj->actorData.staminaOffset, line.values1[i], curobj->actorData.staminaOffset * line.values1[i]);
-					curobj->actorData.staminaOffset = curobj->actorData.staminaOffset * line.values1[i];
-					curobj->SetBaseActorValue(RE::ActorValue::kStamina, curobj->actorData.staminaOffset);
-					curobj->playerSkills.stamina = curobj->actorData.staminaOffset;
-					if (it2 == aData.npcData.end()) {
-						aData.npcData[curobj->formID].stamina = curobj->actorData.staminaOffset;
-					}
-					else {
-						it2->second.stamina = curobj->actorData.staminaOffset;
-					}
-				}
-				else if (lowerAvif == "magicka") {
-					curobj->actorData.magickaOffset = finalValue;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), curobj->actorData.magickaOffset);
-					curobj->SetBaseActorValue(RE::ActorValue::kMagicka, curobj->actorData.magickaOffset);
-					curobj->playerSkills.magicka = curobj->actorData.magickaOffset;
-					if (it2 == aData.npcData.end()) {
-						aData.npcData[curobj->formID].magicka = curobj->actorData.magickaOffset;
-					}
-					else {
-						it2->second.magicka = curobj->actorData.magickaOffset;
-					}
-				}
-				else if (lowerAvif == "magickamult") {
-					logger::debug(FMT_STRING("npc formid: {:08X} {} multiplied magicka to {} * {} = {}"), curobj->formID, curobj->fullName, curobj->actorData.magickaOffset, line.values1[i], curobj->actorData.magickaOffset * line.values1[i]);
-					curobj->actorData.magickaOffset = curobj->actorData.magickaOffset * line.values1[i];
-					curobj->SetBaseActorValue(RE::ActorValue::kMagicka, curobj->actorData.magickaOffset);
-					curobj->playerSkills.magicka = curobj->actorData.magickaOffset;
-					if (it2 == aData.npcData.end()) {
-						aData.npcData[curobj->formID].magicka = curobj->actorData.magickaOffset;
-					}
-					else {
-						it2->second.magicka = curobj->actorData.magickaOffset;
-					}
-				}
-				else if (lowerAvif == "calchealth") {
-					auto tempResult = calculateAttributePoints(curobj->actorData.level, sw, line.values1[i]);
+					default: {
+						// ByClass. tempResult's member is an int, so the
+						// float->int narrowing happens BEFORE the int->int16
+						// one; that is upstream's order and it is kept.
+						int points = 0;
 
-					if (!line.healthBonus.empty() && line.healthBonus != "none") {
-						tempResult.health = tempResult.health + std::stoi(line.healthBonus);
-						logger::debug(FMT_STRING("npc formid: {:08X} {} added health bonus of {}"), curobj->formID, curobj->fullName, line.healthBonus);
-					}
+						if (weight > 0) {
+							points = static_cast<int>(finalValue);
+						}
+						else {
+							points = 0;
+						}
 
-					curobj->actorData.healthOffset = tempResult.health;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} calculated {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), curobj->actorData.healthOffset);
-					curobj->SetBaseActorValue(RE::ActorValue::kHealth, curobj->actorData.healthOffset);
-					curobj->playerSkills.health = curobj->actorData.healthOffset;
-					if (it2 == aData.npcData.end()) {
-						aData.npcData[curobj->formID].health = curobj->actorData.healthOffset;
-					}
-					else {
-						it2->second.health = curobj->actorData.healthOffset;
-					}
-				}
-				else if (lowerAvif == "calcstamina") {
-					auto tempResult = calculateAttributePoints(curobj->actorData.level, sw, line.values1[i]);
+						if (!bonusText.empty() && bonusText != "none") {
+							points = points + std::stoi(bonusText);
+							logger::debug(FMT_STRING("npc formid: {:08X} {} added {} bonus of {}"), curobj->formID, curobj->fullName, slotName, bonusText);
+						}
 
-					if (!line.staminaBonus.empty() && line.staminaBonus != "none") {
-						tempResult.stamina = tempResult.stamina + std::stoi(line.staminaBonus);
-						logger::debug(FMT_STRING("npc formid: {:08X} {} added stamina bonus of {}"), curobj->formID, curobj->fullName, line.staminaBonus);
+						assignOffset(points);
+						logger::debug(FMT_STRING("npc formid: {:08X} {} setByClass {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), readOffset());
+						commit();
+						break;
 					}
-
-					curobj->actorData.staminaOffset = tempResult.stamina;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} calculated {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), curobj->actorData.staminaOffset);
-					curobj->SetBaseActorValue(RE::ActorValue::kStamina, curobj->actorData.staminaOffset);
-					curobj->playerSkills.stamina = curobj->actorData.staminaOffset;
-					if (it2 == aData.npcData.end()) {
-						aData.npcData[curobj->formID].stamina = curobj->actorData.staminaOffset;
-					}
-					else {
-						it2->second.stamina = curobj->actorData.staminaOffset;
-					}
-				}
-				else if (lowerAvif == "calcmagicka") {
-					auto tempResult = calculateAttributePoints(curobj->actorData.level, sw, line.values1[i]);
-
-					if (!line.magickaBonus.empty() && line.magickaBonus != "none") {
-						tempResult.magicka = tempResult.magicka + std::stoi(line.magickaBonus);
-						logger::debug(FMT_STRING("npc formid: {:08X} {} added magicka bonus of {}"), curobj->formID, curobj->fullName, line.magickaBonus);
-					}
-
-					curobj->actorData.magickaOffset = tempResult.magicka;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} calculated {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), curobj->actorData.magickaOffset);
-					curobj->SetBaseActorValue(RE::ActorValue::kMagicka, curobj->actorData.magickaOffset);
-					curobj->playerSkills.magicka = curobj->actorData.magickaOffset;
-					if (it2 == aData.npcData.end()) {
-						aData.npcData[curobj->formID].magicka = curobj->actorData.magickaOffset;
-					}
-					else {
-						it2->second.magicka = curobj->actorData.magickaOffset;
-					}
-				}
-				else if (lowerAvif == "byclassstamina") {
-					AttributePoints tempResult;
-
-					if (sw.staminaWeight > 0) {
-						tempResult.stamina = finalValue;
-					}
-					else {
-						tempResult.stamina = 0;
-					}
-
-					if (!line.staminaBonus.empty() && line.staminaBonus != "none") {
-						tempResult.stamina = tempResult.stamina + std::stoi(line.staminaBonus);
-						logger::debug(FMT_STRING("npc formid: {:08X} {} added stamina bonus of {}"), curobj->formID, curobj->fullName, line.staminaBonus);
-					}
-
-					curobj->actorData.staminaOffset = tempResult.stamina;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} setByClass {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), curobj->actorData.staminaOffset);
-					curobj->SetBaseActorValue(RE::ActorValue::kStamina, curobj->actorData.staminaOffset);
-					curobj->playerSkills.stamina = curobj->actorData.staminaOffset;
-					if (it2 == aData.npcData.end()) {
-						aData.npcData[curobj->formID].stamina = curobj->actorData.staminaOffset;
-					}
-					else {
-						it2->second.stamina = curobj->actorData.staminaOffset;
-					}
-				}
-				else if (lowerAvif == "byclassmagicka") {
-					AttributePoints tempResult;
-
-					if (sw.magickaWeight > 0) {
-						tempResult.magicka = finalValue;
-					}
-					else {
-						tempResult.magicka = 0;
-					}
-
-					if (!line.magickaBonus.empty() && line.magickaBonus != "none") {
-						tempResult.magicka = tempResult.magicka + std::stoi(line.magickaBonus);
-						logger::debug(FMT_STRING("npc formid: {:08X} {} added magicka bonus of {}"), curobj->formID, curobj->fullName, line.magickaBonus);
-					}
-
-					curobj->actorData.magickaOffset = tempResult.magicka;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} setByClass {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), curobj->actorData.magickaOffset);
-					curobj->SetBaseActorValue(RE::ActorValue::kMagicka, curobj->actorData.magickaOffset);
-					curobj->playerSkills.magicka = curobj->actorData.magickaOffset;
-					if (it2 == aData.npcData.end()) {
-						aData.npcData[curobj->formID].magicka = curobj->actorData.magickaOffset;
-					}
-					else {
-						it2->second.magicka = curobj->actorData.magickaOffset;
 					}
 				}
 
@@ -1439,78 +1542,9 @@ namespace NPC
 			for (size_t i = 0; i < line.skills.size(); i++) {
 				std::string skill = line.skills[i];
 				int         value = line.skillvalues1[i];
-				const std::string lower = toLowerCase(skill);
 
-				if (lower == "onehanded") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kOneHanded] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "twohanded") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kTwoHanded] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "marksman") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kMarksman] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "block") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kBlock] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "smithing") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kSmithing] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "heavyarmor") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kHeavyArmor] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "lightarmor") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kLightArmor] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "pickpocket") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kPickpocket] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "lockpicking") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kLockpicking] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "sneak") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kSneak] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "alchemy") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kAlchemy] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "speechcraft") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kSpeechcraft] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "alteration") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kAlteration] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "conjuration") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kConjuration] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "destruction") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kDestruction] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "illusion") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kIllusion] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "restoration") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kRestoration] = value;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
-				}
-				else if (lower == "enchanting") {
-					curobj->playerSkills.values[RE::TESNPC::Skills::kEnchanting] = value;
+				if (const auto* row = formfilter::findAction(kSkillRows, skill)) {
+					curobj->playerSkills.values[row->value] = value;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed skill {} to {}"), curobj->formID, curobj->fullName, skill, value);
 				}
 				else {
@@ -1541,27 +1575,9 @@ namespace NPC
 		}
 
 		if (!line.setTemplateFlags.empty()) {
-			static const std::unordered_map<std::string, RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG> flagMap = {
-				{"traits", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kTraits},
-				{"stats", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kStats},
-				{"factions", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kFactions},
-				{"spells", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kSpells},
-				{"aidata", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIData},
-				{"aipackages", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIPackages},
-				{"unused", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kUnused},
-				{"basedata", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kBaseData},
-				{"inventory", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kInventory},
-				{"script", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kScript},
-				{"aidefpacklist", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIDefPackList},
-				{"attackdata", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAttackData},
-				{"keywords", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kKeywords},
-				{"copiedtemplate", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kCopiedTemplate}
-			};
-
 			for (const auto& setFlag : line.setTemplateFlags) {
-				auto it = flagMap.find(toLowerCase(setFlag));
-				if (it != flagMap.end()) {
-					curobj->actorData.templateUseFlags.set(it->second);
+				if (const auto* row = formfilter::findAction(kTemplateFlagRows, setFlag)) {
+					curobj->actorData.templateUseFlags.set(static_cast<RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG>(row->value));
 					//aData.npcData[curobj->formID].updateFlags = true;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} template flag enabled {}"), curobj->formID, curobj->fullName, setFlag);
 					aData.npcData[curobj->formID].updateTemplateFlags = true;
@@ -1571,29 +1587,11 @@ namespace NPC
 
 
 		if (!line.removeTemplateFlags.empty()) {
-			std::map<std::string, RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG> flagMap = {
-				{"traits", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kTraits},
-				{"stats", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kStats},
-				{"factions", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kFactions},
-				{"spells", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kSpells},
-				{"aidata", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIData},
-				{"aipackages", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIPackages},
-				{"unused", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kUnused},
-				{"basedata", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kBaseData},
-				{"inventory", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kInventory},
-				{"script", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kScript},
-				{"aidefpacklist", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAIDefPackList},
-				{"attackdata", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAttackData},
-				{"keywords", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kKeywords},
-				{"copiedtemplate", RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kCopiedTemplate}
-			};
-
 			for (const auto& removeFlag : line.removeTemplateFlags) {
 				std::string lowerFlag = toLowerCase(removeFlag);
 
-				auto it = flagMap.find(lowerFlag);
-				if (it != flagMap.end()) {
-					curobj->actorData.templateUseFlags.reset(it->second);
+				if (const auto* row = formfilter::findActionLowered(kTemplateFlagRows, lowerFlag)) {
+					curobj->actorData.templateUseFlags.reset(static_cast<RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG>(row->value));
 					logger::debug(FMT_STRING("npc formid: {:08X} {} template flag disabled {}"), curobj->formID, curobj->fullName, lowerFlag);
 					aData.npcData[curobj->formID].updateTemplateFlags = true;
 				}
@@ -1605,38 +1603,11 @@ namespace NPC
 		}
 
 		if (!line.removeFlags.empty()) {
-			// Define a map to associate flag names with their corresponding Flag values
-			static const std::map<std::string, RE::ACTOR_BASE_DATA::Flag> flagMap = {
-				{"female", RE::ACTOR_BASE_DATA::Flag::kFemale},
-				{"essential", RE::ACTOR_BASE_DATA::Flag::kEssential},
-				{"ischargenfacepreset", RE::ACTOR_BASE_DATA::Flag::kIsChargenFacePreset},
-				{"respawn", RE::ACTOR_BASE_DATA::Flag::kRespawn},
-				{"autocalcstats", RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats},
-				{"unique", RE::ACTOR_BASE_DATA::Flag::kUnique},
-				{"doesntaffectstealthmeter", RE::ACTOR_BASE_DATA::Flag::kDoesntAffectStealthMeter},
-				{"pclevelmult", RE::ACTOR_BASE_DATA::Flag::kPCLevelMult},
-				{"usestemplate", RE::ACTOR_BASE_DATA::Flag::kUsesTemplate},
-				{"calcfalltemplates", RE::ACTOR_BASE_DATA::Flag::kCalcForAllTemplates},
-				{"protected", RE::ACTOR_BASE_DATA::Flag::kProtected},
-				{"norumors", RE::ACTOR_BASE_DATA::Flag::kNoRumors},
-				{"summonable", RE::ACTOR_BASE_DATA::Flag::kSummonable},
-				{"doesntbleed", RE::ACTOR_BASE_DATA::Flag::kDoesntBleed},
-				{"bleedoutoverride", RE::ACTOR_BASE_DATA::Flag::kBleedoutOverride},
-				{"oppositegenderanims", RE::ACTOR_BASE_DATA::Flag::kOppositeGenderAnims},
-				{"simpleactor", RE::ACTOR_BASE_DATA::Flag::kSimpleActor},
-				{"loopedscript", RE::ACTOR_BASE_DATA::Flag::kLoopedScript},
-				{"noactivation", RE::ACTOR_BASE_DATA::Flag::kNoActivation},
-				{"loopedaudio", RE::ACTOR_BASE_DATA::Flag::kLoopedAudio},
-				{"isghost", RE::ACTOR_BASE_DATA::Flag::kIsGhost},
-				{"invulnerable", RE::ACTOR_BASE_DATA::Flag::kInvulnerable}
-			};
-
 			// Iterate through the removeFlags and apply the respective changes
 			for (const auto& removeFlag : line.removeFlags) {
 				std::string lowerFlag = toLowerCase(removeFlag);
-				auto it = flagMap.find(lowerFlag);
-				if (it != flagMap.end()) {
-					curobj->actorData.actorBaseFlags.reset(it->second);
+				if (const auto* row = formfilter::findActionLowered(kBaseFlagRows, lowerFlag)) {
+					curobj->actorData.actorBaseFlags.reset(static_cast<RE::ACTOR_BASE_DATA::Flag>(row->value));
 					logger::debug(FMT_STRING("npc formid: {:08X} {} flag disabled {}"), curobj->formID, curobj->fullName, lowerFlag);
 					aData.npcData[curobj->formID].updateFlags = true;
 				}
@@ -1648,36 +1619,10 @@ namespace NPC
 		}
 
 		if (!line.setFlags.empty()) {
-			static const std::unordered_map<std::string, RE::ACTOR_BASE_DATA::Flag> flagMap = {
-				{"female", RE::ACTOR_BASE_DATA::Flag::kFemale},
-				{"essential", RE::ACTOR_BASE_DATA::Flag::kEssential},
-				{"ischargenfacepreset", RE::ACTOR_BASE_DATA::Flag::kIsChargenFacePreset},
-				{"respawn", RE::ACTOR_BASE_DATA::Flag::kRespawn},
-				{"autocalcstats", RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats},
-				{"unique", RE::ACTOR_BASE_DATA::Flag::kUnique},
-				{"doesntaffectstealthmeter", RE::ACTOR_BASE_DATA::Flag::kDoesntAffectStealthMeter},
-				{"pclevelmult", RE::ACTOR_BASE_DATA::Flag::kPCLevelMult},
-				{"usestemplate", RE::ACTOR_BASE_DATA::Flag::kUsesTemplate},
-				{"calcfalltemplates", RE::ACTOR_BASE_DATA::Flag::kCalcForAllTemplates},
-				{"protected", RE::ACTOR_BASE_DATA::Flag::kProtected},
-				{"norumors", RE::ACTOR_BASE_DATA::Flag::kNoRumors},
-				{"summonable", RE::ACTOR_BASE_DATA::Flag::kSummonable},
-				{"doesntbleed", RE::ACTOR_BASE_DATA::Flag::kDoesntBleed},
-				{"bleedoutoverride", RE::ACTOR_BASE_DATA::Flag::kBleedoutOverride},
-				{"oppositegenderanims", RE::ACTOR_BASE_DATA::Flag::kOppositeGenderAnims},
-				{"simpleactor", RE::ACTOR_BASE_DATA::Flag::kSimpleActor},
-				{"loopedscript", RE::ACTOR_BASE_DATA::Flag::kLoopedScript},
-				{"noactivation", RE::ACTOR_BASE_DATA::Flag::kNoActivation},
-				{"loopedaudio", RE::ACTOR_BASE_DATA::Flag::kLoopedAudio},
-				{"isghost", RE::ACTOR_BASE_DATA::Flag::kIsGhost},
-				{"invulnerable", RE::ACTOR_BASE_DATA::Flag::kInvulnerable}
-			};
-
 			for (const auto& setFlag : line.setFlags) {
 				std::string flag = toLowerCase(setFlag);
-				auto it = flagMap.find(flag);
-				if (it != flagMap.end()) {
-					curobj->actorData.actorBaseFlags.set(it->second);
+				if (const auto* row = formfilter::findActionLowered(kBaseFlagRows, flag)) {
+					curobj->actorData.actorBaseFlags.set(static_cast<RE::ACTOR_BASE_DATA::Flag>(row->value));
 					logger::debug(FMT_STRING("npc formid: {:08X} {} flag enabled {}"), curobj->formID, curobj->fullName, flag);
 					aData.npcData[curobj->formID].updateFlags = true;
 				}
@@ -1849,34 +1794,9 @@ namespace NPC
 					}
 					else if (lowerKey == "removeflags") {
 						for (int i = 1; i < object.size(); ++i) {
-							auto lowerRemoveFlag = toLowerCase(object[i]);
-							if (lowerRemoveFlag == "ignoreweapon") {
-								newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kIgnoreWeapon);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled IgnoreWeapon"), curobj->formID);
-							}
-							else if (lowerRemoveFlag == "bashattack") {
-								newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kBashAttack);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled BashAttack"), curobj->formID);
-							}
-							else if (lowerRemoveFlag == "powerattack") {
-								newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kPowerAttack);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled PowerAttack"), curobj->formID);
-							}
-							else if (lowerRemoveFlag == "chargeattack") {
-								newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kChargeAttack);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled ChargeAttack"), curobj->formID);
-							}
-							else if (lowerRemoveFlag == "rotatingattack") {
-								newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kRotatingAttack);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled RotatingAttack"), curobj->formID);
-							}
-							else if (lowerRemoveFlag == "continuousattack") {
-								newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kContinuousAttack);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled ContinuousAttack"), curobj->formID);
-							}
-							else if (lowerRemoveFlag == "overridedata") {
-								newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kOverrideData);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled OverrideData"), curobj->formID);
+							if (const auto* row = formfilter::findAction(kAttackFlagRows, object[i])) {
+								newAttackData->data.flags.reset(static_cast<RE::AttackData::AttackFlag>(row->value));
+								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled {}"), curobj->formID, row->label);
 							}
 							else {
 								// Handle the case where an invalid flag is provided
@@ -1887,34 +1807,9 @@ namespace NPC
 					}
 					else if (lowerKey == "setflags") {
 						for (int i = 1; i < object.size(); ++i) {
-							auto lowerSetFlag = toLowerCase(object[i]);
-							if (lowerSetFlag == "ignoreweapon") {
-								newAttackData->data.flags.set(RE::AttackData::AttackFlag::kIgnoreWeapon);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled IgnoreWeapon"), curobj->formID);
-							}
-							else if (lowerSetFlag == "bashattack") {
-								newAttackData->data.flags.set(RE::AttackData::AttackFlag::kBashAttack);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled BashAttack"), curobj->formID);
-							}
-							else if (lowerSetFlag == "powerattack") {
-								newAttackData->data.flags.set(RE::AttackData::AttackFlag::kPowerAttack);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled PowerAttack"), curobj->formID);
-							}
-							else if (lowerSetFlag == "chargeattack") {
-								newAttackData->data.flags.set(RE::AttackData::AttackFlag::kChargeAttack);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled ChargeAttack"), curobj->formID);
-							}
-							else if (lowerSetFlag == "rotatingattack") {
-								newAttackData->data.flags.set(RE::AttackData::AttackFlag::kRotatingAttack);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled RotatingAttack"), curobj->formID);
-							}
-							else if (lowerSetFlag == "continuousattack") {
-								newAttackData->data.flags.set(RE::AttackData::AttackFlag::kContinuousAttack);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled ContinuousAttack"), curobj->formID);
-							}
-							else if (lowerSetFlag == "overridedata") {
-								newAttackData->data.flags.set(RE::AttackData::AttackFlag::kOverrideData);
-								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled OverrideData"), curobj->formID);
+							if (const auto* row = formfilter::findAction(kAttackFlagRows, object[i])) {
+								newAttackData->data.flags.set(static_cast<RE::AttackData::AttackFlag>(row->value));
+								logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled {}"), curobj->formID, row->label);
 							}
 							else {
 								// Handle the case where an invalid flag is provided
@@ -2051,34 +1946,9 @@ namespace NPC
 						}
 						else if (lowerKey == "removeflags") {
 							for (int i = 1; i < object.size(); ++i) {
-								auto lowerRemoveFlag = toLowerCase(object[i]);
-								if (lowerRemoveFlag == "ignoreweapon") {
-									newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kIgnoreWeapon);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled IgnoreWeapon"), curobj->formID);
-								}
-								else if (lowerRemoveFlag == "bashattack") {
-									newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kBashAttack);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled BashAttack"), curobj->formID);
-								}
-								else if (lowerRemoveFlag == "powerattack") {
-									newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kPowerAttack);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled PowerAttack"), curobj->formID);
-								}
-								else if (lowerRemoveFlag == "chargeattack") {
-									newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kChargeAttack);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled ChargeAttack"), curobj->formID);
-								}
-								else if (lowerRemoveFlag == "rotatingattack") {
-									newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kRotatingAttack);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled RotatingAttack"), curobj->formID);
-								}
-								else if (lowerRemoveFlag == "continuousattack") {
-									newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kContinuousAttack);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled ContinuousAttack"), curobj->formID);
-								}
-								else if (lowerRemoveFlag == "overridedata") {
-									newAttackData->data.flags.reset(RE::AttackData::AttackFlag::kOverrideData);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled OverrideData"), curobj->formID);
+								if (const auto* row = formfilter::findAction(kAttackFlagRows, object[i])) {
+									newAttackData->data.flags.reset(static_cast<RE::AttackData::AttackFlag>(row->value));
+									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag disabled {}"), curobj->formID, row->label);
 								}
 								else {
 									// Handle the case where an invalid flag is provided
@@ -2089,34 +1959,9 @@ namespace NPC
 						}
 						else if (lowerKey == "setflags") {
 							for (int i = 1; i < object.size(); ++i) {
-								auto lowerSetFlag = toLowerCase(object[i]);
-								if (lowerSetFlag == "ignoreweapon") {
-									newAttackData->data.flags.set(RE::AttackData::AttackFlag::kIgnoreWeapon);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled IgnoreWeapon"), curobj->formID);
-								}
-								else if (lowerSetFlag == "bashattack") {
-									newAttackData->data.flags.set(RE::AttackData::AttackFlag::kBashAttack);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled BashAttack"), curobj->formID);
-								}
-								else if (lowerSetFlag == "powerattack") {
-									newAttackData->data.flags.set(RE::AttackData::AttackFlag::kPowerAttack);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled PowerAttack"), curobj->formID);
-								}
-								else if (lowerSetFlag == "chargeattack") {
-									newAttackData->data.flags.set(RE::AttackData::AttackFlag::kChargeAttack);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled ChargeAttack"), curobj->formID);
-								}
-								else if (lowerSetFlag == "rotatingattack") {
-									newAttackData->data.flags.set(RE::AttackData::AttackFlag::kRotatingAttack);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled RotatingAttack"), curobj->formID);
-								}
-								else if (lowerSetFlag == "continuousattack") {
-									newAttackData->data.flags.set(RE::AttackData::AttackFlag::kContinuousAttack);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled ContinuousAttack"), curobj->formID);
-								}
-								else if (lowerSetFlag == "overridedata") {
-									newAttackData->data.flags.set(RE::AttackData::AttackFlag::kOverrideData);
-									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled OverrideData"), curobj->formID);
+								if (const auto* row = formfilter::findAction(kAttackFlagRows, object[i])) {
+									newAttackData->data.flags.set(static_cast<RE::AttackData::AttackFlag>(row->value));
+									logger::debug(FMT_STRING("npc formid: {:08X} attackData - flag enabled {}"), curobj->formID, row->label);
 								}
 								else {
 									// Handle the case where an invalid flag is provided

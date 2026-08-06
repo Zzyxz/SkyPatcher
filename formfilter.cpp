@@ -923,4 +923,27 @@ namespace formfilter
 		}
 		return true;
 	}
+
+	// =====================================================================
+	// PHASE 4 -- the action table.
+	// =====================================================================
+	const ActionRow* findAction(const ActionRow* a_rows, std::size_t a_count, const std::string& a_raw)
+	{
+		// ONE lowercase for the whole table, where the ladders did one per
+		// rung. toLowerCase (utility.cpp) is the exact fold the ladders used:
+		// std::tolower over unsigned char, byte by byte.
+		return findActionLowered(a_rows, a_count, toLowerCase(a_raw));
+	}
+
+	const ActionRow* findActionLowered(const ActionRow* a_rows, std::size_t a_count, std::string_view a_lowered)
+	{
+		for (std::size_t i = 0; i < a_count; ++i) {
+			if (a_lowered == a_rows[i].name) {
+				return &a_rows[i];
+			}
+		}
+		// Upstream's trailing `else`: the caller decides between "nothing" and
+		// "log a warning". Never a silent default value.
+		return nullptr;
+	}
 }

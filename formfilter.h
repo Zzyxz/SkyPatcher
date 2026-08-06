@@ -24,8 +24,10 @@
 // allocation, and it is meant to be built ONCE PER RULE, outside the form loop.
 
 #include "PCH.h"
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -479,6 +481,76 @@ namespace formfilter
 	// section for the soundness argument -- this is the same derivation, moved
 	// from three hand-written per-type predicates onto the opcode table.
 	bool programSignals(const MatchProgram& a_prog, std::vector<std::uint64_t>& a_keys);
+
+	// =====================================================================
+	// PHASE 4 -- the ACTION TABLE (the apply side).
+	//
+	// `patch()` is what the filter chains used to be: the same decision
+	// written out over and over. Its dominant shape is a LADDER over a
+	// lowercased config token --
+	//
+	//     for (const auto& f : line.setFlags) {
+	//         if      (toLowerCase(f) == "female")    curobj->...set(kFemale);
+	//         else if (toLowerCase(f) == "essential") curobj->...set(kEssential);
+	//         ...                                     // 20 more rungs
+	//     }
+	//
+	// -- and that ladder is a TABLE: a fixed map from a config token to a
+	// small integer (a flag bit, an enum value, an array index, a slot
+	// selector). Upstream re-derives it per PATCHED FORM, and in the worst
+	// shape (WEAPON's `setSkillType`, 18 rungs) re-lowercases the token once
+	// PER RUNG, so a token that lands on the last rung allocates 18 strings.
+	// Two of NPC's ladders go further and rebuild a whole std::map per
+	// patched form.
+	//
+	// An ActionRow table replaces all of that with one lowercase and one
+	// linear scan over a `constexpr` array of string_views -- no allocation
+	// after the single lowercase, no static-init, no map.
+	//
+	// EXACTNESS. Every ladder this replaces is a chain of `==` against
+	// lowercase literals, so the table is an exact transcription only if
+	//   * the rows keep upstream's SPELLING, including rows upstream spelled
+	//     with a capital and therefore made unreachable (WEAPON's
+	//     `"explodeOnly"`); a transcription may not quietly fix those;
+	//   * the row ORDER is upstream's rung order, so a table that does
+	//     contain duplicates resolves them the way the ladder did; and
+	//   * a miss falls through to whatever upstream's trailing `else` did --
+	//     nothing, or a warning. findAction returns nullptr and the call site
+	//     keeps that branch.
+	//
+	// The lowercasing is `utility.h`'s toLowerCase, called once, so tokens
+	// are folded exactly as the ladders folded them.
+	// `label` exists because several ladders log a PHRASE rather than the
+	// token ("changed hit behavior to no dismember or explode", and one
+	// upstream typo, "changed sound level to very load"). Folding those into
+	// one log statement would rewrite the log; carrying the phrase in the row
+	// keeps every emitted line byte-for-byte what the ladder emitted. Rows
+	// whose ladder logged the token itself leave it empty.
+	struct ActionRow
+	{
+		std::string_view name;   // the config token, LOWERCASE unless upstream was not
+		std::uint32_t    value;  // flag bit / enum value / array index / slot selector
+		std::uint8_t     mode;   // per-table discriminator; 0 where a table has one mode
+		std::string_view label;  // the ladder's log wording; empty where it logged `name`
+	};
+
+	// First row whose name equals a_raw folded to lower case, or nullptr.
+	const ActionRow* findAction(const ActionRow* a_rows, std::size_t a_count, const std::string& a_raw);
+	// Same, for a call site that ALREADY holds the folded token -- several
+	// blocks need it for their log line whether the lookup hits or not, and
+	// folding it twice would be slower than the ladder it replaced.
+	const ActionRow* findActionLowered(const ActionRow* a_rows, std::size_t a_count, std::string_view a_lowered);
+
+	template <std::size_t N>
+	inline const ActionRow* findAction(const ActionRow (&a_rows)[N], const std::string& a_raw)
+	{
+		return findAction(a_rows, N, a_raw);
+	}
+	template <std::size_t N>
+	inline const ActionRow* findActionLowered(const ActionRow (&a_rows)[N], std::string_view a_lowered)
+	{
+		return findActionLowered(a_rows, N, a_lowered);
+	}
 }
 
 #endif

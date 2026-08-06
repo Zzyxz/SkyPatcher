@@ -483,9 +483,96 @@ namespace WEAPON
 		}
 	}
 
+	// =====================================================================
+	// PHASE 4 -- WEAPON's action tables.
+	//
+	// Six of patch()'s setters were `else if` ladders over a lowercased
+	// config token, 4 to 18 rungs long, each rung calling toLowerCase AGAIN --
+	// so `setSkillType=enchanting` allocated eighteen std::strings per patched
+	// weapon to reach the last rung. The tables below are exact
+	// transcriptions of those ladders, in rung order; see formfilter.h
+	// "PHASE 4" for what "exact" had to mean.
+	// =====================================================================
+	namespace
+	{
+		using formfilter::ActionRow;
+
+		// `explodeOnly` is upstream's spelling and is DELIBERATELY kept: the
+		// ladder compares it against an already-lowercased token, so that rung
+		// is unreachable. `explode` (the next rung) is the live one. A
+		// transcription may not quietly fix that.
+		constexpr ActionRow kHitBehaviorRows[] = {
+			{ "normal", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kNormal), 0, "normal" },
+			{ "dismemberonly", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kDismemberOnly), 0, "dismember only" },
+			{ "dismember", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kDismemberOnly), 0, "dismember only" },
+			{ "explodeOnly", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kExplodeOnly), 0, "explode only" },
+			{ "explode", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kExplodeOnly), 0, "explode only" },
+			{ "nodismemberorexplode", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kNoDismemberOrExplode), 0, "no dismember or explode" },
+			{ "no", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kNoDismemberOrExplode), 0, "no dismember or explode" },
+		};
+
+		// "very load" is upstream's typo in the kVeryLoud log line, kept.
+		constexpr ActionRow kSoundLevelRows[] = {
+			{ "loud", static_cast<std::uint32_t>(RE::SOUND_LEVEL::kLoud), 0, "loud" },
+			{ "normal", static_cast<std::uint32_t>(RE::SOUND_LEVEL::kNormal), 0, "normal" },
+			{ "silent", static_cast<std::uint32_t>(RE::SOUND_LEVEL::kSilent), 0, "silent" },
+			{ "veryloud", static_cast<std::uint32_t>(RE::SOUND_LEVEL::kVeryLoud), 0, "very load" },
+			{ "quiet", static_cast<std::uint32_t>(RE::SOUND_LEVEL::kQuiet), 0, "quiet" },
+		};
+
+		constexpr ActionRow kAnimationTypeRows[] = {
+			{ "handtohandmelee", static_cast<std::uint32_t>(RE::WEAPON_TYPE::kHandToHandMelee) },
+			{ "onehandsword", static_cast<std::uint32_t>(RE::WEAPON_TYPE::kOneHandSword) },
+			{ "onehanddagger", static_cast<std::uint32_t>(RE::WEAPON_TYPE::kOneHandDagger) },
+			{ "onehandaxe", static_cast<std::uint32_t>(RE::WEAPON_TYPE::kOneHandAxe) },
+			{ "onehandmace", static_cast<std::uint32_t>(RE::WEAPON_TYPE::kOneHandMace) },
+			{ "twohandsword", static_cast<std::uint32_t>(RE::WEAPON_TYPE::kTwoHandSword) },
+			{ "twohandaxe", static_cast<std::uint32_t>(RE::WEAPON_TYPE::kTwoHandAxe) },
+			{ "bow", static_cast<std::uint32_t>(RE::WEAPON_TYPE::kBow) },
+			{ "staff", static_cast<std::uint32_t>(RE::WEAPON_TYPE::kStaff) },
+			{ "crossbow", static_cast<std::uint32_t>(RE::WEAPON_TYPE::kCrossbow) },
+		};
+
+		// `marksman` -> kArchery is upstream's mapping; the log line says
+		// "marksman", which is what `name` carries.
+		constexpr ActionRow kSkillTypeRows[] = {
+			{ "onehanded", static_cast<std::uint32_t>(RE::ActorValue::kOneHanded) },
+			{ "twohanded", static_cast<std::uint32_t>(RE::ActorValue::kTwoHanded) },
+			{ "marksman", static_cast<std::uint32_t>(RE::ActorValue::kArchery) },
+			{ "block", static_cast<std::uint32_t>(RE::ActorValue::kBlock) },
+			{ "smithing", static_cast<std::uint32_t>(RE::ActorValue::kSmithing) },
+			{ "heavyarmor", static_cast<std::uint32_t>(RE::ActorValue::kHeavyArmor) },
+			{ "lightarmor", static_cast<std::uint32_t>(RE::ActorValue::kLightArmor) },
+			{ "pickpocket", static_cast<std::uint32_t>(RE::ActorValue::kPickpocket) },
+			{ "lockpicking", static_cast<std::uint32_t>(RE::ActorValue::kLockpicking) },
+			{ "sneak", static_cast<std::uint32_t>(RE::ActorValue::kSneak) },
+			{ "alchemy", static_cast<std::uint32_t>(RE::ActorValue::kAlchemy) },
+			{ "speechcraft", static_cast<std::uint32_t>(RE::ActorValue::kSpeech) },
+			{ "alteration", static_cast<std::uint32_t>(RE::ActorValue::kAlteration) },
+			{ "conjuration", static_cast<std::uint32_t>(RE::ActorValue::kConjuration) },
+			{ "destruction", static_cast<std::uint32_t>(RE::ActorValue::kDestruction) },
+			{ "illusion", static_cast<std::uint32_t>(RE::ActorValue::kIllusion) },
+			{ "restoration", static_cast<std::uint32_t>(RE::ActorValue::kRestoration) },
+			{ "enchanting", static_cast<std::uint32_t>(RE::ActorValue::kEnchanting) },
+		};
+
+		// setFlags and removeFlags were two identical 8-rung ladders; one table
+		// serves both, because only set-vs-reset differed.
+		constexpr ActionRow kWeaponFlagRows[] = {
+			{ "ignoresnormalweaponresistance", static_cast<std::uint32_t>(RE::TESObjectWEAP::Data::Flag::kIgnoresNormalWeaponResistance) },
+			{ "automatic", static_cast<std::uint32_t>(RE::TESObjectWEAP::Data::Flag::kAutomatic) },
+			{ "hasscope", static_cast<std::uint32_t>(RE::TESObjectWEAP::Data::Flag::kHasScope) },
+			{ "cantdrop", static_cast<std::uint32_t>(RE::TESObjectWEAP::Data::Flag::kCantDrop) },
+			{ "hidebackpack", static_cast<std::uint32_t>(RE::TESObjectWEAP::Data::Flag::kHideBackpack) },
+			{ "embeddedweapon", static_cast<std::uint32_t>(RE::TESObjectWEAP::Data::Flag::kEmbeddedWeapon) },
+			{ "dontusefirstpersonisanim", static_cast<std::uint32_t>(RE::TESObjectWEAP::Data::Flag::kDontUseFirstPersonISAnim) },
+			{ "nonplayable", static_cast<std::uint32_t>(RE::TESObjectWEAP::Data::Flag::kNonPlayable) },
+		};
+	}
+
 	void* patch(const WEAPON::patch_instruction& line, RE::TESObjectWEAP* curobj)
 	{
-		
+
 
 		if (!line.mirrorWeapon.empty() && line.mirrorWeapon != "none") {
 			try {
@@ -696,22 +783,9 @@ namespace WEAPON
 
 		if (!line.hittype.empty() && line.hittype != "none") {
 			try {
-				std::string hittypeLower = line.hittype;
-				std::transform(hittypeLower.begin(), hittypeLower.end(), hittypeLower.begin(), [](unsigned char c) {
-					return std::tolower(c);  // convert to lowercase
-				});
-				if (hittypeLower == "normal") {
-					curobj->weaponData.hitBehavior = RE::WEAPONHITBEHAVIOR::kNormal;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed hit behavior to normal"), curobj->formID, curobj->fullName);
-				} else if (hittypeLower == "dismemberonly" || hittypeLower == "dismember") {
-					curobj->weaponData.hitBehavior = RE::WEAPONHITBEHAVIOR::kDismemberOnly;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed hit behavior to dismember only"), curobj->formID, curobj->fullName);
-				} else if (hittypeLower == "explodeOnly" || hittypeLower == "explode") {
-					curobj->weaponData.hitBehavior = RE::WEAPONHITBEHAVIOR::kExplodeOnly;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed hit behavior to explode only"), curobj->formID, curobj->fullName);
-				} else if (hittypeLower == "nodismemberorexplode" || hittypeLower == "no") {
-					curobj->weaponData.hitBehavior = RE::WEAPONHITBEHAVIOR::kNoDismemberOrExplode;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed hit behavior to no dismember or explode"), curobj->formID, curobj->fullName);
+				if (const auto* row = formfilter::findAction(kHitBehaviorRows, line.hittype)) {
+					curobj->weaponData.hitBehavior = static_cast<RE::WEAPONHITBEHAVIOR>(row->value);
+					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed hit behavior to {}"), curobj->formID, curobj->fullName, row->label);
 				}
 			} catch (const std::invalid_argument& e) {
 			}
@@ -719,25 +793,9 @@ namespace WEAPON
 
 		if (!line.soundlevel.empty() && line.soundlevel != "none") {
 			try {
-				std::string hittypeLower = line.soundlevel;
-				std::transform(hittypeLower.begin(), hittypeLower.end(), hittypeLower.begin(), [](unsigned char c) {
-					return std::tolower(c);  // convert to lowercase
-				});
-				if (hittypeLower == "loud") {
-					curobj->soundLevel = RE::SOUND_LEVEL::kLoud;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed sound level to loud"), curobj->formID, curobj->fullName);
-				} else if (hittypeLower == "normal") {
-					curobj->soundLevel = RE::SOUND_LEVEL::kNormal;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed sound level to normal"), curobj->formID, curobj->fullName);
-				} else if (hittypeLower == "silent") {
-					curobj->soundLevel = RE::SOUND_LEVEL::kSilent;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed sound level to silent"), curobj->formID, curobj->fullName);
-				} else if (hittypeLower == "veryloud") {
-					curobj->soundLevel = RE::SOUND_LEVEL::kVeryLoud;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed sound level to very load"), curobj->formID, curobj->fullName);
-				} else if (hittypeLower == "quiet") {
-					curobj->soundLevel = RE::SOUND_LEVEL::kQuiet;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed sound level to quiet"), curobj->formID, curobj->fullName);
+				if (const auto* row = formfilter::findAction(kSoundLevelRows, line.soundlevel)) {
+					curobj->soundLevel = static_cast<RE::SOUND_LEVEL>(row->value);
+					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed sound level to {}"), curobj->formID, curobj->fullName, row->label);
 				}
 			} catch (const std::invalid_argument& e) {
 			}
@@ -958,36 +1016,9 @@ namespace WEAPON
 		
 		 if (!line.setAnimationType.empty()) {
 			for (const auto& setFlag : line.setAnimationType) {
-				if (toLowerCase(setFlag) == "handtohandmelee") {
-					curobj->weaponData.animationType = RE::WEAPON_TYPE::kHandToHandMelee;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} set AnimationType handtohandmelee"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "onehandsword") {
-					curobj->weaponData.animationType = RE::WEAPON_TYPE::kOneHandSword;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} set AnimationType onehandsword"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "onehanddagger") {
-					curobj->weaponData.animationType = RE::WEAPON_TYPE::kOneHandDagger;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} set AnimationType onehanddagger"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "onehandaxe") {
-					curobj->weaponData.animationType = RE::WEAPON_TYPE::kOneHandAxe;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} set AnimationType onehandaxe"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "onehandmace") {
-					curobj->weaponData.animationType = RE::WEAPON_TYPE::kOneHandMace;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} set AnimationType onehandmace"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "twohandsword") {
-					curobj->weaponData.animationType = RE::WEAPON_TYPE::kTwoHandSword;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} set AnimationType twohandsword"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "twohandaxe") {
-					curobj->weaponData.animationType = RE::WEAPON_TYPE::kTwoHandAxe;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} set AnimationType twohandaxe"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "bow") {
-					curobj->weaponData.animationType = RE::WEAPON_TYPE::kBow;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} set AnimationType bow"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "staff") {
-					curobj->weaponData.animationType = RE::WEAPON_TYPE::kStaff;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} set AnimationType staff"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "crossbow") {
-					curobj->weaponData.animationType = RE::WEAPON_TYPE::kCrossbow;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} set AnimationType crossbow"), curobj->formID, curobj->fullName);
+				if (const auto* row = formfilter::findAction(kAnimationTypeRows, setFlag)) {
+					curobj->weaponData.animationType = static_cast<RE::WEAPON_TYPE>(row->value);
+					logger::debug(FMT_STRING("weapon formid: {:08X} {} set AnimationType {}"), curobj->formID, curobj->fullName, row->name);
 				} else {
 					// Handle the case where an invalid flag is provided
 					logger::warn(FMT_STRING("Invalid set flag: {}"), setFlag);
@@ -997,60 +1028,9 @@ namespace WEAPON
 
 		 if (!line.setSkillType.empty()) {
 			for (const auto& setFlag : line.setSkillType) {
-				if (toLowerCase(setFlag) == "onehanded") {
-					curobj->weaponData.skill = RE::ActorValue::kOneHanded;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to onehanded"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "twohanded") {
-					curobj->weaponData.skill = RE::ActorValue::kTwoHanded;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to twohanded"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "marksman") {
-					curobj->weaponData.skill = RE::ActorValue::kArchery;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to marksman"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "block") {
-					curobj->weaponData.skill = RE::ActorValue::kBlock;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to block"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "smithing") {
-					curobj->weaponData.skill = RE::ActorValue::kSmithing;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to smithing"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "heavyarmor") {
-					curobj->weaponData.skill = RE::ActorValue::kHeavyArmor;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to heavyarmor"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "lightarmor") {
-					curobj->weaponData.skill = RE::ActorValue::kLightArmor;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to lightarmor"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "pickpocket") {
-					curobj->weaponData.skill = RE::ActorValue::kPickpocket;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to pickpocket"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "lockpicking") {
-					curobj->weaponData.skill = RE::ActorValue::kLockpicking;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to lockpicking"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "sneak") {
-					curobj->weaponData.skill = RE::ActorValue::kSneak;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to sneak"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "alchemy") {
-					curobj->weaponData.skill = RE::ActorValue::kAlchemy;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to alchemy"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "speechcraft") {
-					curobj->weaponData.skill = RE::ActorValue::kSpeech;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to speechcraft"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "alteration") {
-					curobj->weaponData.skill = RE::ActorValue::kAlteration;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to alteration"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "conjuration") {
-					curobj->weaponData.skill = RE::ActorValue::kConjuration;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to conjuration"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "destruction") {
-					curobj->weaponData.skill = RE::ActorValue::kDestruction;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to destruction"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "illusion") {
-					curobj->weaponData.skill = RE::ActorValue::kIllusion;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to illusion"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "restoration") {
-					curobj->weaponData.skill = RE::ActorValue::kRestoration;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to restoration"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "enchanting") {
-					curobj->weaponData.skill = RE::ActorValue::kEnchanting;
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to enchanting"), curobj->formID, curobj->fullName);
+				if (const auto* row = formfilter::findAction(kSkillTypeRows, setFlag)) {
+					curobj->weaponData.skill = static_cast<RE::ActorValue>(row->value);
+					logger::debug(FMT_STRING("weapon formid: {:08X} {} skill set to {}"), curobj->formID, curobj->fullName, row->name);
 				} else {
 					// Handle the case where an invalid flag is provided
 					logger::warn(FMT_STRING("Invalid set flag: {}"), setFlag);
@@ -1061,30 +1041,9 @@ namespace WEAPON
 		if (!line.setFlags.empty()) {
 			for (const auto& setFlag : line.setFlags) {
 				//logger::debug(FMT_STRING("weapon formid: {:08X} {} flag {}"), curobj->formID, curobj->fullName, setFlag);
-				if (toLowerCase(setFlag) == "ignoresnormalweaponresistance") {
-					curobj->weaponData.flags.set(RE::TESObjectWEAP::Data::Flag::kIgnoresNormalWeaponResistance);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag enabled ignoresnormalweaponresistance"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "automatic") {
-					curobj->weaponData.flags.set(RE::TESObjectWEAP::Data::Flag::kAutomatic);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag enabled automatic"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "hasscope") {
-					curobj->weaponData.flags.set(RE::TESObjectWEAP::Data::Flag::kHasScope);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag enabled hasscope"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "cantdrop") {
-					curobj->weaponData.flags.set(RE::TESObjectWEAP::Data::Flag::kCantDrop);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag enabled cantdrop"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "hidebackpack") {
-					curobj->weaponData.flags.set(RE::TESObjectWEAP::Data::Flag::kHideBackpack);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag enabled hidebackpack"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "embeddedweapon") {
-					curobj->weaponData.flags.set(RE::TESObjectWEAP::Data::Flag::kEmbeddedWeapon);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag enabled embeddedweapon"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "dontusefirstpersonisanim") {
-					curobj->weaponData.flags.set(RE::TESObjectWEAP::Data::Flag::kDontUseFirstPersonISAnim);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag enabled dontusefirstpersonisanim"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "nonplayable") {
-					curobj->weaponData.flags.set(RE::TESObjectWEAP::Data::Flag::kNonPlayable);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag enabled nonplayable"), curobj->formID, curobj->fullName);
+				if (const auto* row = formfilter::findAction(kWeaponFlagRows, setFlag)) {
+					curobj->weaponData.flags.set(static_cast<RE::TESObjectWEAP::Data::Flag>(row->value));
+					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag enabled {}"), curobj->formID, curobj->fullName, row->name);
 				} else {
 					// Handle the case where an invalid flag is provided
 					// You might want to add error handling or logging here
@@ -1094,30 +1053,9 @@ namespace WEAPON
 
 		if (!line.removeFlags.empty()) {
 			for (const auto& removeFlag : line.removeFlags) {
-				if (toLowerCase(removeFlag) == "ignoresnormalweaponresistance") {
-					curobj->weaponData.flags.reset(RE::TESObjectWEAP::Data::Flag::kIgnoresNormalWeaponResistance);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag disabled ignoresnormalweaponresistance"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(removeFlag) == "automatic") {
-					curobj->weaponData.flags.reset(RE::TESObjectWEAP::Data::Flag::kAutomatic);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag disabled automatic"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(removeFlag) == "hasscope") {
-					curobj->weaponData.flags.reset(RE::TESObjectWEAP::Data::Flag::kHasScope);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag disabled hasscope"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(removeFlag) == "cantdrop") {
-					curobj->weaponData.flags.reset(RE::TESObjectWEAP::Data::Flag::kCantDrop);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag disabled cantdrop"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(removeFlag) == "hidebackpack") {
-					curobj->weaponData.flags.reset(RE::TESObjectWEAP::Data::Flag::kHideBackpack);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag disabled hidebackpack"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(removeFlag) == "embeddedweapon") {
-					curobj->weaponData.flags.reset(RE::TESObjectWEAP::Data::Flag::kEmbeddedWeapon);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag disabled embeddedweapon"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(removeFlag) == "dontusefirstpersonisanim") {
-					curobj->weaponData.flags.reset(RE::TESObjectWEAP::Data::Flag::kDontUseFirstPersonISAnim);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag disabled dontusefirstpersonisanim"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(removeFlag) == "nonplayable") {
-					curobj->weaponData.flags.reset(RE::TESObjectWEAP::Data::Flag::kNonPlayable);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag disabled nonplayable"), curobj->formID, curobj->fullName);
+				if (const auto* row = formfilter::findAction(kWeaponFlagRows, removeFlag)) {
+					curobj->weaponData.flags.reset(static_cast<RE::TESObjectWEAP::Data::Flag>(row->value));
+					logger::debug(FMT_STRING("weapon formid: {:08X} {} flag disabled {}"), curobj->formID, curobj->fullName, row->name);
 				} else {
 					// Handle the case where an invalid flag is provided
 					// You might want to add error handling or logging here

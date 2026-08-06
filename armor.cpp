@@ -490,6 +490,34 @@ namespace ARMOR
 		}
 	}
 
+	// =====================================================================
+	// PHASE 4 -- ARMOR's action tables. See formfilter.h "PHASE 4".
+	//
+	// Three ladders, each re-lowercasing the token once per rung. The
+	// `armorType` one did it three times to reject a token; setFlags and
+	// removeFlags were the same four rungs written twice.
+	// =====================================================================
+	namespace
+	{
+		using formfilter::ActionRow;
+
+		// The log line spells these with capitals ("LightArmor"), the config
+		// token does not; `label` carries the log spelling.
+		constexpr ActionRow kArmorTypeRows[] = {
+			{ "lightarmor", static_cast<std::uint32_t>(RE::BIPED_MODEL::ArmorType::kLightArmor), 0, "LightArmor" },
+			{ "heavyarmor", static_cast<std::uint32_t>(RE::BIPED_MODEL::ArmorType::kHeavyArmor), 0, "HeavyArmor" },
+			{ "clothing", static_cast<std::uint32_t>(RE::BIPED_MODEL::ArmorType::kClothing), 0, "Clothing" },
+		};
+
+		// RecordFlags is a raw bit mask OR'd into formFlags, not an enum set.
+		constexpr ActionRow kArmorFlagRows[] = {
+			{ "nonplayable", static_cast<std::uint32_t>(RE::TESObjectARMO::RecordFlags::kNonPlayable) },
+			{ "deleted", static_cast<std::uint32_t>(RE::TESObjectARMO::RecordFlags::kDeleted) },
+			{ "shield", static_cast<std::uint32_t>(RE::TESObjectARMO::RecordFlags::kShield) },
+			{ "ignored", static_cast<std::uint32_t>(RE::TESObjectARMO::RecordFlags::kIgnored) },
+		};
+	}
+
 	void* patch(const ARMOR::patch_instruction_armor& line, RE::TESObjectARMO* curobj)
 	{
 
@@ -754,15 +782,9 @@ namespace ARMOR
 		}
 
 		if (!line.armorType.empty() && line.armorType != "none") {
-			if (toLowerCase(line.armorType) == "lightarmor") {
-				curobj->bipedModelData.armorType = RE::BIPED_MODEL::ArmorType::kLightArmor;
-				logger::debug(FMT_STRING("armor formid: {:08X} {} changed armorType to LightArmor"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.armorType) == "heavyarmor") {
-				curobj->bipedModelData.armorType = RE::BIPED_MODEL::ArmorType::kHeavyArmor;
-				logger::debug(FMT_STRING("armor formid: {:08X} {} changed armorType to HeavyArmor"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.armorType) == "clothing") {
-				curobj->bipedModelData.armorType = RE::BIPED_MODEL::ArmorType::kClothing;
-				logger::debug(FMT_STRING("armor formid: {:08X} {} changed armorType to Clothing"), curobj->formID, curobj->fullName);
+			if (const auto* row = formfilter::findAction(kArmorTypeRows, line.armorType)) {
+				curobj->bipedModelData.armorType = static_cast<RE::BIPED_MODEL::ArmorType>(row->value);
+				logger::debug(FMT_STRING("armor formid: {:08X} {} changed armorType to {}"), curobj->formID, curobj->fullName, row->label);
 			}
 		}
 
@@ -1086,26 +1108,9 @@ namespace ARMOR
 			bool changedFlags = false;
 
 			for (const auto& setFlagRaw : line.setFlags) {
-				const auto setFlag = toLowerCase(setFlagRaw);
-
-				if (setFlag == "nonplayable") {
-					curobj->formFlags |= RE::TESObjectARMO::RecordFlags::kNonPlayable;
-					logger::debug(FMT_STRING("armor formid: {:08X} {} flag enabled nonplayable"), curobj->formID, curobj->fullName);
-					changedFlags = true;
-
-				} else if (setFlag == "deleted") {
-					curobj->formFlags |= RE::TESObjectARMO::RecordFlags::kDeleted;
-					logger::debug(FMT_STRING("armor formid: {:08X} {} flag enabled deleted"), curobj->formID, curobj->fullName);
-					changedFlags = true;
-
-				} else if (setFlag == "shield") {
-					curobj->formFlags |= RE::TESObjectARMO::RecordFlags::kShield;
-					logger::debug(FMT_STRING("armor formid: {:08X} {} flag enabled shield"), curobj->formID, curobj->fullName);
-					changedFlags = true;
-
-				} else if (setFlag == "ignored") {
-					curobj->formFlags |= RE::TESObjectARMO::RecordFlags::kIgnored;
-					logger::debug(FMT_STRING("armor formid: {:08X} {} flag enabled ignored"), curobj->formID, curobj->fullName);
+				if (const auto* row = formfilter::findAction(kArmorFlagRows, setFlagRaw)) {
+					curobj->formFlags |= row->value;
+					logger::debug(FMT_STRING("armor formid: {:08X} {} flag enabled {}"), curobj->formID, curobj->fullName, row->name);
 					changedFlags = true;
 
 				} else {
@@ -1125,26 +1130,9 @@ namespace ARMOR
 			bool changedFlags = false;
 
 			for (const auto& removeFlagRaw : line.removeFlags) {
-				const auto removeFlag = toLowerCase(removeFlagRaw);
-
-				if (removeFlag == "nonplayable") {
-					curobj->formFlags &= ~RE::TESObjectARMO::RecordFlags::kNonPlayable;
-					logger::debug(FMT_STRING("armor formid: {:08X} {} flag disabled nonplayable"), curobj->formID, curobj->fullName);
-					changedFlags = true;
-
-				} else if (removeFlag == "deleted") {
-					curobj->formFlags &= ~RE::TESObjectARMO::RecordFlags::kDeleted;
-					logger::debug(FMT_STRING("armor formid: {:08X} {} flag disabled deleted"), curobj->formID, curobj->fullName);
-					changedFlags = true;
-
-				} else if (removeFlag == "shield") {
-					curobj->formFlags &= ~RE::TESObjectARMO::RecordFlags::kShield;
-					logger::debug(FMT_STRING("armor formid: {:08X} {} flag disabled shield"), curobj->formID, curobj->fullName);
-					changedFlags = true;
-
-				} else if (removeFlag == "ignored") {
-					curobj->formFlags &= ~RE::TESObjectARMO::RecordFlags::kIgnored;
-					logger::debug(FMT_STRING("armor formid: {:08X} {} flag disabled ignored"), curobj->formID, curobj->fullName);
+				if (const auto* row = formfilter::findAction(kArmorFlagRows, removeFlagRaw)) {
+					curobj->formFlags &= ~row->value;
+					logger::debug(FMT_STRING("armor formid: {:08X} {} flag disabled {}"), curobj->formID, curobj->fullName, row->name);
 					changedFlags = true;
 
 				} else {
