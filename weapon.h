@@ -41,6 +41,7 @@ namespace WEAPON
 		std::string              templateWeapon;
 		std::string              actionpointcost;
 		std::string              hittype;
+		std::string              valueMatch;
 		std::string              soundlevel;
 		std::string              bashDamage;
 		std::string              outOfRangeDamageMult;
@@ -112,7 +113,11 @@ namespace WEAPON
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
+<<<<<<< HEAD
 	void* patch(const WEAPON::patch_instruction& line, RE::TESObjectWEAP* curobj);
+=======
+	void* patch(const WEAPON::patch_instruction& line, RE::TESObjectWEAP* curobj);
+>>>>>>> origin/new-main
 }
 
 #endif

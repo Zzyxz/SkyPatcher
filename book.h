@@ -97,7 +97,11 @@ namespace BOOK
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
+<<<<<<< HEAD
 	void* patch(const BOOK::patch_instruction& line, RE::TESObjectBOOK* curobj);
+=======
+	void* patch(const BOOK::patch_instruction& line, RE::TESObjectBOOK* curobj);
+>>>>>>> origin/new-main
 }
 
 #endif

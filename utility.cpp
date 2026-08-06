@@ -240,6 +240,7 @@ bool IsPluginInstalled(const char* name)
 //	return nullptr;
 //}
 
+<<<<<<< HEAD
 RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
 {
 	auto dataHandler = RE::TESDataHandler::GetSingleton();
@@ -275,40 +276,74 @@ RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
 	}
 	return nullptr;
 }
+=======
+RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
+{
+	static std::unordered_map<std::string, RE::TESForm*> formCache;
+	if (const auto it = formCache.find(identifier); it != formCache.end()) {
+		return it->second;
+	}
+
+	auto dataHandler = RE::TESDataHandler::GetSingleton();
+	if (!dataHandler) {
+		return nullptr;
+	}
+
+	RE::TESForm* result = nullptr;
+	try {
+		auto delimiter = identifier.find('|');
+		if (delimiter != std::string::npos) {
+			// Handle the case when '|' is present in the identifier
+			std::string modName = identifier.substr(0, delimiter);
+			std::string modForm = identifier.substr(delimiter + 1);
+			uint32_t    formID = std::stoul(modForm, nullptr, 16) & 0xFFFFFF;
+			auto*       mod = dataHandler->LookupModByName(modName.c_str());
+			if (mod && mod->IsLight())
+				formID = std::stoul(modForm, nullptr, 16) & 0xFFF;
+			result = dataHandler->LookupForm(formID, modName.c_str());
+		} else {
+			result = RE::TESForm::LookupByEditorID(identifier);
+		}
+	} catch (const std::exception& e) {
+		logger::warn("Invalid form identifier '{}': {}", identifier, e.what());
+	}
+
+	formCache.emplace(identifier, result);
+	return result;
+}
+>>>>>>> origin/new-main
 
 RE::FormID BuildFormIDFromIdentifier(const std::string& identifier)
 {
 	auto* dataHandler = RE::TESDataHandler::GetSingleton();
 	if (!dataHandler)
 		return 0x0;
-
+	try {
 	auto delimiter = identifier.find('|');
 	if (delimiter == std::string::npos) {
 		logger::warn("Invalid identifier format: {}", identifier);
 		return 0x0;
 	}
-
-	std::string modName = identifier.substr(0, delimiter);
-	std::string modForm = identifier.substr(delimiter + 1);
+	std::string   modName = identifier.substr(0, delimiter);
+	std::string   modForm = identifier.substr(delimiter + 1);
 	std::uint32_t rawFormID = std::stoul(modForm, nullptr, 16);
-
-	auto* mod = dataHandler->LookupModByName(modName.c_str());
+	auto*         mod = dataHandler->LookupModByName(modName.c_str());
 	if (!mod) {
 		logger::warn("Mod not found: {}", modName);
 		return 0x0;
 	}
-
 	std::uint32_t fullFormID = 0;
-
 	if (mod->IsLight()) {
-		fullFormID = 0xFE000000 | (mod->GetCompileIndex() << 12) | (rawFormID & 0xFFF);
+		fullFormID = 0xFE000000 | (static_cast<std::uint32_t>(mod->GetSmallFileCompileIndex()) << 12) | (rawFormID & 0xFFF);
+	} else {
+		fullFormID = (static_cast<std::uint32_t>(mod->GetCompileIndex()) << 24) | (rawFormID & 0xFFFFFF);
 	}
-	else {
-		fullFormID = (mod->GetCompileIndex() << 24) | (rawFormID & 0xFFFFFF);
-	}
-
-	//logger::debug("Built FormID {:08X} from {}", fullFormID, identifier);
+	logger::debug("Built FormID {:08X} from {}", fullFormID, identifier);
 	return fullFormID;
+	} catch (const std::exception& e) {
+		logger::warn("Invalid form identifier '{}': {}", identifier, e.what());
+		return 0x0;
+	}
 }
 
 
@@ -747,6 +782,27 @@ RE::BGSKeyword* createKeyword()
 	return RE::ActorValue::kNone; // Example default value
 }
 
+
+RE::FIGHT_REACTION GetFightReaction(const std::string& value)
+{
+	std::string v = value;
+	std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+
+	if (v == "neutral" || v == "0") {
+		return RE::FIGHT_REACTION::kNeutral;
+	}
+	if (v == "enemy" || v == "1") {
+		return RE::FIGHT_REACTION::kEnemy;
+	}
+	if (v == "ally" || v == "2") {
+		return RE::FIGHT_REACTION::kAlly;
+	}
+	if (v == "friend" || v == "3") {
+		return RE::FIGHT_REACTION::kFriend;
+	}
+
+	return RE::FIGHT_REACTION::kNeutral;
+}
 
 
 

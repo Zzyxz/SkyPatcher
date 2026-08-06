@@ -71,7 +71,11 @@ namespace AMMO
 	{
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
+<<<<<<< HEAD
 		auto& AmmoArray = dataHandler->GetFormArray<RE::TESAmmo>();
+=======
+		const auto& AmmoArray = dataHandler->GetFormArray<RE::TESAmmo>();
+>>>>>>> origin/new-main
 		for (const auto& line : tokens) {
 
 			if (!line.ammo.empty()) {
@@ -209,7 +213,7 @@ namespace AMMO
 					try {
 						found = false;
 						//logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} is not a bolt."), curobj->formID, curobj->fullName);
-					} catch (const std::invalid_argument& e) {
+					} catch (const std::exception& e) {
 					}
 				}
 
@@ -280,7 +284,7 @@ namespace AMMO
 								std::list<line_content> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -303,7 +307,11 @@ namespace AMMO
 		}
 	}
 
+<<<<<<< HEAD
 	void* patch(const AMMO::line_content& line, RE::TESAmmo* curobj) {
+=======
+	void* patch(const AMMO::line_content& line, RE::TESAmmo* curobj) {
+>>>>>>> origin/new-main
 		
 		if (!line.damage.empty() && line.damage != "none") {
 				curobj->data.damage = stof(line.damage);
@@ -369,7 +377,7 @@ namespace AMMO
 			try {
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		#ifndef SKYRIMVR
@@ -377,7 +385,7 @@ namespace AMMO
 			try {
 				curobj->weight = std::stof(line.weight);
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		#endif
@@ -385,7 +393,7 @@ namespace AMMO
 			try {
 				curobj->value = std::stoi(line.value);
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		#ifndef SKYRIMVR
@@ -393,7 +401,7 @@ namespace AMMO
 			try {
 				curobj->weight = curobj->weight * std::stof(line.weightMult);
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} multiplied weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		#endif
@@ -401,7 +409,7 @@ namespace AMMO
 			try {
 				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -410,7 +418,7 @@ namespace AMMO
 				curobj->SetModel(line.model.c_str());
 				curobj->ReplaceModel();
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed model path {}"), curobj->formID, curobj->fullName, curobj->model.c_str());
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -461,7 +469,7 @@ namespace AMMO
 			try {
 				curobj->data.projectile->data.speed = std::stof(line.speed);
 				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed speed {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.speed);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -469,7 +477,7 @@ namespace AMMO
 			try {
 				curobj->data.projectile->data.speed = curobj->data.projectile->data.speed * std::stof(line.speedMult);
 				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied speed {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.speed);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -477,7 +485,7 @@ namespace AMMO
 			try {
 				curobj->data.projectile->data.range = std::stof(line.range);
 				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed range {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.range);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -485,7 +493,7 @@ namespace AMMO
 			try {
 				curobj->data.projectile->data.range = curobj->data.projectile->data.range * std::stof(line.rangeMult);
 				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied range {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.range);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -493,7 +501,7 @@ namespace AMMO
 			try {
 				curobj->data.projectile->data.gravity = std::stof(line.gravity);
 				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed gravity {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.gravity);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -501,7 +509,7 @@ namespace AMMO
 			try {
 				curobj->data.projectile->data.gravity = curobj->data.projectile->data.gravity * std::stof(line.gravityMult);
 				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied gravity {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.gravity);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 

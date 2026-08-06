@@ -69,7 +69,11 @@ namespace SCROLL
 	struct line_content create_patch_instruction(const std::string& line);
 	void process_patch_instructions(const std::list<line_content>& tokens);
 	void* readConfig(const std::string& folder);
+<<<<<<< HEAD
 	void*               patch(const SCROLL::line_content& line, RE::ScrollItem* curobj);
+=======
+	void*               patch(const SCROLL::line_content& line, RE::ScrollItem* curobj);
+>>>>>>> origin/new-main
 }
 
 #endif

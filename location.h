@@ -94,7 +94,11 @@ namespace LOCATION
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
+<<<<<<< HEAD
 	void* patch(const LOCATION::patch_instruction& line, RE::BGSLocation* curobj);
+=======
+	void* patch(const LOCATION::patch_instruction& line, RE::BGSLocation* curobj);
+>>>>>>> origin/new-main
 }
 
 #endif

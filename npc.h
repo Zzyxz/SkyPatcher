@@ -223,6 +223,7 @@ namespace NPC
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	ActorData readConfig(const std::string& folder);
+<<<<<<< HEAD
 	void*     patch(const NPC::patch_instruction& line, RE::TESNPC* curobj);
 	void      setbEnableSetLevelDirectlyByPCMult();
 	bool      findObject(const patch_instruction& line, RE::TESNPC* curobj);
@@ -233,6 +234,12 @@ namespace NPC
 	// is NOT what process_patch_instructions uses.
 	bool      findObject(const patch_instruction& line, const formfilter::MatchProgram& program, RE::TESNPC* curobj);
 	formfilter::MatchProgram makeFilterView(const patch_instruction& line);
+=======
+	void*     patch(const NPC::patch_instruction& line, RE::TESNPC* curobj);
+	void*     patchActor(const NPC::patch_instruction& line, RE::Character* curActObj);
+	void      setbEnableSetLevelDirectlyByPCMult();
+	bool      findObject(const patch_instruction& line, RE::TESNPC* curobj, const std::string& lowerEditorID);
+>>>>>>> origin/new-main
 	void*     readConfigHook(const std::string& folder);
 }
 

@@ -307,7 +307,12 @@ namespace SPELL
 	{
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
+<<<<<<< HEAD
 		auto& objectSpellArray = dataHandler->GetFormArray<RE::SpellItem>();
+=======
+		//RE::BSTArray<RE::AlchemyItem*> objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
+		const auto& objectSpellArray = dataHandler->GetFormArray<RE::SpellItem>();
+>>>>>>> origin/new-main
 		for (const auto& line : tokens) {
 
 
@@ -591,7 +596,7 @@ namespace SPELL
 								std::list<line_content> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -616,7 +621,11 @@ namespace SPELL
 
 	
 
+<<<<<<< HEAD
 	void patch(const SPELL::line_content& line, RE::SpellItem* curobj) {
+=======
+	void patch(const SPELL::line_content& line, RE::SpellItem* curobj) {
+>>>>>>> origin/new-main
 		if (!line.keywordsToAdd.empty()) {
 			for (size_t i = 0; i < line.keywordsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
@@ -667,7 +676,8 @@ namespace SPELL
 		}
 
 		if ( !line.addedObjects.empty()) {
-			for (const auto& objectToAdd : line.addedObjects) {
+		for (const auto& objectToAdd : line.addedObjects) {
+			if (objectToAdd.size() < 4) { logger::warn("spell {:08X}: invalid addedObjects entry, expected 4 values", curobj->formID); continue; }
 				std::string        addFormStr = objectToAdd[0];
 				float              magnitude = std::stof(objectToAdd[1]);
 				int32_t            duration = std::stoi(objectToAdd[2]);
@@ -696,7 +706,9 @@ namespace SPELL
 		}
 
 		if ( !line.changedObjects.empty()) {
-			for (const auto& objectToAdd : line.changedObjects) {
+		for (auto objectToAdd : line.changedObjects) {
+			if (objectToAdd.empty()) { logger::warn("spell {:08X}: empty changedObjects entry", curobj->formID); continue; }
+			objectToAdd.resize(5, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
 				if (addForm) {  // Only proceed if addForm is not null
@@ -746,7 +758,9 @@ namespace SPELL
 		}
 
 		if (!line.changedAddObjects.empty()) {
-			for (const auto& objectToAdd : line.changedAddObjects) {
+		for (auto objectToAdd : line.changedAddObjects) {
+			if (objectToAdd.empty()) { logger::warn("spell {:08X}: empty changedAddObjects entry", curobj->formID); continue; }
+			objectToAdd.resize(4, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
 				if (addForm) {  // Only proceed if addForm is not null
@@ -786,7 +800,9 @@ namespace SPELL
 		}
 
 		if (!line.changedFirstObjects.empty()) {
-			for (const auto& objectToAdd : line.changedFirstObjects) {
+		for (auto objectToAdd : line.changedFirstObjects) {
+			if (objectToAdd.empty()) { logger::warn("spell {:08X}: empty changedFirstObjects entry", curobj->formID); continue; }
+			objectToAdd.resize(4, "null");
 
 					float magnitude = 0.0f;
 					if (objectToAdd[0] != "null") {
@@ -832,7 +848,9 @@ namespace SPELL
 		}
 
 		if (!line.changedDamageHealthObjects.empty()) {
-			for (const auto& objectToAdd : line.changedDamageHealthObjects) {
+		for (auto objectToAdd : line.changedDamageHealthObjects) {
+			if (objectToAdd.empty()) { logger::warn("spell {:08X}: empty changedDamageHealthObjects entry", curobj->formID); continue; }
+			objectToAdd.resize(4, "null");
 				float magnitude = 0.0f;
 				if (objectToAdd[0] != "null") {
 					magnitude = std::stof(objectToAdd[0]);
@@ -880,7 +898,7 @@ namespace SPELL
 			try {
 				logger::debug(FMT_STRING("spell formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -898,7 +916,7 @@ namespace SPELL
 					curobj->data.castingPerk = (RE::BGSPerk*)currentform;
 					logger::debug(FMT_STRING("spell formid: {:08X} {} changed halfCostPerk {:08X}"), curobj->formID, curobj->fullName, curobj->data.castingPerk->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -921,9 +939,10 @@ namespace SPELL
 		if (!line.equipSlot.empty() && line.equipSlot != "none") {
 			RE::TESForm* currentform = nullptr;
 			currentform = GetFormFromIdentifier(line.equipSlot);
-			if (currentform && currentform->formType == RE::FormType::EquipSlot)
+			if (currentform && currentform->formType == RE::FormType::EquipSlot) {
 				curobj->SetEquipSlot((RE::BGSEquipSlot*)currentform);
-			logger::debug(FMT_STRING("spell formid: {:08X} {} changed equipslot to {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
+				logger::debug(FMT_STRING("spell formid: {:08X} {} changed equipslot to {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
+			}
 		}
 
 

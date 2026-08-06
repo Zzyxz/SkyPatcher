@@ -47,6 +47,12 @@ bool                             findTextureSet(RE::TESModelTextureSwap* curobj,
 RE::TESClass*                    copyClass(RE::TESClass* aobj);
 RE::BGSKeyword*					 createKeyword();
 std::string                      normalizePath(const std::string& path);
+<<<<<<< HEAD
 
+=======
+std::string                      toHex(const std::string& str);
+RE::TESObjectREFR*               createREFR();
+RE::FIGHT_REACTION               GetFightReaction(const std::string& value);
+>>>>>>> origin/new-main
 
 #endif

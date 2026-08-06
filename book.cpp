@@ -74,7 +74,11 @@ namespace BOOK
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
+<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectBOOK>();
+=======
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectBOOK>();
+>>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -304,7 +308,7 @@ namespace BOOK
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -327,14 +331,18 @@ namespace BOOK
 		}
 	}
 
+<<<<<<< HEAD
 	void* patch(const BOOK::patch_instruction& line, RE::TESObjectBOOK* curobj)
+=======
+	void* patch(const BOOK::patch_instruction& line, RE::TESObjectBOOK* curobj)
+>>>>>>> origin/new-main
 	{
 
 		if (!line.weight.empty() && line.weight != "none") {
 			try {
 				curobj->weight = std::stof(line.weight);
 				logger::debug(FMT_STRING("book formid: {:08X} {} changed weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -342,7 +350,7 @@ namespace BOOK
 			try {
 				curobj->value = std::stoi(line.value);
 				logger::debug(FMT_STRING("book formid: {:08X} {} changed value {:d}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -350,7 +358,7 @@ namespace BOOK
 			try {
 				curobj->weight = curobj->weight * std::stof(line.weightMult);
 				logger::debug(FMT_STRING("book formid: {:08X} {} multiplied weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -358,7 +366,7 @@ namespace BOOK
 			try {
 				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
 				logger::debug(FMT_STRING("book formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -395,7 +403,7 @@ namespace BOOK
 					curobj->inventoryModel = (RE::TESObjectSTAT*)currentform;
 					logger::debug(FMT_STRING("book formid: {:08X} {} changed inventory art {:08X}"), curobj->formID, curobj->fullName, curobj->inventoryModel->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -462,7 +470,7 @@ namespace BOOK
 					curobj->pickupSound = (RE::BGSSoundDescriptorForm*)currentform;
 					logger::debug(FMT_STRING("book formid: {:08X} {} changed pickUpSound {:08X}"), curobj->formID, curobj->fullName, curobj->pickupSound->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -475,7 +483,7 @@ namespace BOOK
 					curobj->putdownSound = (RE::BGSSoundDescriptorForm*)currentform;
 					logger::debug(FMT_STRING("book formid: {:08X} {} changed putDownSound {:08X}"), curobj->formID, curobj->fullName, curobj->putdownSound->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -493,7 +501,7 @@ namespace BOOK
 					curobj->data.teaches.spell = nullptr;
 					logger::debug(FMT_STRING("book formid: {:08X} {} changed spell teached to null"), curobj->formID, curobj->fullName);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -563,7 +571,7 @@ namespace BOOK
 				curobj->SetModel(line.model.c_str());
 				curobj->ReplaceModel();
 				logger::debug(FMT_STRING("book formid: {:08X} {} changed model path {}"), curobj->formID, curobj->fullName, curobj->model.c_str());
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -609,7 +617,7 @@ namespace BOOK
 			try {
 				logger::debug(FMT_STRING("book formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -617,7 +625,7 @@ namespace BOOK
 			try {
 				logger::debug(FMT_STRING("book formid: {:08X} {} changed minX to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.minX);
 				curobj->boundData.boundMin.x = std::stoi(line.minX);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -625,7 +633,7 @@ namespace BOOK
 			try {
 				logger::debug(FMT_STRING("book formid: {:08X} {} changed minY to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.minY);
 				curobj->boundData.boundMin.y = std::stoi(line.minY);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -633,7 +641,7 @@ namespace BOOK
 			try {
 				logger::debug(FMT_STRING("book formid: {:08X} {} changed minZ to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.minZ);
 				curobj->boundData.boundMin.z = std::stoi(line.minZ);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -641,7 +649,7 @@ namespace BOOK
 			try {
 				logger::debug(FMT_STRING("book formid: {:08X} {} changed maxX to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.maxX);
 				curobj->boundData.boundMax.x = std::stoi(line.maxX);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -649,7 +657,7 @@ namespace BOOK
 			try {
 				logger::debug(FMT_STRING("book formid: {:08X} {} changed maxY to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.maxY);
 				curobj->boundData.boundMax.y = std::stoi(line.maxY);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -657,7 +665,7 @@ namespace BOOK
 			try {
 				logger::debug(FMT_STRING("book formid: {:08X} {} changed maxZ to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.maxZ);
 				curobj->boundData.boundMax.z = std::stoi(line.maxZ);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 

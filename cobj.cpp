@@ -65,7 +65,11 @@ namespace COBJ
 	{
 		logger::debug("processing patch instructions");
 		const auto                                dataHandler = RE::TESDataHandler::GetSingleton();
+<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSConstructibleObject>();
+=======
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::BGSConstructibleObject>();
+>>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -370,7 +374,7 @@ namespace COBJ
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -393,7 +397,11 @@ namespace COBJ
 		}
 	}
 
+<<<<<<< HEAD
 	void* patch(const COBJ::patch_instruction& line, RE::BGSConstructibleObject* curobj)
+=======
+	void* patch(const COBJ::patch_instruction& line, RE::BGSConstructibleObject* curobj)
+>>>>>>> origin/new-main
 	{
 
 
@@ -401,12 +409,13 @@ namespace COBJ
 			try {
 				curobj->requiredItems.RemoveAllObjectFromContainer();
 				logger::debug(FMT_STRING("cobj formid: {:08X} cleared all ingredients"), curobj->formID);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
 		if (!line.removeContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjects) {
+				if (objectToAdd.size() < 2) { logger::warn("cobj {:08X}: invalid removeContainerObjects entry, expected 2 values", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string addFormStr = objectToAdd[0];
 				// `removeFromCobjsByCount=<form>~<count>`: the count IS the verb,
@@ -452,6 +461,7 @@ namespace COBJ
 
 		if (!line.addedContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjects) {
+				if (objectToAdd.size() < 2) { logger::warn("cobj {:08X}: invalid addedContainerObjects entry, expected 2 values", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string addFormStr = objectToAdd[0];
 				// `addToCobjs` is `addToContainers` for a recipe; container.cpp's
@@ -482,6 +492,7 @@ namespace COBJ
 
 		if (!line.addedContainerObjectsAdjusted.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjectsAdjusted) {
+				if (objectToAdd.size() < 3) { logger::warn("cobj {:08X}: invalid addedContainerObjectsAdjusted entry, expected 3 values", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string addFormStr = objectToAdd[0];
 				// `addToCobjsAdjusted=<form>~<count>~<maxAmount>`. Both operands
@@ -524,6 +535,7 @@ namespace COBJ
 
 		if (!line.replaceObjectInContainer.empty()) {
 			for (const auto& objectToAdd : line.replaceObjectInContainer) {
+				if (objectToAdd.size() < 2) { logger::warn("cobj {:08X}: invalid replaceObjectInContainer entry, expected 2 values", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				// `replaceInCobjs=<old>~<new>` needs both halves; a one-element
 				// group read past the end. No conversion here, so this is only
@@ -654,12 +666,16 @@ namespace COBJ
 			try {
 				curobj->data.numConstructed = std::stoi(line.count);
 				logger::debug(FMT_STRING("cobj formid: {:08X} changed count {}"), curobj->formID, curobj->data.numConstructed);
+<<<<<<< HEAD
 			} catch (...) {
 				// Was `catch (const std::invalid_argument&)`, which let
 				// std::out_of_range (e.g. `count=99999999999`) escape patch()
 				// and terminate the load. Widened, and given the diagnostic the
 				// silent catch never produced.
 				logger::warn(FMT_STRING("Invalid count for cobj: {}"), line.count);
+=======
+			} catch (const std::exception& e) {
+>>>>>>> origin/new-main
 			}
 		}
 
@@ -667,9 +683,13 @@ namespace COBJ
 			try {
 				curobj->data.numConstructed = curobj->data.numConstructed * std::stof(line.countMult);
 				logger::debug(FMT_STRING("cobj formid: {:08X} multiplied count {}"), curobj->formID, curobj->data.numConstructed);
+<<<<<<< HEAD
 			} catch (...) {
 				// As above: std::out_of_range escaped the narrower catch.
 				logger::warn(FMT_STRING("Invalid countMult for cobj: {}"), line.countMult);
+=======
+			} catch (const std::exception& e) {
+>>>>>>> origin/new-main
 			}
 		}
 

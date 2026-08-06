@@ -28,6 +28,7 @@ namespace FORMLIST
 	struct line_content create_patch_instruction(const std::string& line);
 	void                process_patch_instructions(const std::list<line_content>& tokens);
 	void*               readConfig(const std::string& folder);
+	void               patch(const FORMLIST::line_content& line, RE::BGSListForm* curobj);
 }
 
 #endif

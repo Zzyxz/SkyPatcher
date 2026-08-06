@@ -78,7 +78,11 @@ namespace OUTFIT
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
+<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSOutfit>();
+=======
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::BGSOutfit>();
+>>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -259,7 +263,7 @@ namespace OUTFIT
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -282,7 +286,11 @@ namespace OUTFIT
 		}
 	}
 
+<<<<<<< HEAD
 	void patch(const OUTFIT::patch_instruction& line, RE::BGSOutfit* curobj)
+=======
+	void patch(const OUTFIT::patch_instruction& line, RE::BGSOutfit* curobj)
+>>>>>>> origin/new-main
 	{
 		
 
@@ -293,7 +301,7 @@ namespace OUTFIT
 			try {
 				curobj->outfitItems.clear();
 				logger::debug(FMT_STRING("outfit formid: {:08X} cleared"), curobj->formID);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 

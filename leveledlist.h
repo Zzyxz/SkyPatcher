@@ -55,7 +55,12 @@ namespace LEVELEDLIST
 	void                process_patch_instructions(const std::list<line_content>& tokens);
 	void*               readConfig(const std::string& folder);
 	template <typename T>
+<<<<<<< HEAD
 	void patch(const LEVELEDLIST::line_content& line, T* curobj);
+=======
+	void patch(const LEVELEDLIST::line_content& line, T* curobj);
+	void                patchLevChar(LEVELEDLIST::line_content line, RE::TESLevCharacter* curobj);
+>>>>>>> origin/new-main
 }
 
 #endif

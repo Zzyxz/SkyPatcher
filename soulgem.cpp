@@ -61,7 +61,11 @@ namespace SOULGEM
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
+<<<<<<< HEAD
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESSoulGem>();
+=======
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::TESSoulGem>();
+>>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -207,7 +211,7 @@ namespace SOULGEM
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -230,13 +234,17 @@ namespace SOULGEM
 		}
 	}
 
+<<<<<<< HEAD
 	void* patch(const SOULGEM::patch_instruction& line, RE::TESSoulGem* curobj)
+=======
+	void* patch(const SOULGEM::patch_instruction& line, RE::TESSoulGem* curobj)
+>>>>>>> origin/new-main
 	{
 		if (!line.weight.empty() && line.weight != "none") {
 			try {
 				curobj->weight = std::stof(line.weight);
 				logger::debug(FMT_STRING("soulgem formid: {:08X} {} changed weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -244,7 +252,7 @@ namespace SOULGEM
 			try {
 				curobj->value = std::stoi(line.value);
 				logger::debug(FMT_STRING("soulgem formid: {:08X} {} changed value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -252,7 +260,7 @@ namespace SOULGEM
 			try {
 				curobj->weight = curobj->weight * std::stof(line.weightMult);
 				logger::debug(FMT_STRING("soulgem formid: {:08X} {} multiplied weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -260,7 +268,7 @@ namespace SOULGEM
 			try {
 				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
 				logger::debug(FMT_STRING("soulgem formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -283,7 +291,7 @@ namespace SOULGEM
 					curobj->putdownSound = (RE::BGSSoundDescriptorForm*)currentform;
 					logger::debug(FMT_STRING("soulgem formid: {:08X} {} changed putDownSound {:08X}"), curobj->formID, curobj->fullName, curobj->putdownSound->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -360,7 +368,7 @@ namespace SOULGEM
 			try {
 				logger::debug(FMT_STRING("soulgem formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -369,7 +377,7 @@ namespace SOULGEM
 				curobj->SetModel(line.model.c_str());
 				curobj->ReplaceModel();
 				logger::debug(FMT_STRING("soulgem formid: {:08X} {} changed model path {}"), curobj->formID, curobj->fullName, curobj->model.c_str());
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 

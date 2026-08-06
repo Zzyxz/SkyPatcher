@@ -33,7 +33,11 @@ namespace OUTFIT
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
+<<<<<<< HEAD
 	void patch(const OUTFIT::patch_instruction& line, RE::BGSOutfit* curobj);
+=======
+	void patch(const OUTFIT::patch_instruction& line, RE::BGSOutfit* curobj);
+>>>>>>> origin/new-main
 }
 
 #endif

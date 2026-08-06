@@ -70,7 +70,12 @@ namespace INGR
 	{
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
+<<<<<<< HEAD
 		auto& objectIngredientArray = dataHandler->GetFormArray<RE::IngredientItem>();
+=======
+		//RE::BSTArray<RE::AlchemyItem*> objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
+		const auto& objectIngredientArray = dataHandler->GetFormArray<RE::IngredientItem>();
+>>>>>>> origin/new-main
 		for (const auto& line : tokens) {
 			
 			if (!line.objects.empty()) {
@@ -309,7 +314,7 @@ namespace INGR
 								std::list<line_content> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -332,7 +337,11 @@ namespace INGR
 		}
 	}
 
+<<<<<<< HEAD
 	void patch(const INGR::line_content& line, RE::IngredientItem* curobj) {
+=======
+	void patch(const INGR::line_content& line, RE::IngredientItem* curobj) {
+>>>>>>> origin/new-main
 		
 
 		if ( !line.keywordsToAdd.empty()) {
@@ -384,6 +393,7 @@ namespace INGR
 
 		if ( !line.addedObjects.empty()) {
 			for (const auto& objectToAdd : line.addedObjects) {
+				if (objectToAdd.size() < 4) { logger::warn("ingredient {:08X}: invalid addedObjects entry, expected 4 values", curobj->formID); continue; }
 				std::string        addFormStr = objectToAdd[0];
 				float              magnitude = std::stof(objectToAdd[1]);
 				int32_t            duration = std::stoi(objectToAdd[2]);
@@ -408,7 +418,9 @@ namespace INGR
 		}
 
 		if ( !line.changedObjects.empty()) {
-			for (const auto& objectToAdd : line.changedObjects) {
+			for (auto objectToAdd : line.changedObjects) {
+				if (objectToAdd.empty()) { logger::warn("ingredient {:08X}: empty changedObjects entry", curobj->formID); continue; }
+				objectToAdd.resize(5, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
 				if (addForm) {  // Only proceed if addForm is not null
@@ -457,7 +469,9 @@ namespace INGR
 		}
 
 		if (!line.changedAddObjects.empty()) {
-			for (const auto& objectToAdd : line.changedAddObjects) {
+			for (auto objectToAdd : line.changedAddObjects) {
+				if (objectToAdd.empty()) { logger::warn("ingredient {:08X}: empty changedAddObjects entry", curobj->formID); continue; }
+				objectToAdd.resize(4, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
 				if (addForm) {  // Only proceed if addForm is not null
@@ -500,7 +514,7 @@ namespace INGR
 			try {
 				curobj->weight = std::stof(line.weight);
 				logger::debug(FMT_STRING("ingredient formid: {:08X} {} changed weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -508,7 +522,7 @@ namespace INGR
 			try {
 				curobj->weight = curobj->weight * std::stof(line.weightMult);
 				logger::debug(FMT_STRING("ingredient formid: {:08X} {} multiplied weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -516,7 +530,7 @@ namespace INGR
 			try {
 				curobj->value = std::stoi(line.capsvalue);
 				logger::debug(FMT_STRING("ingredient formid: {:08X} {} changed value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -524,7 +538,7 @@ namespace INGR
 			try {
 				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
 				logger::debug(FMT_STRING("ingredient formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -532,7 +546,7 @@ namespace INGR
 			try {
 				logger::debug(FMT_STRING("ingredient formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -541,7 +555,7 @@ namespace INGR
 				curobj->SetModel(line.model.c_str());
 				curobj->ReplaceModel();
 				logger::debug(FMT_STRING("ingredient formid: {:08X} {} changed model path {}"), curobj->formID, curobj->fullName, curobj->model.c_str());
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 

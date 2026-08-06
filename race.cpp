@@ -151,11 +151,120 @@ namespace RACE
 		patch_instruction l;
 		raceKeyTable().parse(line, &l);
 
+<<<<<<< HEAD
 		// GAP: not on the table -- see the comment above kRaceHookKeys.
 		extractValueString(line, "startingHealthMult\\s*= ([^:]+)", l.startingHealthMult);
 		extractValueString(line, "startingStaminaMult\\s*= ([^:]+)", l.startingStaminaMult);
 		extractValueString(line, "startingMagickaMult\\s*= ([^:]+)", l.startingMagickaMult);
 
+=======
+		extractData(line, "filterByRaces\\s*=([^:]+)", l.object);
+
+		extractData(line, "filterByRacesExcluded\\s*=([^:]+)", l.objectExcluded);
+
+		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
+
+		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
+		extractData(line, "filterByVoiceTypeOr\\s*=([^:]+)", l.filterByVoiceTypeOr);
+
+		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
+
+		// extract avifs
+		std::regex  avifs_regex("changeStats\\s*=([^:]+)", regex::icase);
+		std::smatch avifs_match;
+		std::regex_search(line, avifs_match, avifs_regex);
+		std::vector<std::string> avifs_before_eq;
+		std::vector<float>       avifs_min_values;
+		std::vector<float>       avifs_max_values;
+		if (avifs_match.empty() || avifs_match[1].str().empty()) {
+			//empty
+		} else {
+			std::string          avifs_str = avifs_match[1];
+			std::regex           avifs_list_regex("([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\\s*=\\s*([\\d.]+)(?:\\s*~\\s*([\\d.]+))?", regex::icase);
+			std::sregex_iterator avifs_iterator(avifs_str.begin(), avifs_str.end(), avifs_list_regex);
+			std::sregex_iterator avifs_end;
+			while (avifs_iterator != avifs_end) {
+				std::string avif = (*avifs_iterator)[1].str();
+				avif.erase(avif.begin(), std::find_if_not(avif.begin(), avif.end(), ::isspace));
+				avif.erase(std::find_if_not(avif.rbegin(), avif.rend(), ::isspace).base(), avif.end());
+
+				if (avif == "none") {
+					break;
+				}
+
+				avifs_before_eq.push_back(avif);
+				avifs_min_values.push_back(std::stof((*avifs_iterator)[2]));
+				if ((*avifs_iterator)[3] != "") {
+					avifs_max_values.push_back(std::stof((*avifs_iterator)[3]));
+				} else {
+					avifs_max_values.push_back(std::stof((*avifs_iterator)[2]));
+				}
+				std::string val1 = ((*avifs_iterator)[2]);
+				std::string val2 = ((*avifs_iterator)[3] != "") ? ((*avifs_iterator)[3]) : ((*avifs_iterator)[2]);
+				//logger::info(FMT_STRING("avif: {}"), avif);
+				//logger::info(FMT_STRING("value1: {}"), val1);
+				//logger::info(FMT_STRING("value2: {}"), val2);
+				++avifs_iterator;
+			}
+			l.avifs = avifs_before_eq;
+			l.values1 = avifs_min_values;
+			l.values2 = avifs_max_values;
+		}
+
+
+		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
+
+		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
+
+		extractDataStrings(line, "filterByMaleModelContains\\s*=([^:]+)", l.filterByMaleModelContains);
+		extractDataStrings(line, "filterByFemaleModelContains\\s*=([^:]+)", l.filterByFemaleModelContains);
+		extractToArr2D(line, "keywordToAddIfKeywordsEIDDoesNotContain\\s*=([^:]+)", l.keywordsToAddIfKeywordsEIDDoNotContain);
+		
+		extractData(line, "spellsToAdd\\s*=([^:]+)", l.spellsToAdd);
+		extractData(line, "spellsToRemove\\s*=([^:]+)", l.spellsToRemove);
+		extractData(line, "shoutsToAdd\\s*=([^:]+)", l.shoutsToAdd);
+		extractData(line, "shoutsToRemove\\s*=([^:]+)", l.shoutsToRemove);
+		extractData(line, "levSpellsToAdd\\s*=([^:]+)", l.levSpellsToAdd);
+		extractData(line, "levSpellsToRemove\\s*=([^:]+)", l.levSpellsToRemove);
+		extractValueString(line, "baseMass\\s*=([^:]+)", l.baseMass);
+		extractValueString(line, "baseCarryweight\\s*=([^:]+)", l.baseCarryweight);
+		extractValueString(line, "skin\\s*=([^:]+)", l.skin);
+		extractValueString(line, "startingHealth\\s*=([^:]+)", l.startingHealth);
+		extractValueString(line, "startingStamina\\s*=([^:]+)", l.startingStamina);
+		extractValueString(line, "startingMagicka\\s*=([^:]+)", l.startingMagicka);
+		extractValueString(line, "regenHealth\\s*=([^:]+)", l.regenHealth);
+		extractValueString(line, "regenStamina\\s*=([^:]+)", l.regenStamina);
+		extractValueString(line, "regenMagicka\\s*=([^:]+)", l.regenMagicka);
+		extractValueString(line, "damageUnarmed\\s*=([^:]+)", l.damageUnarmed);
+		extractValueString(line, "reachUnarmed\\s*=([^:]+)", l.reachUnarmed);
+
+		extractValueString(line, "baseMassMult\\s*=([^:]+)", l.baseMassMult);
+		extractValueString(line, "baseCarryweightMult\\s*=([^:]+)", l.baseCarryweightMult);
+		extractValueString(line, "startingHealthMult\\s*= ([^:]+)", l.startingHealthMult);
+		extractValueString(line, "startingStaminaMult\\s*= ([^:]+)", l.startingStaminaMult);
+		extractValueString(line, "startingMagickaMult\\s*= ([^:]+)", l.startingMagickaMult);
+		extractValueString(line, "regenHealthMult\\s*=([^:]+)", l.regenHealthMult);
+		extractValueString(line, "regenStaminaMult\\s*=([^:]+)", l.regenStaminaMult);
+		extractValueString(line, "regenMagickaMult\\s*=([^:]+)", l.regenMagickaMult);
+		extractValueString(line, "damageUnarmedMult\\s*=([^:]+)", l.damageUnarmedMult);
+		extractValueString(line, "reachUnarmedMult\\s*=([^:]+)", l.reachUnarmedMult);
+
+		extractValueString(line, "weightMale\\s*=([^:]+)", l.weightMale);
+		extractValueString(line, "weightFemale\\s*=([^:]+)", l.weightFemale);
+		extractValueString(line, "heightMale\\s*=([^:]+)", l.heightMale);
+		extractValueString(line, "heightFemale\\s*=([^:]+)", l.heightFemale);
+		extractValueString(line, "heightFemale\\s*=([^:]+)", l.heightFemale);
+		extractValueString(line, "accelerationRate\\s*=([^:]+)", l.rateAcceleration);
+		extractValueString(line, "decelerationRate\\s*=([^:]+)", l.rateDeceleration);
+		extractValueString(line, "accelerationAngularRate\\s*=([^:]+)", l.angularAccelerationRate);
+		extractValueString(line, "aimAngleTolerance\\s*=([^:]+)", l.aimAngleTolerance);
+		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
+		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
+		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
+		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
+		extractValueString(line, "voiceTypeFemale\\s*=([^:]+)", l.voiceTypeFemale);
+		extractValueString(line, "voiceTypeMale\\s*=([^:]+)", l.voiceTypeMale);
+>>>>>>> origin/new-main
 		logger::debug(FMT_STRING("races: {}  keywords: {}  avifs: {} keywordsToAdd: {} spellsToAdd {}"), l.object.size(), l.keywords.size(), l.avifs.size(), l.keywordsToAdd.size(), l.spellsToAdd.size());
 		//logger::info("returning patch instructions");
 		return l;
@@ -283,7 +392,11 @@ namespace RACE
 	{
 		logger::debug("processing patch instructions");
 		const auto                 dataHandler = RE::TESDataHandler::GetSingleton();
+<<<<<<< HEAD
 		auto& RaceArray = dataHandler->GetFormArray<RE::TESRace>();
+=======
+		const auto& RaceArray = dataHandler->GetFormArray<RE::TESRace>();
+>>>>>>> origin/new-main
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -420,7 +533,11 @@ namespace RACE
 	}
 
 	//
+<<<<<<< HEAD
 	void hookpatch(const RACE::patch_instruction& line, RE::TESRace* curobj)
+=======
+	void hookpatch(const RACE::patch_instruction& line, RE::TESRace* curobj)
+>>>>>>> origin/new-main
 	{
 		//logger::debug("start Patch race {:08X}", curobj->formID);
 		if (!line.addedObjects.empty()) {
@@ -753,7 +870,11 @@ namespace RACE
 	}
 	//
 
+<<<<<<< HEAD
 	void patch(const RACE::patch_instruction& line, RE::TESRace* curobj)
+=======
+	void patch(const RACE::patch_instruction& line, RE::TESRace* curobj)
+>>>>>>> origin/new-main
 	{
 		if (!line.avifs.empty()) {
 			//logger::info("found! patching values");
@@ -932,7 +1053,7 @@ namespace RACE
 			try {
 				curobj->data.baseMass = std::stof(line.baseMass);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed baseMass {}"), curobj->formID, curobj->fullName, curobj->data.baseMass);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -940,7 +1061,7 @@ namespace RACE
 			try {
 				curobj->data.baseCarryWeight = std::stof(line.baseCarryweight);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed baseCarryweight {}"), curobj->formID, curobj->fullName, curobj->data.baseCarryWeight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -948,7 +1069,7 @@ namespace RACE
 			try {
 				curobj->data.startingHealth = std::stof(line.startingHealth);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed startingHealth {}"), curobj->formID, curobj->fullName, curobj->data.startingHealth);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -956,7 +1077,7 @@ namespace RACE
 			try {
 				curobj->data.startingStamina = std::stof(line.startingStamina);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed startingStamina {}"), curobj->formID, curobj->fullName, curobj->data.startingStamina);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -964,7 +1085,7 @@ namespace RACE
 			try {
 				curobj->data.startingMagicka = std::stof(line.startingMagicka);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed startingMagicka {}"), curobj->formID, curobj->fullName, curobj->data.startingMagicka);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -972,7 +1093,7 @@ namespace RACE
 			try {
 				curobj->data.healthRegen = std::stof(line.regenHealth);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed regenHealth {}"), curobj->formID, curobj->fullName, curobj->data.healthRegen);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -980,7 +1101,7 @@ namespace RACE
 			try {
 				curobj->data.staminaRegen = std::stof(line.regenStamina);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed regenStamina {}"), curobj->formID, curobj->fullName, curobj->data.staminaRegen);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -988,7 +1109,7 @@ namespace RACE
 			try {
 				curobj->data.magickaRegen = std::stof(line.regenMagicka);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed regenMagicka {}"), curobj->formID, curobj->fullName, curobj->data.magickaRegen);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -996,7 +1117,7 @@ namespace RACE
 			try {
 				curobj->data.unarmedDamage = std::stof(line.damageUnarmed);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed damageUnarmed {}"), curobj->formID, curobj->fullName, curobj->data.unarmedDamage);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1004,7 +1125,7 @@ namespace RACE
 			try {
 				curobj->data.unarmedReach = std::stof(line.reachUnarmed);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed reachUnarmed {}"), curobj->formID, curobj->fullName, curobj->data.unarmedReach);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1012,7 +1133,7 @@ namespace RACE
 			try {
 				curobj->data.baseMass = curobj->data.baseMass * std::stof(line.baseMassMult);
 				logger::debug(FMT_STRING("race formid: {:08X} {} multiplied baseMass {}"), curobj->formID, curobj->fullName, curobj->data.baseMass);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1020,7 +1141,7 @@ namespace RACE
 			try {
 				curobj->data.baseCarryWeight = curobj->data.baseCarryWeight * std::stof(line.baseCarryweightMult);
 				logger::debug(FMT_STRING("race formid: {:08X} {} multiplied baseCarryweight {}"), curobj->formID, curobj->fullName, curobj->data.baseCarryWeight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1028,7 +1149,7 @@ namespace RACE
 			try {
 				curobj->data.startingHealth = curobj->data.startingHealth * std::stof(line.startingHealthMult);
 				logger::debug(FMT_STRING("race formid: {:08X} {} multiplied startingHealth {}"), curobj->formID, curobj->fullName, curobj->data.startingHealth);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1036,7 +1157,7 @@ namespace RACE
 			try {
 				curobj->data.startingStamina = curobj->data.startingStamina * std::stof(line.startingStaminaMult);
 				logger::debug(FMT_STRING("race formid: {:08X} {} multiplied startingStamina {}"), curobj->formID, curobj->fullName, curobj->data.startingStamina);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1044,7 +1165,7 @@ namespace RACE
 			try {
 				curobj->data.startingMagicka = curobj->data.startingMagicka * std::stof(line.startingMagickaMult);
 				logger::debug(FMT_STRING("race formid: {:08X} {} multiplied startingMagicka {}"), curobj->formID, curobj->fullName, curobj->data.startingMagicka);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1052,7 +1173,7 @@ namespace RACE
 			try {
 				curobj->data.healthRegen = curobj->data.healthRegen * std::stof(line.regenHealthMult);
 				logger::debug(FMT_STRING("race formid: {:08X} {} multiplied regenHealth {}"), curobj->formID, curobj->fullName, curobj->data.healthRegen);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1060,7 +1181,7 @@ namespace RACE
 			try {
 				curobj->data.staminaRegen = curobj->data.staminaRegen * std::stof(line.regenStaminaMult);
 				logger::debug(FMT_STRING("race formid: {:08X} {} multiplied regenStamina {}"), curobj->formID, curobj->fullName, curobj->data.staminaRegen);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1068,7 +1189,7 @@ namespace RACE
 			try {
 				curobj->data.magickaRegen = curobj->data.magickaRegen * std::stof(line.regenMagickaMult);
 				logger::debug(FMT_STRING("race formid: {:08X} {} multiplied regenMagicka {}"), curobj->formID, curobj->fullName, curobj->data.magickaRegen);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1076,7 +1197,7 @@ namespace RACE
 			try {
 				curobj->data.unarmedDamage = curobj->data.unarmedDamage * std::stof(line.damageUnarmedMult);
 				logger::debug(FMT_STRING("race formid: {:08X} {} multiplied damageUnarmed {}"), curobj->formID, curobj->fullName, curobj->data.unarmedDamage);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1084,7 +1205,7 @@ namespace RACE
 			try {
 				curobj->data.unarmedReach = curobj->data.unarmedReach * std::stof(line.reachUnarmedMult);
 				logger::debug(FMT_STRING("race formid: {:08X} {} multiplied reachUnarmed {}"), curobj->formID, curobj->fullName, curobj->data.unarmedReach);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1097,7 +1218,45 @@ namespace RACE
 					curobj->skin = (RE::TESObjectARMO*)currentform;
 					logger::debug(FMT_STRING("race formid: {:08X} {} changed skin {:08X}"), curobj->formID, curobj->fullName, curobj->skin->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
+			}
+		}
+
+		if (!line.voiceTypeMale.empty() && line.voiceTypeMale != "none") {
+			try {
+				RE::TESForm* currentform = nullptr;
+				std::string  string_form = line.voiceTypeMale;
+				currentform = GetFormFromIdentifier(string_form);
+
+				if (currentform && currentform->formType == RE::FormType::VoiceType) {
+					curobj->defaultVoiceTypes[RE::SEXES::kMale] = static_cast<RE::BGSVoiceType*>(currentform);
+
+					logger::debug(
+						FMT_STRING("race formid: {:08X} {} changed voiceTypeMale {:08X}"),
+						curobj->formID,
+						curobj->fullName,
+						curobj->defaultVoiceTypes[RE::SEXES::kMale]->formID);
+				}
+			} catch (const std::exception& e) {
+			}
+		}
+
+		if (!line.voiceTypeFemale.empty() && line.voiceTypeFemale != "none") {
+			try {
+				RE::TESForm* currentform = nullptr;
+				std::string  string_form = line.voiceTypeFemale;
+				currentform = GetFormFromIdentifier(string_form);
+
+				if (currentform && currentform->formType == RE::FormType::VoiceType) {
+					curobj->defaultVoiceTypes[RE::SEXES::kFemale] = static_cast<RE::BGSVoiceType*>(currentform);
+
+					logger::debug(
+						FMT_STRING("race formid: {:08X} {} changed voiceTypeFemale {:08X}"),
+						curobj->formID,
+						curobj->fullName,
+						curobj->defaultVoiceTypes[RE::SEXES::kFemale]->formID);
+				}
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1105,7 +1264,7 @@ namespace RACE
 			try {
 				curobj->data.height[RE::SEXES::kMale] = std::stof(line.heightMale);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed heightMale {}"), curobj->formID, curobj->fullName, curobj->data.height[RE::SEXES::kMale]);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1113,7 +1272,7 @@ namespace RACE
 			try {
 				curobj->data.height[RE::SEXES::kFemale] = std::stof(line.heightFemale);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed heightFemale {}"), curobj->formID, curobj->fullName, curobj->data.height[RE::SEXES::kFemale]);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1121,7 +1280,7 @@ namespace RACE
 			try {
 				curobj->data.weight[RE::SEXES::kMale] = std::stof(line.weightMale);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed weightMale {}"), curobj->formID, curobj->fullName, curobj->data.weight[RE::SEXES::kMale]);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1129,7 +1288,7 @@ namespace RACE
 			try {
 				curobj->data.weight[RE::SEXES::kFemale] = std::stof(line.weightFemale);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed weightFemale {}"), curobj->formID, curobj->fullName, curobj->data.weight[RE::SEXES::kFemale]);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1137,7 +1296,7 @@ namespace RACE
 			try {
 				curobj->data.accelerate = std::stof(line.rateAcceleration);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed rateAcceleration {}"), curobj->formID, curobj->fullName, curobj->data.accelerate);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1145,7 +1304,7 @@ namespace RACE
 			try {
 				curobj->data.decelerate = std::stof(line.rateDeceleration);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed rateDeceleration {}"), curobj->formID, curobj->fullName, curobj->data.decelerate);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1153,7 +1312,7 @@ namespace RACE
 			try {
 				curobj->data.angleAccelerate = std::stof(line.angularAccelerationRate);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed angularAccelerationRate {}"), curobj->formID, curobj->fullName, curobj->data.angleAccelerate);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1161,7 +1320,7 @@ namespace RACE
 			try {
 				curobj->data.aimAngleTolerance = std::stof(line.aimAngleTolerance);
 				logger::debug(FMT_STRING("race formid: {:08X} {} changed aimAngleTolerance {}"), curobj->formID, curobj->fullName, curobj->data.aimAngleTolerance);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1294,7 +1453,7 @@ namespace RACE
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -1350,7 +1509,7 @@ namespace RACE
 
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 

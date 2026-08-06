@@ -94,7 +94,11 @@ namespace COBJ
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
+<<<<<<< HEAD
 	void* patch(const COBJ::patch_instruction& line, RE::BGSConstructibleObject* curobj);
+=======
+	void* patch(const COBJ::patch_instruction& line, RE::BGSConstructibleObject* curobj);
+>>>>>>> origin/new-main
 }
 
 #endif

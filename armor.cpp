@@ -327,7 +327,107 @@ namespace ARMOR
 	struct patch_instruction_armor create_patch_instruction_armor(const std::string& line)
 	{
 		patch_instruction_armor l;
+<<<<<<< HEAD
 		armorKeyTable().parse(line, &l);
+=======
+
+		extractData(line, "filterByArmors\\s*=([^:]+)", l.object);
+
+		extractData(line, "filterByArmorsExcluded\\s*=([^:]+)", l.objectExcluded);
+
+		extractData(line, "filterByKeywords\\s*=([^:]+)", l.keywords);
+
+		extractData(line, "filterByKeywordsOr\\s*=([^:]+)", l.keywordsOr);
+
+		extractData(line, "filterByKeywordsExcluded\\s*=([^:]+)", l.keywordsExcluded);
+		extractValueString(line, "mirrorArmor\\s*=([^:]+)", l.mirrorArmor);
+		extractValueString(line, "damageResist\\s*=([^:]+)", l.damageResist);
+		extractValueString(line, "damageResistMatch\\s*=([^:]+)", l.damageResistMatch);
+
+		extractValueString(line, "damageResistMultiply\\s*=([^:]+)", l.damageResistMult);
+
+		extractValueString(line, "health\\s*=([^:]+)", l.health);
+
+		extractValueString(line, "objectEffect\\s*=([^:]+)", l.objectEffect);
+
+		extractData(line, "keywordsToAdd\\s*=([^:]+)", l.keywordsToAdd);
+
+		extractData(line, "keywordsToRemove\\s*=([^:]+)", l.keywordsToRemove);
+
+		extractDataStrings(line, "filterByBipedSlots\\s*=([^:]+)", l.bipedSlot);
+
+		extractDataStrings(line, "filterByBipedSlotsOr\\s*=([^:]+)", l.bipedSlotOr);
+
+		extractDataStrings(line, "filterByBipedSlotsExcluded\\s*=([^:]+)", l.bipedSlotExcluded);
+
+		extractDataStrings(line, "bipedSlotsToAdd\\s*=([^:]+)", l.setBipedSlot);
+
+		extractDataStrings(line, "bipedSlotsToRemove\\s*=([^:]+)", l.removeBipedSlot);
+
+		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
+
+		extractValueString(line, "modelFemale\\s*=([^:]+)", l.modelFemale);
+		extractValueString(line, "modelMale\\s*=([^:]+)", l.modelMale);
+		extractValueString(line, "value\\s*=([^:]+)", l.value);
+		extractValueString(line, "valueMult\\s*=([^:]+)", l.valueMult);
+		extractValueString(line, "weight\\s*=([^:]+)", l.weight);
+		extractValueString(line, "weightMult\\s*=([^:]+)", l.weightMult);
+		extractValueString(line, "armorType\\s*=([^:]+)", l.armorType);
+		
+
+		extractValueString(line, "pickUpSound\\s*=([^:]+)", l.pickUpSound);
+		extractValueString(line, "putDownSound\\s*=([^:]+)", l.putDownSound);
+		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
+		extractDataStrings(line, "filterByArmorTypes\\s*=([^:]+)", l.filterByArmorType);
+		extractDataStrings(line, "filterByArmorTypesExcluded\\s*=([^:]+)", l.filterByArmorTypeExcluded);
+		extractValueString(line, "altBlockMaterialType\\s*=([^:]+)", l.altBlockMaterialType);
+		extractValueString(line, "blockBashImpactDataSet\\s*=([^:]+)", l.blockBashImpactDataSet);
+		extractValueString(line, "equipSlot\\s*=([^:]+)", l.equipSlot);
+		extractValueString(line, "enchantAmount\\s*=([^:]+)", l.enchantAmount);
+
+		extractDataStrings(line, "filterByNameContains\\s*=([^:]+)", l.filterByNameContains);
+		extractDataStrings(line, "filterByNameContainsOr\\s*=([^:]+)", l.filterByNameContainsOr);
+		extractDataStrings(line, "filterByNameContainsExcluded\\s*=([^:]+)", l.filterByNameContainsExcluded);
+		extractDataStrings(line, "filterByEditorIdContains\\s*=([^:]+)", l.filterByEditorIdContains);
+		extractDataStrings(line, "filterByEditorIdContainsOr\\s*=([^:]+)", l.filterByEditorIdContainsOr);
+		extractDataStrings(line, "filterByEditorIdContainsExcluded\\s*=([^:]+)", l.filterByEditorIdContainsExcluded);
+		extractToArr2D(line, "reCalcArmorRating\\s*=([^:]+)", l.reCalcArmorRating);
+		extractToArr2D(line, "reCalcArmorRatingv2\\s*=([^:]+)", l.reCalcArmorRatingv2);
+		
+		
+		extractDataStrings(line, "filterByArmorAddons\\s*=([^:]+)", l.filterByArmorAddons);
+		extractDataStrings(line, "filterByArmorAddonsOr\\s*=([^:]+)", l.filterByArmorAddonsOr);
+		extractDataStrings(line, "filterByArmorAddonsExcluded\\s*=([^:]+)", l.filterByArmorAddonsExcluded);
+		
+		extractData(line, "armorAddonsToAdd\\s*=([^:]+)", l.armorAddonToAdd);
+		extractData(line, "armorAddonsToRemove\\s*=([^:]+)", l.armorAddonToRemove);
+		extractValueString(line, "clearArmorAddons\\s*=([^:]+)", l.clearArmorAddons);
+		
+		extractValueString(line, "templateArmor\\s*=([^:]+)", l.templateArmor);
+		
+		extractValueString(line, "minX\\s*=([^:]+)", l.minX);
+		extractValueString(line, "minY\\s*=([^:]+)", l.minY);
+		extractValueString(line, "minZ\\s*=([^:]+)", l.minZ);
+		extractValueString(line, "maxX\\s*=([^:]+)", l.maxX);
+		extractValueString(line, "maxY\\s*=([^:]+)", l.maxY);
+		extractValueString(line, "maxZ\\s*=([^:]+)", l.maxZ);
+
+		extractValueString(line, "valueMatch\\s*=([^:]+)", l.valueMatch);
+		extractValueString(line, "dwMatch\\s*=([^:]+)", l.dwMatch);
+		extractValueString(line, "modelMatch\\s*=([^:]+)", l.modelMatch);
+
+		extractDataStrings(line, "hasPlugins\\s*=([^:]+)", l.hasPlugin);
+		extractDataStrings(line, "hasPluginsOr\\s*=([^:]+)", l.hasPluginOr);
+
+		extractToArr2D(line, "armaRaceToAdd\\s*=([^:]+)", l.armaRaceToAdd);
+
+		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
+		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
+
+		extractData(line, "restrictToKeywords\\s*=([^:]+)", l.restrictKeywords);
+		extractData(line, "restrictToBipedSlots\\s*=([^:]+)", l.restrictSlots);
+
+>>>>>>> origin/new-main
 		return l;
 	}
 
@@ -336,6 +436,7 @@ namespace ARMOR
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
+<<<<<<< HEAD
 		auto& ArmorArray = dataHandler->GetFormArray<RE::TESObjectARMO>();
 
 		// PHASE 3: built on first use.
@@ -345,6 +446,9 @@ namespace ARMOR
 		std::vector<std::uint64_t>  keys;
 		std::vector<std::uint32_t>  candidates;
 
+=======
+		const auto& ArmorArray = dataHandler->GetFormArray<RE::TESObjectARMO>();
+>>>>>>> origin/new-main
 		for (const auto& line : tokens) {
 			indexStale = indexStale || armorRuleInvalidatesIndex(line);
 
@@ -467,7 +571,7 @@ namespace ARMOR
 								std::list<patch_instruction_armor> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -490,6 +594,7 @@ namespace ARMOR
 		}
 	}
 
+<<<<<<< HEAD
 	// =====================================================================
 	// PHASE 4 -- ARMOR's action tables. See formfilter.h "PHASE 4".
 	//
@@ -519,6 +624,9 @@ namespace ARMOR
 	}
 
 	void* patch(const ARMOR::patch_instruction_armor& line, RE::TESObjectARMO* curobj)
+=======
+	void* patch(const ARMOR::patch_instruction_armor& line, RE::TESObjectARMO* curobj)
+>>>>>>> origin/new-main
 	{
 
 		if (!line.mirrorArmor.empty() && line.mirrorArmor != "none") {
@@ -551,7 +659,7 @@ namespace ARMOR
 					}
 				}
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 
@@ -647,7 +755,7 @@ namespace ARMOR
 			try {
 				curobj->armorRating = stoi(line.damageResist) * 100;
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed armor rating {}"), curobj->formID, curobj->fullName, curobj->armorRating / 100);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -655,7 +763,7 @@ namespace ARMOR
 			try {
 				curobj->armorRating = (uint32_t)(curobj->armorRating * stof(line.damageResistMult));
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed(multiplied) armor rating {}"), curobj->formID, curobj->fullName, curobj->armorRating / 100);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -674,7 +782,7 @@ namespace ARMOR
 					logger::debug(FMT_STRING("armor formid: {:08X} {} object is not an armor {}"), curobj->formID, curobj->fullName, line.damageResistMatch);
 				}
 				
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -745,7 +853,7 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -753,7 +861,7 @@ namespace ARMOR
 			try {
 				curobj->weight = std::stof(line.weight);
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -761,7 +869,7 @@ namespace ARMOR
 			try {
 				curobj->value = std::stoi(line.value);
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -769,7 +877,7 @@ namespace ARMOR
 			try {
 				curobj->weight = curobj->weight * std::stof(line.weightMult);
 				logger::debug(FMT_STRING("armor formid: {:08X} {} multiplied weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -777,7 +885,7 @@ namespace ARMOR
 			try {
 				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
 				logger::debug(FMT_STRING("armor formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -797,7 +905,7 @@ namespace ARMOR
 					curobj->pickupSound = (RE::BGSSoundDescriptorForm*)currentform;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed pickUpSound {:08X}"), curobj->formID, curobj->fullName, curobj->pickupSound->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -810,7 +918,7 @@ namespace ARMOR
 					curobj->putdownSound = (RE::BGSSoundDescriptorForm*)currentform;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed putDownSound {:08X}"), curobj->formID, curobj->fullName, curobj->putdownSound->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -818,7 +926,7 @@ namespace ARMOR
 			try {
 				curobj->worldModels[RE::SEXES::kFemale].SetModel(line.modelFemale.c_str());
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed female model path {}"), curobj->formID, curobj->fullName, curobj->worldModels[RE::SEXES::kFemale].model.c_str());
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -827,7 +935,7 @@ namespace ARMOR
 				curobj->worldModels[RE::SEXES::kMale].SetModel(line.modelMale.c_str());
 				curobj->ReplaceModel();
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed male model path {}"), curobj->formID, curobj->fullName, curobj->worldModels[RE::SEXES::kMale].model.c_str());
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -840,7 +948,7 @@ namespace ARMOR
 					curobj->altBlockMaterialType = (RE::BGSMaterialType*)currentform;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed altBlockMaterialType {:08X}"), curobj->formID, curobj->fullName, curobj->altBlockMaterialType->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -853,7 +961,7 @@ namespace ARMOR
 					curobj->blockBashImpactDataSet = (RE::BGSImpactDataSet*)currentform;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed blockBashImpactDataSet {:08X}"), curobj->formID, curobj->fullName, curobj->blockBashImpactDataSet->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -866,7 +974,7 @@ namespace ARMOR
 					curobj->SetEquipSlot((RE::BGSEquipSlot*)currentform);
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed equipSlot {:08X}"), curobj->formID, curobj->fullName, curobj->equipSlot->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -874,7 +982,7 @@ namespace ARMOR
 			try {
 				curobj->amountofEnchantment = std::stoi(line.enchantAmount);
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed enchantAmount {}"), curobj->formID, curobj->fullName, curobj->amountofEnchantment);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -947,7 +1055,7 @@ namespace ARMOR
 					curobj->descriptionText = templateArmor->descriptionText;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed templateArmor {:08X}"), curobj->formID, curobj->fullName, curobj->templateArmor->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -962,7 +1070,21 @@ namespace ARMOR
 					curobj->weight = templateArmor->weight;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed damage resist and weight to {:08X} {}"), curobj->formID, curobj->fullName, templateArmor->formID, templateArmor->fullName);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
+			}
+		}
+
+		if (!line.valueMatch.empty() && line.valueMatch != "none") {
+			try {
+				RE::TESForm* currentform = nullptr;
+				std::string  string_form = line.valueMatch;
+				currentform = GetFormFromIdentifier(string_form);
+				if (currentform && currentform->formType == RE::FormType::Armor) {
+					auto templateArmor = (RE::TESObjectARMO*)currentform;
+					curobj->value = templateArmor->value;
+					logger::debug(FMT_STRING("armor formid: {:08X} {} changed value to {:08X} {}"), curobj->formID, curobj->fullName, templateArmor->formID, templateArmor->fullName);
+				}
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1003,7 +1125,7 @@ namespace ARMOR
 					curobj->altBlockMaterialType = templateArmor->altBlockMaterialType;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed model to {:08X} {}"), curobj->formID, curobj->fullName, templateArmor->formID, templateArmor->fullName);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1011,7 +1133,7 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed minX to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.minX);
 				curobj->boundData.boundMin.x = std::stoi(line.minX);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1019,7 +1141,7 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed minY to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.minY);
 				curobj->boundData.boundMin.y = std::stoi(line.minY);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1027,7 +1149,7 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed minZ to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.minZ);
 				curobj->boundData.boundMin.z = std::stoi(line.minZ);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1035,7 +1157,7 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed maxX to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.maxX);
 				curobj->boundData.boundMax.x = std::stoi(line.maxX);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1043,7 +1165,7 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed maxY to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.maxY);
 				curobj->boundData.boundMax.y = std::stoi(line.maxY);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1051,12 +1173,16 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed maxZ to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.maxZ);
 				curobj->boundData.boundMax.z = std::stoi(line.maxZ);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
 		if (!line.armaRaceToAdd.empty()) {
 			for (const auto& objectToAdd : line.armaRaceToAdd) {
+				if (objectToAdd.empty()) {
+					logger::warn("armor formid: {:08X}: ignoring empty armaRaceToAdd entry", curobj->formID);
+					continue;
+				}
 				std::string  armaToAddTo = objectToAdd[0];  // Armature identifier
 				RE::TESForm* currentform = GetFormFromIdentifier(armaToAddTo);
 
@@ -1064,7 +1190,7 @@ namespace ARMOR
 					// Find the correct armorAddon by matching formID
 					auto it = std::find_if(curobj->armorAddons.begin(), curobj->armorAddons.end(),
 						[&](const RE::TESObjectARMA* addon) {
-							return addon->formID == currentform->formID;
+							return addon && addon->formID == currentform->formID;
 						});
 
 					if (it != curobj->armorAddons.end()) {
@@ -1080,7 +1206,7 @@ namespace ARMOR
 								// Check if the race already exists in the armorAddon->races
 								bool raceExists = std::any_of(armorAddon->additionalRaces.begin(), armorAddon->additionalRaces.end(),
 									[&](RE::TESForm* existingRace) {
-										return existingRace->formID == raceToAdd->formID;
+								return existingRace && existingRace->formID == raceToAdd->formID;
 									});
 
 								if (!raceExists) {

@@ -69,130 +69,109 @@ namespace FORMLIST
 	{
 		logger::debug("processing patch instructions");
 		const auto                     dataHandler = RE::TESDataHandler::GetSingleton();
+<<<<<<< HEAD
 		auto& objectArray = dataHandler->GetFormArray<RE::BGSListForm>();
+=======
+		const auto& objectArray = dataHandler->GetFormArray<RE::BGSListForm>();
+>>>>>>> origin/new-main
 		for (const auto& line : tokens) {
-			for (const auto& curobj : objectArray) {
 
-				bool found = false;
-				
+			if (!line.objects.empty()) {
+				//logger::info("npc not empty");
+				for (const auto& objectstring : line.objects) {
+					RE::TESForm*     currentform = nullptr;
+					RE::BGSListForm* object = nullptr;
 
-				if (!curobj || curobj->IsDeleted()) {
-					continue;
-				}
-
-				if (!line.modNames.empty()) {
-					bool modFound = false;
-					for (auto const modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
-							modFound = true;
+					std::string string_form = objectstring;
+					currentform = GetFormFromIdentifier(string_form);
+					if (currentform && currentform->formType == RE::FormType::FormList) {
+						object = (RE::BGSListForm*)currentform;
+						if (!object || object->IsDeleted()) {
+							continue;
 						}
-					}
-					if (modFound == false) {
-						continue;
-					}
-				}
-				
-				
-
-				//logger::debug(FMT_STRING("formlist found. {:08X}"), curobj->formID);
-				if (!line.objects.empty()) {
-					//logger::info("npc not empty");
-					for (const auto& objectstring : line.objects) {
-						RE::TESForm*     currentform = nullptr;
-						RE::BGSListForm* object = nullptr;
-
-						std::string string_form = objectstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::FormList) {
-							object = (RE::BGSListForm*)currentform;
-
-							if (curobj->formID == object->formID) {
-								found = true;
-								//logger::info("NPC found.");
-								break;
-							}
+						if (object->formID) {
+							patch(line, object);
+							//logger::info("NPC found.");
+							break;
 						}
 					}
 				}
+			}
 
-				if (line.objects.empty()) {
-					found = true;
+			
+
+			//for (const auto& curobj : objectArray) {
+			//	bool found = false;
+			//	
+			//	if (!line.modNames.empty()) {
+			//		bool modFound = false;
+			//		for (auto const modName : line.modNames) {
+			//			if (modName == curobj->GetFile(0)->fileName) {
+			//				modFound = true;
+			//			}
+			//		}
+			//		if (modFound == false) {
+			//			continue;
+			//		}
+			//	}
+			//}
+		}
+	}
+
+	void patch(const FORMLIST::line_content& line, RE::BGSListForm* curobj)
+	{
+		if (!line.clear.empty() && line.clear != "none") {
+			curobj->forms.clear();
+		}
+
+		if (!line.objectsRemove.empty()) {
+			for (const auto& objectToRemove : line.objectsRemove) {
+				std::string removeFormStr = objectToRemove;
+				auto        removeForm = GetFormFromIdentifier(removeFormStr);
+				if (removeForm) {
+					auto it = std::remove_if(curobj->forms.begin(), curobj->forms.end(), [&](const RE::TESForm* x) {
+						return x->formID == removeForm->formID;
+					});
+					while (it != curobj->forms.end()) {
+						curobj->forms.erase(it);
+						it = std::remove_if(it, curobj->forms.end(), [&](const RE::TESForm* x) {
+							return x->formID == removeForm->formID;
+						});
+					}
+					logger::debug(FMT_STRING("formlist formid: {:08X} removed form {:08X} "), curobj->formID, removeForm->formID);
 				}
+			}
+		}
 
-				if (found && !line.clear.empty() && line.clear != "none") {
-					curobj->forms.clear();
+		if (!line.objectsAdd.empty()) {
+			for (size_t i = 0; i < line.objectsAdd.size(); i++) {
+				RE::TESForm* currentform = nullptr;
+				std::string  string_form = line.objectsAdd[i];
+				currentform = GetFormFromIdentifier(string_form);
+				if (currentform) {
+					//logger::debug(FMT_STRING("formlist formid: {:08X} with count({}) added form {:08X} "), curobj->formID, curobj->arrayOfForms.size(), currentform->formID);
+					curobj->forms.push_back(currentform);
+					logger::debug(FMT_STRING("formlist formid: {:08X} with count({}) added form {:08X} "), curobj->formID, curobj->forms.size(), currentform->formID);
 				}
+			}
+		}
 
-				if (found && !line.objectsRemove.empty()) {
-					for (const auto& objectToRemove : line.objectsRemove) {
-						std::string        removeFormStr = objectToRemove;
-						auto removeForm = GetFormFromIdentifier(removeFormStr);
-						if (removeForm) {
-							auto it = std::remove_if(curobj->forms.begin(), curobj->forms.end(), [&](const RE::TESForm* x) {
-								return x->formID == removeForm->formID;
-							});
-							while (it != curobj->forms.end()) {
-								curobj->forms.erase(it);
-								it = std::remove_if(it, curobj->forms.end(), [&](const RE::TESForm* x) {
-									return x->formID == removeForm->formID;
-								});
-							}
-							logger::debug(FMT_STRING("formlist formid: {:08X} removed form {:08X} "), curobj->formID, removeForm->formID);
+		if (!line.formsToReplace.empty()) {
+			for (uint32_t i = 0; i < line.formsToReplace.size(); i++) {
+				RE::TESForm* currentform = nullptr;
+				RE::TESForm* currentform2 = nullptr;
+				std::string  string_form = line.formsToReplace[i];
+				std::string  string_form2 = line.formsToReplaceWith[i];
+				currentform = GetFormFromIdentifier(string_form);
+				currentform2 = GetFormFromIdentifier(string_form2);
+				if (currentform && currentform2) {
+					// Loop through all elements in arrayOfForms and replace matches
+					for (auto& form : curobj->forms) {
+						if (form && form->formID == currentform->formID) {
+							form = currentform2;  // Replace the matching form
 						}
 					}
 				}
-
-				//if (found && !line.objectsRemove.empty()) {
-				//	for (size_t i = 0; i < line.objectsRemove.size(); i++) {
-				//		RE::TESForm* currentform = nullptr;
-				//		std::string  string_form = line.objectsRemove[i];
-				//		currentform = GetFormFromIdentifier(string_form);
-				//		if (currentform) {
-				//			//logger::debug(FMT_STRING("formlist formid: {:08X} with count({}) "), curobj->formID, curobj->arrayOfForms.size());
-				//			curobj->forms.erase(std::remove_if(curobj->forms.begin(), curobj->forms.end(), [&](const RE::TESForm* x) {
-				//				return x->formID == currentform->formID;
-				//			}));
-				//			
-				//		}
-				//	}
-				//}
-
-				if (found && !line.objectsAdd.empty()) {
-					for (size_t i = 0; i < line.objectsAdd.size(); i++) {
-						RE::TESForm* currentform = nullptr;
-						std::string  string_form = line.objectsAdd[i];
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform) {
-							//logger::debug(FMT_STRING("formlist formid: {:08X} with count({}) added form {:08X} "), curobj->formID, curobj->arrayOfForms.size(), currentform->formID);
-							curobj->forms.push_back(currentform);
-							logger::debug(FMT_STRING("formlist formid: {:08X} with count({}) added form {:08X} "), curobj->formID, curobj->forms.size(), currentform->formID);
-						}
-					}
-				}
-
-				if (found && !line.formsToReplace.empty()) {
-					for (uint32_t i = 0; i < line.formsToReplace.size(); i++) {
-						RE::TESForm* currentform = nullptr;
-						RE::TESForm* currentform2 = nullptr;
-						std::string  string_form = line.formsToReplace[i];
-						std::string  string_form2 = line.formsToReplaceWith[i];
-						currentform = GetFormFromIdentifier(string_form);
-						currentform2 = GetFormFromIdentifier(string_form2);
-						if (currentform && currentform2) {
-							// Loop through all elements in arrayOfForms and replace matches
-							for (auto& form : curobj->forms) {
-								if (form && form->formID == currentform->formID) {
-									form = currentform2;  // Replace the matching form
-								}
-							}
-						}
-					}
-				}
-
-
-
-				//if (found) {
-				//}
 			}
 		}
 	}
@@ -240,7 +219,7 @@ namespace FORMLIST
 								std::list<line_content> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
