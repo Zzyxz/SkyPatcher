@@ -1,4 +1,5 @@
 #include "dirent.h"
+#include <ShlObj.h>
 #include <alch.h>
 #include <ammo.h>
 #include <armor.h>
@@ -1515,13 +1516,24 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 
 void InitializeLog()
 {
-	auto path = logger::log_directory();
-	if (!path) {
-		stl::report_and_fail("Failed to find standard logging directory"sv);
+	PWSTR documentsPath = nullptr;
+	if (FAILED(::SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, nullptr, &documentsPath)) || !documentsPath) {
+		stl::report_and_fail("Failed to find the Documents directory"sv);
 	}
 
-	*path /= fmt::format(FMT_STRING("{}.log"), Version::PROJECT);
-	auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path->string(), true);
+	std::filesystem::path path{ documentsPath };
+	::CoTaskMemFree(documentsPath);
+	path /= "My Games";
+#ifdef SKYRIMVR
+	path /= "Skyrim VR";
+#else
+	path /= "Skyrim Special Edition";
+#endif
+	path /= "SKSE";
+	std::filesystem::create_directories(path);
+
+	path /= fmt::format(FMT_STRING("{}.log"), Version::PROJECT);
+	auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path.string(), true);
 
 	auto log = std::make_shared<spdlog::logger>("global log"s, std::move(sink));
 
