@@ -408,8 +408,22 @@ namespace COBJ
 		if (!line.removeContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjects) {
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-				std::string         addFormStr = objectToAdd[0];
-				uint32_t            count = std::stoi(objectToAdd[1]);
+				std::string addFormStr = objectToAdd[0];
+				// `removeFromCobjsByCount=<form>~<count>`: the count IS the verb,
+				// so a missing one has no defensible default. A malformed one is
+				// skipped with a warning instead of being thrown out of patch()
+				// -- same convention as changeCobjsCount below.
+				if (objectToAdd.size() < 2) {
+					logger::warn(FMT_STRING("removeFromCobjsByCount is missing its count, skipping entry: {}"), addFormStr);
+					continue;
+				}
+				uint32_t count = 0;
+				try {
+					count = std::stoi(objectToAdd[1]);
+				} catch (...) {
+					logger::warn(FMT_STRING("Invalid count for removeFromCobjsByCount: {}"), objectToAdd[1]);
+					continue;
+				}
 				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
 
 				if (addForm) {
@@ -439,8 +453,22 @@ namespace COBJ
 		if (!line.addedContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjects) {
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-				std::string         addFormStr = objectToAdd[0];
-				uint32_t            count = std::stoi(objectToAdd[1]);
+				std::string addFormStr = objectToAdd[0];
+				// `addToCobjs` is `addToContainers` for a recipe; container.cpp's
+				// copy of the same verb already defaults a missing count to 1
+				// (container.cpp `if (objectToAdd.size() > 1)`), so do that here
+				// rather than reading past the end of a one-element group. A count
+				// that is PRESENT but malformed is skipped with a warning -- we
+				// must not silently add a quantity the user did not ask for.
+				uint32_t count = 1;
+				if (objectToAdd.size() > 1) {
+					try {
+						count = std::stoi(objectToAdd[1]);
+					} catch (...) {
+						logger::warn(FMT_STRING("Invalid count for addToCobjs: {}"), objectToAdd[1]);
+						continue;
+					}
+				}
 				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
 
 				if (addForm) {
@@ -455,9 +483,31 @@ namespace COBJ
 		if (!line.addedContainerObjectsAdjusted.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjectsAdjusted) {
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-				std::string         addFormStr = objectToAdd[0];
-				uint32_t            count = std::stoi(objectToAdd[1]);
-				uint32_t            maxAmount = std::stoi(objectToAdd[2]);
+				std::string addFormStr = objectToAdd[0];
+				// `addToCobjsAdjusted=<form>~<count>~<maxAmount>`. Both operands
+				// are required -- maxAmount is the divisor, so neither a missing
+				// nor a zero one has a defensible default. Skip with a warning
+				// rather than read past the end of the group (a short group was
+				// undefined behaviour) or divide by zero (which produced an
+				// infinite `proportion` and then an out-of-range float->int
+				// conversion, also undefined).
+				if (objectToAdd.size() < 3) {
+					logger::warn(FMT_STRING("addToCobjsAdjusted needs <form>~<count>~<maxAmount>, skipping entry: {}"), addFormStr);
+					continue;
+				}
+				uint32_t count = 0;
+				uint32_t maxAmount = 0;
+				try {
+					count = std::stoi(objectToAdd[1]);
+					maxAmount = std::stoi(objectToAdd[2]);
+				} catch (...) {
+					logger::warn(FMT_STRING("Invalid count/maxAmount for addToCobjsAdjusted: {}~{}"), objectToAdd[1], objectToAdd[2]);
+					continue;
+				}
+				if (maxAmount == 0) {
+					logger::warn(FMT_STRING("addToCobjsAdjusted maxAmount must be > 0, skipping entry: {}"), addFormStr);
+					continue;
+				}
 				uint32_t            createdItemCount = curobj->data.numConstructed;
 				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
 
@@ -475,6 +525,13 @@ namespace COBJ
 		if (!line.replaceObjectInContainer.empty()) {
 			for (const auto& objectToAdd : line.replaceObjectInContainer) {
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
+				// `replaceInCobjs=<old>~<new>` needs both halves; a one-element
+				// group read past the end. No conversion here, so this is only
+				// the bounds half of the same malformed-config hazard.
+				if (objectToAdd.size() < 2) {
+					logger::warn(FMT_STRING("replaceInCobjs needs <oldForm>~<newForm>, skipping entry: {}"), objectToAdd[0]);
+					continue;
+				}
 				std::string         object1 = objectToAdd[0];
 				std::string         object2 = (objectToAdd[1]);
 				RE::TESBoundObject* oldObject = (RE::TESBoundObject*)GetFormFromIdentifier(object1);
@@ -488,6 +545,12 @@ namespace COBJ
 		}
 
 		for (const auto& entry : line.changeCobjsCount) {
+			// The conversion below was already guarded; the INDEXING was not.
+			// `changeCobjsCount=null` (no `~`) is a one-element group.
+			if (entry.size() < 2) {
+				logger::warn(FMT_STRING("changeCobjsCount needs <form|null>~<count>, skipping entry: {}"), entry[0]);
+				continue;
+			}
 			std::string identifier = entry[0];  // "null" oder "Skyrim.esm|12345678"
 			std::string multStr = entry[1];     // z. B. "0.01"
 
@@ -520,6 +583,11 @@ namespace COBJ
 		}
 
 		for (const auto& entry : line.changeCobjsCountByMult) {
+			// As above: std::stof was guarded, entry[1] was not.
+			if (entry.size() < 2) {
+				logger::warn(FMT_STRING("changeCobjsCountByMult needs <form|null>~<mult>, skipping entry: {}"), entry[0]);
+				continue;
+			}
 			std::string identifier = entry[0];  // "null" oder "Skyrim.esm|12345678"
 			std::string multStr = entry[1];     // z. B. "0.01"
 
@@ -586,7 +654,12 @@ namespace COBJ
 			try {
 				curobj->data.numConstructed = std::stoi(line.count);
 				logger::debug(FMT_STRING("cobj formid: {:08X} changed count {}"), curobj->formID, curobj->data.numConstructed);
-			} catch (const std::invalid_argument& e) {
+			} catch (...) {
+				// Was `catch (const std::invalid_argument&)`, which let
+				// std::out_of_range (e.g. `count=99999999999`) escape patch()
+				// and terminate the load. Widened, and given the diagnostic the
+				// silent catch never produced.
+				logger::warn(FMT_STRING("Invalid count for cobj: {}"), line.count);
 			}
 		}
 
@@ -594,7 +667,9 @@ namespace COBJ
 			try {
 				curobj->data.numConstructed = curobj->data.numConstructed * std::stof(line.countMult);
 				logger::debug(FMT_STRING("cobj formid: {:08X} multiplied count {}"), curobj->formID, curobj->data.numConstructed);
-			} catch (const std::invalid_argument& e) {
+			} catch (...) {
+				// As above: std::out_of_range escaped the narrower catch.
+				logger::warn(FMT_STRING("Invalid countMult for cobj: {}"), line.countMult);
 			}
 		}
 

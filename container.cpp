@@ -267,8 +267,22 @@ namespace CONTAINER
 		if (!line.removeContainerObjectsByCount.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjectsByCount) {
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
-				std::string         addFormStr = objectToAdd[0];
-				uint32_t            count = std::stoi(objectToAdd[1]);
+				std::string addFormStr = objectToAdd[0];
+				// `removeContainerObjectsByCount=<form>~<count>`: the count is the
+				// verb, so there is no defensible default for a missing one, and a
+				// malformed one is skipped with a warning rather than thrown out of
+				// patchContainer() and out of the plugin load.
+				if (objectToAdd.size() < 2) {
+					logger::warn(FMT_STRING("removeContainerObjectsByCount is missing its count, skipping entry: {}"), addFormStr);
+					continue;
+				}
+				uint32_t count = 0;
+				try {
+					count = std::stoi(objectToAdd[1]);
+				} catch (...) {
+					logger::warn(FMT_STRING("Invalid count for removeContainerObjectsByCount: {}"), objectToAdd[1]);
+					continue;
+				}
 				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
 
 				if (addForm) {
@@ -302,7 +316,13 @@ namespace CONTAINER
 				uint32_t            count = 1;
 				std::string         addFormStr = objectToAdd[0];
 				if (objectToAdd.size() > 1) {
-					count = std::stoi(objectToAdd[1]);
+					// The bounds were guarded here; the conversion was not.
+					try {
+						count = std::stoi(objectToAdd[1]);
+					} catch (...) {
+						logger::warn(FMT_STRING("Invalid count for addToContainers: {}"), objectToAdd[1]);
+						continue;
+					}
 				}
 				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
 				if (addForm) {
@@ -324,7 +344,13 @@ namespace CONTAINER
 				uint32_t            count = 1;
 				std::string         addFormStr = objectToAdd[0];
 				if (objectToAdd.size() > 1) {
-					count = std::stoi(objectToAdd[1]);
+					// The bounds were guarded here; the conversion was not.
+					try {
+						count = std::stoi(objectToAdd[1]);
+					} catch (...) {
+						logger::warn(FMT_STRING("Invalid count for addOnceToContainers: {}"), objectToAdd[1]);
+						continue;
+					}
 				}
 				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
 				if (addForm) {
@@ -356,7 +382,13 @@ namespace CONTAINER
 				std::string formToReplaceString = objectToreplace[0];
 				float multiplier = 1;
 				if (objectToreplace.size() > 1) {
-					multiplier = std::stof(objectToreplace[1]);
+					// The bounds were guarded here; the conversion was not.
+					try {
+						multiplier = std::stof(objectToreplace[1]);
+					} catch (...) {
+						logger::warn(FMT_STRING("Invalid multiplier for objectMultCount: {}"), objectToreplace[1]);
+						continue;
+					}
 				}
 				int          count = 0;
 				RE::TESForm* formToReplace = GetFormFromIdentifier(formToReplaceString);
@@ -371,6 +403,12 @@ namespace CONTAINER
 		if (!line.objectsToReplace.empty()) {
 			for (const auto& objectToAdd : line.objectsToReplace) {
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
+				// `replaceInContainers=<old>~<new>` needs both halves; a
+				// one-element group read past the end.
+				if (objectToAdd.size() < 2) {
+					logger::warn(FMT_STRING("replaceInContainers needs <oldForm>~<newForm>, skipping entry: {}"), objectToAdd[0]);
+					continue;
+				}
 				std::string         object1 = objectToAdd[0];
 				std::string         object2 = objectToAdd[1];
 				RE::TESBoundObject* oldObject = (RE::TESBoundObject*)GetFormFromIdentifier(object1);
