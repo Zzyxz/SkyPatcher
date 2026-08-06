@@ -23,7 +23,6 @@ namespace REFERENCE
 	void process_patch_instructions(const std::list<patch_instruction>& tokens)
 	{
 		logger::debug("processing patch instructions");
-		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
 		//RE::BSTArray<RE::TESObjectWEAP*> ObjectArray = dataHandler->GetFormArray<RE::TESObjectREFR>();
 
 		for (const auto& line : tokens) {
@@ -32,7 +31,6 @@ namespace REFERENCE
 				//logger::debug("REFR 2 ");
 				for (const auto& npcstring : line.objects) {
 					//logger::debug("REFR 3 ");
-					RE::TESForm*       currentform = nullptr;
 					//RE::FormID curobj = nullptr;
 
 					std::string string_form = npcstring;
@@ -56,6 +54,7 @@ namespace REFERENCE
 
 	RefrData readConfig(const std::string& folder)
 	{
+		rData.refrDataMap.clear();
 		char        skipChar = ';';
 		std::string extension = ".ini";
 
@@ -97,7 +96,7 @@ namespace REFERENCE
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -121,7 +120,7 @@ namespace REFERENCE
 		return rData;
 	}
 
-	void* patch(REFERENCE::patch_instruction line, RE::FormID curobj)
+	void* patch(const REFERENCE::patch_instruction& line, RE::FormID curobj)
 	{
 		//logger::debug(FMT_STRING("refr 11 formid: {:08X} "), curobj);
 		if (!line.baseobject.empty() && line.baseobject != "none") {
@@ -147,7 +146,7 @@ namespace REFERENCE
 
 
 		
-
-
+		
+		return nullptr;
 	}
 }

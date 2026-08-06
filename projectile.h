@@ -85,7 +85,7 @@ namespace PROJECTILE
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
-	void  patch(PROJECTILE::patch_instruction line, RE::BGSProjectile* curobj);
+	void  patch(const PROJECTILE::patch_instruction& line, RE::BGSProjectile* curobj);
 }
 
 #endif

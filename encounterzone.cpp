@@ -35,7 +35,7 @@ namespace ENCOUNTERZONE
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::BGSEncounterZone*> ObjectArray = dataHandler->GetFormArray<RE::BGSEncounterZone>();
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::BGSEncounterZone>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -203,7 +203,7 @@ namespace ENCOUNTERZONE
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -226,7 +226,7 @@ namespace ENCOUNTERZONE
 		}
 	}
 
-	void* patch(ENCOUNTERZONE::patch_instruction line, RE::BGSEncounterZone* curobj)
+	void* patch(const ENCOUNTERZONE::patch_instruction& line, RE::BGSEncounterZone* curobj)
 	{
 
 
@@ -239,7 +239,7 @@ namespace ENCOUNTERZONE
 					curobj->data.minLevel = static_cast<int8_t>(val);
 					logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed minLevel {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.minLevel);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -258,7 +258,7 @@ namespace ENCOUNTERZONE
 						clib_util::editorID::get_editorID(curobj),
 						curobj->data.minLevel);
 				}
-			} catch (const std::invalid_argument&) {
+			} catch (const std::exception&) {
 				// Ungültige Eingabe – wird ignoriert
 			}
 		}
@@ -277,7 +277,7 @@ namespace ENCOUNTERZONE
 					logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed(mult) minLevel {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.minLevel);
 				}
 
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -290,7 +290,7 @@ namespace ENCOUNTERZONE
 					curobj->data.maxLevel = static_cast<int8_t>(val);
 					logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed maxLevel {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.maxLevel);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -309,7 +309,7 @@ namespace ENCOUNTERZONE
 						clib_util::editorID::get_editorID(curobj),
 						curobj->data.maxLevel);
 				}
-			} catch (const std::invalid_argument&) {
+			} catch (const std::exception&) {
 				// Ungültige Eingabe – wird ignoriert
 			}
 		}
@@ -327,7 +327,7 @@ namespace ENCOUNTERZONE
 					logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed(mult) maxLevel {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.maxLevel);
 				}
 
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -371,11 +371,11 @@ namespace ENCOUNTERZONE
 		//				curobj->formID,
 		//				clib_util::editorID::get_editorID(curobj));
 		//		}
-		//	} catch (const std::invalid_argument&) {
+		//	} catch (const std::exception&) {
 		//	}
 		//}
 		
-
+		return nullptr;
 	}
 
 }

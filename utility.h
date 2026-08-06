@@ -30,7 +30,6 @@ struct AttributePoints
 bool                             IsPluginInstalled(const char* name);
 RE::ActorValue StringToActorValue(const std::string& valueString);
 RE::TESForm*                     GetFormFromIdentifier(const std::string& identifier);
-RE::TESForm*					GetRefrFormFromIdentifier(const std::string& identifier);
 RE::FormID BuildFormIDFromIdentifier(const std::string& identifier);
 
 std::string                      toLowerCase(std::string pString);
@@ -57,6 +56,6 @@ RE::BGSListForm* createListForm();
 std::string                      normalizePath(const std::string& path);
 std::string                      toHex(const std::string& str);
 RE::TESObjectREFR*               createREFR();
-
+RE::FIGHT_REACTION               GetFightReaction(const std::string& value);
 
 #endif

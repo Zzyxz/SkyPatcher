@@ -77,7 +77,7 @@ namespace SPELL
 	struct line_content create_patch_instruction(const std::string& line);
 	void process_patch_instructions(const std::list<line_content>& tokens);
 	void* readConfig(const std::string& folder);
-	void               patch(SPELL::line_content line, RE::SpellItem* curobj);
+	void               patch(const SPELL::line_content& line, RE::SpellItem* curobj);
 }
 
 #endif

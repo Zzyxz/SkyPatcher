@@ -73,7 +73,7 @@ namespace ALCH
 	{
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::AlchemyItem*> objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
+		const auto& objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
 		//RE::BSTArray<RE::IngredientItem*> objectIngredientArray = dataHandler->GetFormArray<RE::IngredientItem>();
 		for (const auto& line : tokens) {
 			
@@ -423,7 +423,7 @@ namespace ALCH
 								std::list<line_content> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -446,7 +446,7 @@ namespace ALCH
 		}
 	}
 
-	void patch(ALCH::line_content line, RE::AlchemyItem* curobj) {
+	void patch(const ALCH::line_content& line, RE::AlchemyItem* curobj) {
 
 		if ( !line.keywordsToAdd.empty()) {
 			for (size_t i = 0; i < line.keywordsToAdd.size(); i++) {
@@ -496,7 +496,8 @@ namespace ALCH
 		}
 
 		if ( !line.addedObjects.empty()) {
-			for (const auto& objectToAdd : line.addedObjects) {
+		for (const auto& objectToAdd : line.addedObjects) {
+			if (objectToAdd.size() < 4) { logger::warn("alch {:08X}: invalid addedObjects entry, expected 4 values", curobj->formID); continue; }
 				std::string        addFormStr = objectToAdd[0];
 				float              magnitude = std::stof(objectToAdd[1]);
 				int32_t            duration = std::stoi(objectToAdd[2]);
@@ -521,7 +522,9 @@ namespace ALCH
 		}
 
 		if ( !line.changedObjects.empty()) {
-			for (const auto& objectToAdd : line.changedObjects) {
+		for (auto objectToAdd : line.changedObjects) {
+			if (objectToAdd.empty()) { logger::warn("alch {:08X}: empty changedObjects entry", curobj->formID); continue; }
+			objectToAdd.resize(5, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
 				if (addForm) {  // Only proceed if addForm is not null
@@ -570,7 +573,9 @@ namespace ALCH
 		}
 
 		if (!line.changedAddObjects.empty()) {
-			for (const auto& objectToAdd : line.changedAddObjects) {
+		for (auto objectToAdd : line.changedAddObjects) {
+			if (objectToAdd.empty()) { logger::warn("alch {:08X}: empty changedAddObjects entry", curobj->formID); continue; }
+			objectToAdd.resize(4, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
 				if (addForm) {  // Only proceed if addForm is not null
@@ -610,7 +615,9 @@ namespace ALCH
 		}
 
 		if (!line.changedFirstObjects.empty()) {
-			for (const auto& objectToAdd : line.changedFirstObjects) {
+		for (auto objectToAdd : line.changedFirstObjects) {
+			if (objectToAdd.empty()) { logger::warn("alch {:08X}: empty changedFirstObjects entry", curobj->formID); continue; }
+			objectToAdd.resize(4, "null");
 				float magnitude = 0.0f;
 				if (objectToAdd[0] != "null") {
 					magnitude = std::stof(objectToAdd[0]);
@@ -654,7 +661,9 @@ namespace ALCH
 		}
 
 		if (!line.changedDamageHealthObjects.empty()) {
-			for (const auto& objectToAdd : line.changedDamageHealthObjects) {
+		for (auto objectToAdd : line.changedDamageHealthObjects) {
+			if (objectToAdd.empty()) { logger::warn("alch {:08X}: empty changedDamageHealthObjects entry", curobj->formID); continue; }
+			objectToAdd.resize(4, "null");
 				float magnitude = 0.0f;
 				if (objectToAdd[0] != "null") {
 					magnitude = std::stof(objectToAdd[0]);
@@ -702,14 +711,16 @@ namespace ALCH
 			try {
 				curobj->weight = std::stof(line.weight);
 				logger::debug(FMT_STRING("ingestible formid: {:08X} {} changed weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
+				logger::warn("alch {:08X}: invalid weight '{}': {}", curobj->formID, line.weight, e.what());
 			}
 		}
 		if ( !line.capsvalue.empty() && line.capsvalue != "none") {
 			try {
 				curobj->data.costOverride = std::stoi(line.capsvalue);
 				logger::debug(FMT_STRING("ingestible formid: {:08X} {} changed value {}"), curobj->formID, curobj->fullName, curobj->data.costOverride);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
+				logger::warn("alch {:08X}: invalid value '{}': {}", curobj->formID, line.capsvalue, e.what());
 			}
 		}
 
@@ -717,7 +728,8 @@ namespace ALCH
 			try {
 				logger::debug(FMT_STRING("ingestible formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
+				logger::warn("alch {:08X}: failed to set fullName: {}", curobj->formID, e.what());
 			}
 		}
 
@@ -726,7 +738,8 @@ namespace ALCH
 				curobj->SetModel(line.model.c_str());
 				curobj->ReplaceModel();
 				logger::debug(FMT_STRING("ingestible formid: {:08X} {} changed model path {}"), curobj->formID, curobj->fullName, curobj->model.c_str());
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
+				logger::warn("alch {:08X}: failed to set model '{}': {}", curobj->formID, line.model, e.what());
 			}
 		}
 

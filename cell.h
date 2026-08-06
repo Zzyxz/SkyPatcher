@@ -21,6 +21,7 @@ namespace CELL
 		std::vector<std::string> objectExcluded;
 		std::string              acousticSpace;
 		std::string              musicType;
+		std::string              location;
 		std::string              skyRegion;
 		std::string              imageSpace;
 		std::string              encounterZone;
@@ -30,12 +31,12 @@ namespace CELL
 		
 		std::vector<std::string> filterByAcousticSpace;
 		std::vector<std::string> filterByMusicType;
+		std::vector<std::string> filterByLocation;
 		std::vector<std::string> filterBySkyRegion;
 		std::vector<std::string> filterByImageSpace;
 		std::vector<std::string> setCellFlags;
 		std::vector<std::string> removeCellFlags;
 		std::vector<std::string> skipByModContains;
-		;
 		std::string              waterType;
 		std::string              fogNear;
 		std::string              fogFar;
@@ -139,7 +140,7 @@ namespace CELL
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
-	void* patch(CELL::patch_instruction line, RE::TESObjectCELL* curobj);
+	void* patch(const CELL::patch_instruction& line, RE::TESObjectCELL* curobj);
 }
 
 #endif

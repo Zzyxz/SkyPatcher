@@ -359,7 +359,7 @@ namespace NPC
 		const auto start_time{ std::chrono::system_clock::now() };
 		logger::debug("processing patch instructions");
 		const auto                dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESNPC*> NPCArray = dataHandler->GetFormArray<RE::TESNPC>();
+		const auto& NPCArray = dataHandler->GetFormArray<RE::TESNPC>();
 
 		logger::debug("NPC count: {}", NPCArray.size());
 
@@ -368,8 +368,6 @@ namespace NPC
 				for (const auto& npcstring : line.object) {
 					RE::TESForm* currentform = nullptr;
 					RE::TESNPC* curobj = nullptr;
-					RE::Character* curActObj = nullptr;
-					
 
 					std::string string_form = npcstring;
 					currentform = GetFormFromIdentifier(string_form);
@@ -410,7 +408,8 @@ namespace NPC
 					}
 				}
 
-				if (findObject(line, curobj)) {
+				const std::string lowerEditorID = (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty() || !line.filterByEditorIdContainsExcluded.empty()) ? toLowerCase(clib_util::editorID::get_editorID(curobj)) : std::string{};
+				if (findObject(line, curobj, lowerEditorID)) {
 					patch(line, curobj);
 				}
 			}
@@ -422,7 +421,7 @@ namespace NPC
 	}
 
 
-	void* patch(NPC::patch_instruction line, RE::TESNPC* curobj)
+	void* patch(const NPC::patch_instruction& line, RE::TESNPC* curobj)
 	{
 
 
@@ -504,6 +503,10 @@ namespace NPC
 
 		if (!line.rcslist.empty()) {
 			for (auto tempCs : line.rcslist) {
+				if (tempCs.empty()) {
+					logger::warn("NPC {:08X}: ignoring empty random combat style entry", curobj->formID);
+					continue;
+				}
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = tempCs[0];
 				currentform = GetFormFromIdentifier(string_form);
@@ -674,6 +677,9 @@ namespace NPC
 
 		if (!line.setRandomVisualStyle.empty()) {
 			//logger::debug(" line.setRandomVisualStyle {}", line.setRandomVisualStyle);
+			if (line.setRandomVisualStyle.front().empty()) {
+				logger::warn("NPC {:08X}: ignoring empty random visual style entry", curobj->formID);
+			} else {
 			RE::TESForm* currentform = nullptr;
 			std::string  string_form = line.setRandomVisualStyle[0][0];
 			currentform = GetFormFromIdentifier(string_form);
@@ -691,15 +697,19 @@ namespace NPC
 				if (line.setRandomVisualStyle[0].size() > 2) {
 					aData.npcData[curobj->formID].changeVoice = true;
 				}
-				if (!line.rvsRestrictToTraits.empty() && line.rvsRestrictToTraits != "none") {
+			if (!line.rvsRestrictToTraits.empty() && line.rvsRestrictToTraits != "none") {
 					aData.npcData[curobj->formID].restrictToTraits = true;
 				}
 
+			}
 			}
 		}
 
 		if (!line.addRandomVisualStyle.empty()) {
 			//logger::debug(" line.addRandomVisualStyle {}", line.addRandomVisualStyle);
+			if (line.addRandomVisualStyle.front().empty()) {
+				logger::warn("NPC {:08X}: ignoring empty added random visual style entry", curobj->formID);
+			} else {
 			RE::TESForm* currentform = nullptr;
 			std::string  string_form = line.addRandomVisualStyle[0][0];
 			currentform = GetFormFromIdentifier(string_form);
@@ -742,6 +752,7 @@ namespace NPC
 					aData.npcData[curobj->formID].restrictToTraits = true;
 				}
 
+			}
 			}
 		}
 
@@ -1225,7 +1236,7 @@ namespace NPC
 		//	try {
 		//		curobj->actorData. = std::stof(line.xpValueOffset);
 		//		logger::debug(FMT_STRING("npc formid: {:08X} {} changed xpValueOffset to {}"), curobj->formID, curobj->fullName, curobj->actorData.xpValueOffset);
-		//	} catch (const std::invalid_argument& e) {
+		//	} catch (const std::exception& e) {
 		//	}
 		//}
 
@@ -1234,7 +1245,7 @@ namespace NPC
 				curobj->weight = std::stof(line.weight);
 				logger::debug(FMT_STRING("npc formid: {:08X} {} changed weight to {}"), curobj->formID, curobj->fullName, curobj->weight);
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 
@@ -1243,7 +1254,7 @@ namespace NPC
 				curobj->height = std::stof(line.height);
 				logger::debug(FMT_STRING("npc formid: {:08X} {} changed height to {}"), curobj->formID, curobj->fullName, curobj->height);
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 
@@ -1252,7 +1263,7 @@ namespace NPC
 				curobj->actorData.level = std::stof(line.level);
 				logger::debug(FMT_STRING("npc formid: {:08X} {} changed level to {}"), curobj->formID, curobj->fullName, curobj->actorData.level);
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 		if (!line.calcLevelMin.empty() && line.calcLevelMin != "none") {
@@ -1262,7 +1273,7 @@ namespace NPC
 				aData.npcData[curobj->formID].minLevelWasSet = true;
 				logger::debug(FMT_STRING("npc formid: {:08X} {} changed calcLevelMin to {}"), curobj->formID, curobj->fullName, curobj->actorData.calcLevelMin);
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 		if (!line.calcLevelMax.empty() && line.calcLevelMax != "none") {
@@ -1272,7 +1283,7 @@ namespace NPC
 				aData.npcData[curobj->formID].maxLevelWasSet = true;
 				logger::debug(FMT_STRING("npc formid: {:08X} {} changed calcLevelMax to {}"), curobj->formID, curobj->fullName, curobj->actorData.calcLevelMax);
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 
@@ -1415,6 +1426,7 @@ namespace NPC
 
 		if (!line.removeContainerObjectsByCount.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjectsByCount) {
+				if (objectToAdd.size() < 2) { logger::warn("npc {:08X}: invalid removeContainerObjectsByCount entry, expected 2 values", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string         addFormStr = objectToAdd[0];
 				uint32_t            count = std::stoi(objectToAdd[1]);
@@ -1464,6 +1476,7 @@ namespace NPC
 
 		if (!line.addedContainerObjectsOnce.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjectsOnce) {
+				if (objectToAdd.size() < 2) { logger::warn("npc {:08X}: invalid addedContainerObjectsOnce entry, expected 2 values", curobj->formID); continue; }
 				std::string         addFormStr = objectToAdd[0];
 				uint32_t            count = std::stoi(objectToAdd[1]);
 				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
@@ -1488,6 +1501,7 @@ namespace NPC
 
 		if (!line.objectsToReplace.empty()) {
 			for (const auto& objectToAdd : line.objectsToReplace) {
+				if (objectToAdd.size() < 2) { logger::warn("npc {:08X}: invalid objectsToReplace entry, expected 2 values", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string         object1 = objectToAdd[0];
 				std::string         object2 = objectToAdd[1];
@@ -1507,7 +1521,7 @@ namespace NPC
 				curobj->actorData.speedMult = std::stof(line.speedMultiplier);
 				logger::debug(FMT_STRING("npc formid: {:08X} {} changed speedMultiplier to {}"), curobj->formID, curobj->fullName, curobj->actorData.speedMult);
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 
@@ -1516,7 +1530,7 @@ namespace NPC
 				logger::debug(FMT_STRING("npc formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 
@@ -1525,7 +1539,7 @@ namespace NPC
 				logger::debug(FMT_STRING("npc formid: {:08X} {} changed shortname to {}"), curobj->formID, curobj->shortName, line.shortName);
 				curobj->shortName = line.shortName;
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 
@@ -2299,7 +2313,7 @@ namespace NPC
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -2363,7 +2377,7 @@ namespace NPC
 
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -2393,7 +2407,7 @@ namespace NPC
 		//return;
 	}
 
-	bool findObject(patch_instruction line, RE::TESNPC* curobj)
+	bool findObject(const patch_instruction& line, RE::TESNPC* curobj, const std::string& lowerEditorID)
 	{
 		bool found = false;
 		bool keywordAnd = false;
@@ -2677,7 +2691,7 @@ namespace NPC
 
 		if (!found && !line.filterByEditorIdContains.empty() && curobj->formID != 0x000007) {
 			for (const auto& editorString : line.filterByEditorIdContains) {
-				if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
+				if (lowerEditorID.find(toLowerCase(editorString)) != std::string::npos) {
 					contains = true;
 				}
 				else {
@@ -2693,7 +2707,7 @@ namespace NPC
 		if (!found && !line.filterByEditorIdContainsOr.empty() && curobj->formID != 0x000007) {
 			//logger::info("keywords not empty");
 			for (const auto& editorString : line.filterByEditorIdContainsOr) {
-				if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
+				if (lowerEditorID.find(toLowerCase(editorString)) != std::string::npos) {
 					containsOr = true;
 					break;
 				}
@@ -2785,7 +2799,7 @@ namespace NPC
 		if (!line.filterByEditorIdContainsExcluded.empty() && found && curobj->formID != 0x000007) {
 			//logger::info("factions not empty");
 			for (const auto& editorString : line.filterByEditorIdContainsExcluded) {
-				if (toLowerCase(clib_util::editorID::get_editorID(curobj)).find(toLowerCase(editorString)) != std::string::npos) {
+				if (lowerEditorID.find(toLowerCase(editorString)) != std::string::npos) {
 					found = false;
 					break;
 				}
@@ -3186,7 +3200,8 @@ namespace NPC
 					}
 				}
 
-				if (found || findObject(line, curobj))
+				const std::string lowerEditorID = (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty() || !line.filterByEditorIdContainsExcluded.empty()) ? toLowerCase(clib_util::editorID::get_editorID(curobj)) : std::string{};
+				if (found || findObject(line, curobj, lowerEditorID))
 					patch(line, curobj);
 			}
 

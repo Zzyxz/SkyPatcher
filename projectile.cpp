@@ -95,7 +95,7 @@ namespace PROJECTILE
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::BGSProjectile*> ObjectArray = dataHandler->GetFormArray<RE::BGSProjectile>();
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::BGSProjectile>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -214,14 +214,14 @@ namespace PROJECTILE
 		}
 	}
 
-	void patch(PROJECTILE::patch_instruction line, RE::BGSProjectile* curobj)
+	void patch(const PROJECTILE::patch_instruction& line, RE::BGSProjectile* curobj)
 	{
 
 		if (!line.speed.empty() && line.speed != "none") {
 			try {
 				curobj->data.speed = std::stof(line.speed);
 				logger::debug(FMT_STRING("projectile formid: {:08X} {} changed speed {}"), curobj->formID, curobj->fullName, curobj->data.speed);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -229,7 +229,7 @@ namespace PROJECTILE
 			try {
 				curobj->data.speed = curobj->data.speed * std::stof(line.speedMult);
 				logger::debug(FMT_STRING("projectile formid: {:08X} {} multiplied speed {}"), curobj->formID, curobj->fullName, curobj->data.speed);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -237,7 +237,7 @@ namespace PROJECTILE
 			try {
 				curobj->data.range = std::stof(line.range);
 				logger::debug(FMT_STRING("projectile formid: {:08X} {} changed range {}"), curobj->formID, curobj->fullName, curobj->data.range);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -245,7 +245,7 @@ namespace PROJECTILE
 			try {
 				curobj->data.range = curobj->data.range * std::stof(line.rangeMult);
 				logger::debug(FMT_STRING("projectile formid: {:08X} {} multiplied range {}"), curobj->formID, curobj->fullName, curobj->data.range);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -253,7 +253,7 @@ namespace PROJECTILE
 			try {
 				curobj->data.gravity = std::stof(line.gravity);
 				logger::debug(FMT_STRING("projectile formid: {:08X} {} changed gravity {}"), curobj->formID, curobj->fullName, curobj->data.gravity);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -261,7 +261,7 @@ namespace PROJECTILE
 			try {
 				curobj->data.gravity = curobj->data.gravity * std::stof(line.gravityMult);
 				logger::debug(FMT_STRING("projectile formid: {:08X} {} multiplied gravity {}"), curobj->formID, curobj->fullName, curobj->data.gravity);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -274,7 +274,7 @@ namespace PROJECTILE
 					curobj->data.activeSoundLoop = (RE::BGSSoundDescriptorForm*)currentform;
 					logger::debug(FMT_STRING("projectile formid: {:08X} {} changed sound {:08X}"), curobj->formID, curobj->fullName, curobj->data.activeSoundLoop->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -455,7 +455,7 @@ namespace PROJECTILE
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 

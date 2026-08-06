@@ -31,7 +31,7 @@ namespace LOCATION
 		extractValueString(line, "musicType\\s*=([^:]+)", l.musicType);
 		extractValueString(line, "unreportedCrimeFaction\\s*=([^:]+)", l.unreportedCrimeFaction);
 		extractValueString(line, "parentLocation\\s*=([^:]+)", l.parentLoc);
-
+		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
 		return l;
 	}  //endStruct
 
@@ -39,7 +39,7 @@ namespace LOCATION
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::BGSLocation*> ObjectArray = dataHandler->GetFormArray<RE::BGSLocation>();
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::BGSLocation>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -322,7 +322,7 @@ namespace LOCATION
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -345,7 +345,7 @@ namespace LOCATION
 		}
 	}
 
-	void* patch(LOCATION::patch_instruction line, RE::BGSLocation* curobj)
+	void* patch(const LOCATION::patch_instruction& line, RE::BGSLocation* curobj)
 	{
 
 		if (!line.keywordsToRemove.empty()) {
@@ -378,7 +378,7 @@ namespace LOCATION
 			try {
 				logger::debug(FMT_STRING("location formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -415,9 +415,15 @@ namespace LOCATION
 			}
 		}
 
+		if (!line.fullName.empty() && line.fullName != "none") {
+			try {
+				logger::debug(FMT_STRING("location formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
+				curobj->fullName = line.fullName;
+			} catch (const std::exception& e) {
+			}
+		}
 
-
-
+		return nullptr;
 	}
 
 }

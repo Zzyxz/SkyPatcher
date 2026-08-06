@@ -6,7 +6,7 @@
 #include <unordered_map>
 
 
-void* patch(NPC::patch_instruction line, RE::TESNPC* curobj, bool bEnableSetLevelDirectlyByPCMult, NPC::ActorData aData)
+void* patch(const NPC::patch_instruction& line, RE::TESNPC* curobj, bool bEnableSetLevelDirectlyByPCMult, const NPC::ActorData& aData)
 {
 	if (!line.calcStats.empty() && line.calcStats != "none" && curobj->formID != 0x000007) {
 		if (line.calcStats == "yes" || line.calcStats == "true") {
@@ -508,7 +508,7 @@ void* patch(NPC::patch_instruction line, RE::TESNPC* curobj, bool bEnableSetLeve
 	//	try {
 	//		curobj->actorData. = std::stof(line.xpValueOffset);
 	//		logger::debug(FMT_STRING("npc formid: {:08X} {} changed xpValueOffset to {}"), curobj->formID, curobj->fullName, curobj->actorData.xpValueOffset);
-	//	} catch (const std::invalid_argument& e) {
+	//	} catch (const std::exception& e) {
 	//	}
 	//}
 
@@ -516,21 +516,21 @@ void* patch(NPC::patch_instruction line, RE::TESNPC* curobj, bool bEnableSetLeve
 		try {
 			curobj->actorData.level = std::stof(line.level);
 			logger::debug(FMT_STRING("npc formid: {:08X} {} changed level to {}"), curobj->formID, curobj->fullName, curobj->actorData.level);
-		} catch (const std::invalid_argument& e) {
+		} catch (const std::exception& e) {
 		}
 	}
 	if (!line.calcLevelMin.empty() && line.calcLevelMin != "none") {
 		try {
 			curobj->actorData.calcLevelMin = std::stof(line.calcLevelMin);
 			logger::debug(FMT_STRING("npc formid: {:08X} {} changed calcLevelMin to {}"), curobj->formID, curobj->fullName, curobj->actorData.calcLevelMin);
-		} catch (const std::invalid_argument& e) {
+		} catch (const std::exception& e) {
 		}
 	}
 	if (!line.calcLevelMax.empty() && line.calcLevelMax != "none") {
 		try {
 			curobj->actorData.calcLevelMax = std::stof(line.calcLevelMax);
 			logger::debug(FMT_STRING("npc formid: {:08X} {} changed calcLevelMax to {}"), curobj->formID, curobj->fullName, curobj->actorData.calcLevelMax);
-		} catch (const std::invalid_argument& e) {
+		} catch (const std::exception& e) {
 		}
 	}
 
@@ -664,6 +664,7 @@ void* patch(NPC::patch_instruction line, RE::TESNPC* curobj, bool bEnableSetLeve
 
 	if (!line.removeContainerObjectsByCount.empty()) {
 		for (const auto& objectToAdd : line.removeContainerObjectsByCount) {
+			if (objectToAdd.size() < 2) { logger::warn("npc {:08X}: invalid removeContainerObjectsByCount entry, expected 2 values", curobj->formID); continue; }
 			//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 			std::string         addFormStr = objectToAdd[0];
 			uint32_t            count = std::stoi(objectToAdd[1]);
@@ -711,6 +712,7 @@ void* patch(NPC::patch_instruction line, RE::TESNPC* curobj, bool bEnableSetLeve
 
 	if (!line.addedContainerObjectsOnce.empty()) {
 		for (const auto& objectToAdd : line.addedContainerObjectsOnce) {
+			if (objectToAdd.size() < 2) { logger::warn("npc {:08X}: invalid addedContainerObjectsOnce entry, expected 2 values", curobj->formID); continue; }
 			std::string         addFormStr = objectToAdd[0];
 			uint32_t            count = std::stoi(objectToAdd[1]);
 			RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
@@ -735,7 +737,7 @@ void* patch(NPC::patch_instruction line, RE::TESNPC* curobj, bool bEnableSetLeve
 		try {
 			curobj->actorData.speedMult = std::stof(line.speedMultiplier);
 			logger::debug(FMT_STRING("npc formid: {:08X} {} changed speedMultiplier to {}"), curobj->formID, curobj->fullName, curobj->actorData.speedMult);
-		} catch (const std::invalid_argument& e) {
+		} catch (const std::exception& e) {
 		}
 	}
 
@@ -743,7 +745,7 @@ void* patch(NPC::patch_instruction line, RE::TESNPC* curobj, bool bEnableSetLeve
 		try {
 			logger::debug(FMT_STRING("npc formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 			curobj->fullName = line.fullName;
-		} catch (const std::invalid_argument& e) {
+		} catch (const std::exception& e) {
 		}
 	}
 

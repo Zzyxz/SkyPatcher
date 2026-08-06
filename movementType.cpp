@@ -46,7 +46,7 @@ namespace MOVETYPE
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::BGSMovementType*> ObjectArray = dataHandler->GetFormArray<RE::BGSMovementType>();
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::BGSMovementType>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -169,7 +169,7 @@ namespace MOVETYPE
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -192,7 +192,7 @@ namespace MOVETYPE
 		}
 	}
 
-	void* patch(MOVETYPE::patch_instruction line, RE::BGSMovementType* curobj)
+	void* patch(const MOVETYPE::patch_instruction& line, RE::BGSMovementType* curobj)
 	{
 
 		if (!line.walkLeft.empty() && line.walkLeft != "none") {
@@ -200,7 +200,7 @@ namespace MOVETYPE
 				//logger::debug(FMT_STRING("movementType formid: {:08X} before walkLeft {}"), curobj->formID, curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kLeft][RE::Movement::MaxSpeeds::kWalk]);
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kLeft][RE::Movement::MaxSpeeds::kWalk] = std::stof(line.walkLeft);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed walkLeft {}"), curobj->formID, line.walkLeft);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		if (!line.runLeft.empty() && line.runLeft != "none") {
@@ -208,49 +208,49 @@ namespace MOVETYPE
 				//logger::debug(FMT_STRING("movementType formid: {:08X} before runLeft {}"), curobj->formID, curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kLeft][RE::Movement::MaxSpeeds::kRun]);
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kLeft][RE::Movement::MaxSpeeds::kRun] = std::stof(line.runLeft);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed runLeft {}"), curobj->formID, line.runLeft);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		if (!line.walkRight.empty() && line.walkRight != "none") {
 			try {
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kRight][RE::Movement::MaxSpeeds::kWalk] = std::stof(line.walkRight);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed walkRight {}"), curobj->formID, line.walkRight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		if (!line.runRight.empty() && line.runRight != "none") {
 			try {
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kRight][RE::Movement::MaxSpeeds::kRun] = std::stof(line.runRight);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed runRight {}"), curobj->formID, line.runRight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		if (!line.walkForward.empty() && line.walkForward != "none") {
 			try {
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kForward][RE::Movement::MaxSpeeds::kWalk] = std::stof(line.walkForward);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed walkForward {}"), curobj->formID, line.walkForward);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		if (!line.runForward.empty() && line.runForward != "none") {
 			try {
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kForward][RE::Movement::MaxSpeeds::kRun] = std::stof(line.runForward);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed runForward {}"), curobj->formID, line.runForward);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		if (!line.walkBack.empty() && line.walkBack != "none") {
 			try {
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kBack][RE::Movement::MaxSpeeds::kWalk] = std::stof(line.walkBack);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed walkBack {}"), curobj->formID, line.walkBack);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		if (!line.runBack.empty() && line.runBack != "none") {
 			try {
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::SPEED_DIRECTION::kBack][RE::Movement::MaxSpeeds::kRun] = std::stof(line.runBack);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed runBack {}"), curobj->formID, line.runBack);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -260,7 +260,7 @@ namespace MOVETYPE
 				//logger::debug(FMT_STRING("movementType formid: {:08X} before rotateWhileMovingRun {}"), curobj->formID, curobj->movementTypeData.defaultData.rotateWhileMovingRun);
 				curobj->movementTypeData.defaultData.rotateWhileMovingRun = std::stof(line.rotateWhileMovingRun) * (M_PI / 180);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed rotateWhileMovingRun {}"), curobj->formID, curobj->movementTypeData.defaultData.rotateWhileMovingRun);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		//
@@ -269,7 +269,7 @@ namespace MOVETYPE
 				//logger::debug(FMT_STRING("movementType formid: {:08X} before rotateInPlaceWalk {}"), curobj->formID, curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::kRotations][RE::Movement::MaxSpeeds::kWalk]);
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::kRotations][RE::Movement::MaxSpeeds::kWalk] = std::stof(line.rotateInPlaceWalk) * (M_PI / 180);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed rotateInPlaceWalk {}"), curobj->formID, curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::kRotations][RE::Movement::MaxSpeeds::kWalk]);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		if (!line.rotateInPlaceRun.empty() && line.rotateInPlaceRun != "none") {
@@ -277,7 +277,7 @@ namespace MOVETYPE
 				//logger::debug(FMT_STRING("movementType formid: {:08X} before rotateInPlaceRun {}"), curobj->formID, curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::kRotations][RE::Movement::MaxSpeeds::kRun]);
 				curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::kRotations][RE::Movement::MaxSpeeds::kRun] = std::stof(line.rotateInPlaceRun) * (M_PI / 180);
 				logger::debug(FMT_STRING("movementType formid: {:08X} changed rotateInPlaceRun {}"), curobj->formID, curobj->movementTypeData.defaultData.speeds[RE::Movement::SPEED_DIRECTIONS::kRotations][RE::Movement::MaxSpeeds::kRun]);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 

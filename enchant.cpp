@@ -66,7 +66,7 @@ namespace ENCH
 		logger::debug("processing patch instructions");
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
 		//RE::BSTArray<RE::AlchemyItem*> objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
-		RE::BSTArray<RE::EnchantmentItem*> objectSpellArray = dataHandler->GetFormArray<RE::EnchantmentItem>();
+		const auto& objectSpellArray = dataHandler->GetFormArray<RE::EnchantmentItem>();
 		for (const auto& line : tokens) {
 			
 				if (!line.objects.empty()) {
@@ -556,7 +556,7 @@ namespace ENCH
 								std::list<line_content> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -579,7 +579,7 @@ namespace ENCH
 		}
 	}
 
-	void patch(ENCH::line_content line, RE::EnchantmentItem* curobj) {
+	void patch(const ENCH::line_content& line, RE::EnchantmentItem* curobj) {
 		
 
 		if (!line.keywordsToAdd.empty()) {
@@ -630,7 +630,8 @@ namespace ENCH
 		}
 
 		if ( !line.addedObjects.empty()) {
-			for (const auto& objectToAdd : line.addedObjects) {
+		for (const auto& objectToAdd : line.addedObjects) {
+			if (objectToAdd.size() < 4) { logger::warn("enchant {:08X}: invalid addedObjects entry, expected 4 values", curobj->formID); continue; }
 				std::string        addFormStr = objectToAdd[0];
 				float              magnitude = std::stof(objectToAdd[1]);
 				int32_t            duration = std::stoi(objectToAdd[2]);
@@ -659,7 +660,9 @@ namespace ENCH
 		}
 
 		if ( !line.changedObjects.empty()) {
-			for (const auto& objectToAdd : line.changedObjects) {
+		for (auto objectToAdd : line.changedObjects) {
+			if (objectToAdd.empty()) { logger::warn("enchant {:08X}: empty changedObjects entry", curobj->formID); continue; }
+			objectToAdd.resize(5, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
 				if (addForm) {  // Only proceed if addForm is not null
@@ -708,7 +711,9 @@ namespace ENCH
 		}
 
 		if (!line.changedAddObjects.empty()) {
-			for (const auto& objectToAdd : line.changedAddObjects) {
+		for (auto objectToAdd : line.changedAddObjects) {
+			if (objectToAdd.empty()) { logger::warn("enchant {:08X}: empty changedAddObjects entry", curobj->formID); continue; }
+			objectToAdd.resize(4, "null");
 				std::string        addFormStr = objectToAdd[0];
 				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
 				if (addForm) {  // Only proceed if addForm is not null
@@ -748,7 +753,9 @@ namespace ENCH
 		}
 
 		if (!line.changedFirstObjects.empty()) {
-			for (const auto& objectToAdd : line.changedFirstObjects) {
+		for (auto objectToAdd : line.changedFirstObjects) {
+			if (objectToAdd.empty()) { logger::warn("enchant {:08X}: empty changedFirstObjects entry", curobj->formID); continue; }
+			objectToAdd.resize(4, "null");
 				float magnitude = 0.0f;
 				if (objectToAdd[0] != "null") {
 					magnitude = std::stof(objectToAdd[0]);
@@ -792,7 +799,9 @@ namespace ENCH
 		}
 
 		if (!line.changedDamageHealthObjects.empty()) {
-			for (const auto& objectToAdd : line.changedDamageHealthObjects) {
+		for (auto objectToAdd : line.changedDamageHealthObjects) {
+			if (objectToAdd.empty()) { logger::warn("enchant {:08X}: empty changedDamageHealthObjects entry", curobj->formID); continue; }
+			objectToAdd.resize(4, "null");
 				float magnitude = 0.0f;
 				if (objectToAdd[0] != "null") {
 					magnitude = std::stof(objectToAdd[0]);
@@ -840,7 +849,7 @@ namespace ENCH
 			try {
 				curobj->data.costOverride = std::stoi(line.baseCost);
 				logger::debug(FMT_STRING("enchantment formid: {:08X} {} changed baseCost to {}"), curobj->formID, curobj->fullName, curobj->data.costOverride);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -848,7 +857,7 @@ namespace ENCH
 			try {
 				curobj->data.chargeOverride = std::stoi(line.chargeOverride);
 				logger::debug(FMT_STRING("enchantment formid: {:08X} {} changed enchantmentAmount to {}"), curobj->formID, curobj->fullName, curobj->data.chargeOverride);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -856,7 +865,7 @@ namespace ENCH
 			try {
 				logger::debug(FMT_STRING("enchantment formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 

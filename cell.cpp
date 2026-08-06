@@ -97,12 +97,14 @@ namespace CELL
 		extractValueString(line, "imageSpace\\s*=([^:]+)", l.imageSpace);
 
 		extractData(line, "filterByAcousticSpace\\s*=([^:]+)", l.filterByAcousticSpace);
+		extractData(line, "filterByLocations\\s*=([^:]+)", l.filterByLocation);
 		extractData(line, "filterByMusicType\\s*=([^:]+)", l.filterByMusicType);
 		extractData(line, "filterBySkyRegion\\s*=([^:]+)", l.filterBySkyRegion);
 		extractData(line, "filterByImageSpace\\s*=([^:]+)", l.filterByImageSpace);
 		extractValueString(line, "encounterZone\\s*=([^:]+)", l.encounterZone);
 		extractValueString(line, "waterHeight\\s*=([^:]+)", l.waterHeight);
 		extractValueString(line, "waterType\\s*=([^:]+)", l.waterType);
+		extractValueString(line, "location\\s*=([^:]+)", l.location);
 		extractValueString(line, "fullName\\s*=\\s*~([^~]+)~", l.fullName);
 
 		extractValueString(line, "directionalXY\\s*=([^:]+)", l.directionalXY);
@@ -288,7 +290,7 @@ namespace CELL
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESObjectCELL*> ObjectArray = dataHandler->GetFormArray<RE::TESObjectCELL>();
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectCELL>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -353,7 +355,7 @@ namespace CELL
 				}
 			}
 			//logger::debug("before con ");
-			if (!line.object.empty() && line.filterByAcousticSpace.empty() && line.filterByMusicType.empty() && line.filterBySkyRegion.empty() && line.filterByImageSpace.empty()) {
+			if (!line.object.empty() && line.filterByAcousticSpace.empty() && line.filterByMusicType.empty() && line.filterBySkyRegion.empty() && line.filterByImageSpace.empty() && line.filterByLocation.empty()) {
 				continue;
 			}
 			//logger::debug("after con {}", ObjectArray.size());
@@ -435,6 +437,20 @@ namespace CELL
 							auto* reg = static_cast<RE::TESRegion*>(form);
 							auto* extra = curobj->extraList.GetByType<RE::ExtraCellSkyRegion>();
 							if (extra && extra->skyRegion && extra->skyRegion->formID == reg->formID) {
+								found = true;
+								break;
+							}
+						}
+					}
+				}
+
+				if (!found && !line.filterByLocation.empty()) {
+					for (const auto& locString : line.filterByLocation) {
+						auto* form = GetFormFromIdentifier(locString);
+						if (form && form->formType == RE::FormType::Location) {
+							auto* reg = static_cast<RE::BGSLocation*>(form);
+							auto* extra = curobj->extraList.GetByType<RE::ExtraLocation>();
+							if (extra && extra->location && extra->location->formID == reg->formID) {
 								found = true;
 								break;
 							}
@@ -572,7 +588,7 @@ namespace CELL
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -595,7 +611,7 @@ namespace CELL
 		}
 	}
 
-	void* patch(CELL::patch_instruction line, RE::TESObjectCELL* curobj)
+	void* patch(const CELL::patch_instruction& line, RE::TESObjectCELL* curobj)
 	{
 
 
@@ -721,7 +737,35 @@ namespace CELL
 				logger::debug(FMT_STRING("cell formid {:08X} removed musicType"), curobj->formID);
 			}
 		}
+		
+		if (!line.location.empty() &&
+			line.location != "none") {
+			RE::TESForm* form = GetFormFromIdentifier(line.location);
+			if (form && form->formType == RE::FormType::Location) {
+				auto* loc = static_cast<RE::BGSLocation*>(form);
 
+				if (curobj->extraList.HasType<RE::ExtraLocation>()) {
+					auto* extra = curobj->extraList.GetByType<RE::ExtraLocation>();
+					if (extra) {
+						extra->location = loc;
+						logger::debug(FMT_STRING("cell formid {:08X} changed location to {:08X}"), curobj->formID, loc->formID);
+					} else {
+						logger::warn(FMT_STRING("HasType true but GetByType null for location on cell {:08X}"), curobj->formID);
+					}
+				} else {
+					auto* newExtra = new RE::ExtraLocation();
+					newExtra->location = loc;
+					curobj->extraList.Add(newExtra);
+					logger::debug(FMT_STRING("cell formid {:08X} added location {:08X}"), curobj->formID, loc->formID);
+				}
+			}
+		} else if (toLowerCase(line.location) == "null") {
+			if (curobj->extraList.HasType<RE::ExtraLocation>()) {
+				curobj->extraList.RemoveByType(RE::ExtraDataType::kLocation);
+				logger::debug(FMT_STRING("cell formid {:08X} removed location"), curobj->formID);
+			}
+		}
+		
 		if (!line.skyRegion.empty() &&
 			line.skyRegion != "none") {
 			RE::TESForm* form = GetFormFromIdentifier(line.skyRegion);
@@ -860,93 +904,95 @@ namespace CELL
 			}
 		}
 
+
+
 		if (!line.fogColorNearRed.empty() && line.fogColorNearRed != "none") {
 			try {
 				curobj->cellData.interior->fogColorNear.red = static_cast<std::uint8_t>(std::stoi(line.fogColorNearRed));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogColorNear.red to {}"), curobj->formID, curobj->cellData.interior->fogColorNear.red);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 
 		if (!line.fogColorNearGreen.empty() && line.fogColorNearGreen != "none") {
 			try {
 				curobj->cellData.interior->fogColorNear.green = static_cast<std::uint8_t>(std::stoi(line.fogColorNearGreen));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogColorNear.green to {}"), curobj->formID, curobj->cellData.interior->fogColorNear.green);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 
 		if (!line.fogColorNearBlue.empty() && line.fogColorNearBlue != "none") {
 			try {
 				curobj->cellData.interior->fogColorNear.blue = static_cast<std::uint8_t>(std::stoi(line.fogColorNearBlue));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogColorNear.blue to {}"), curobj->formID, curobj->cellData.interior->fogColorNear.blue);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 
 		if (!line.directionalRed.empty() && line.directionalRed != "none") {
 			try {
 				curobj->cellData.interior->directional.red = static_cast<std::uint8_t>(std::stoi(line.directionalRed));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed directionalRed to {}"), curobj->formID, curobj->cellData.interior->directional.red);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 		if (!line.directionalGreen.empty() && line.directionalGreen != "none") {
 			try {
 				curobj->cellData.interior->directional.green = static_cast<std::uint8_t>(std::stoi(line.directionalGreen));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed directionalGreen to {}"), curobj->formID, curobj->cellData.interior->directional.green);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 		if (!line.directionalBlue.empty() && line.directionalBlue != "none") {
 			try {
 				curobj->cellData.interior->directional.blue = static_cast<std::uint8_t>(std::stoi(line.directionalBlue));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed directionalBlue to {}"), curobj->formID, curobj->cellData.interior->directional.blue);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 
 		if (!line.ambientBlue.empty() && line.ambientBlue != "none") {
 			try {
 				curobj->cellData.interior->ambient.blue = static_cast<std::uint8_t>(std::stoi(line.ambientBlue));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed ambientBlue to {}"), curobj->formID, curobj->cellData.interior->ambient.blue);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 
 		if (!line.ambientRed.empty() && line.ambientRed != "none") {
 			try {
 				curobj->cellData.interior->ambient.red = static_cast<std::uint8_t>(std::stoi(line.ambientRed));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed ambientRed to {}"), curobj->formID, curobj->cellData.interior->ambient.red);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 
 		if (!line.ambientGreen.empty() && line.ambientGreen != "none") {
 			try {
 				curobj->cellData.interior->ambient.green = static_cast<std::uint8_t>(std::stoi(line.ambientGreen));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed ambientGreen to {}"), curobj->formID, curobj->cellData.interior->ambient.green);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 
 		if (!line.fogNear.empty() && line.fogNear != "none") {
 			try {
 				curobj->cellData.interior->fogNear = std::stof(line.fogNear);
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogNear to {}"), curobj->formID, curobj->cellData.interior->fogNear);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 
 		if (!line.fogFar.empty() && line.fogFar != "none") {
 			try {
 				curobj->cellData.interior->fogFar = std::stof(line.fogFar);
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogFar to {}"), curobj->formID, curobj->cellData.interior->fogFar);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 
 		if (!line.fogPower.empty() && line.fogPower != "none") {
 			try {
 				curobj->cellData.interior->fogPower = std::stof(line.fogPower);
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogPower to {}"), curobj->formID, curobj->cellData.interior->fogPower);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 
 		if (!line.clipDist.empty() && line.clipDist != "none") {
 			try {
 				curobj->cellData.interior->clipDist = std::stof(line.clipDist);
 				logger::debug(FMT_STRING("cell formid: {:08X} changed clipDist to {}"), curobj->formID, curobj->cellData.interior->clipDist);
-			} catch (const std::invalid_argument&) {}
+			} catch (const std::exception&) {}
 		}
 
 		if (!line.directionalAmbientXMinRed.empty() && line.directionalAmbientXMinRed != "none") {
@@ -1076,7 +1122,7 @@ namespace CELL
 			try {
 				logger::debug(FMT_STRING("cell formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1100,7 +1146,7 @@ namespace CELL
 		//			curobj->lightingTemplate = (RE::BGSLightingTemplate*)currentform;
 		//			logger::debug(FMT_STRING("race formid: {:08X} {} changed lightingTemplate {:08X}"), curobj->formID, curobj->fullName, curobj->lightingTemplate->formID);
 		//		}
-		//	} catch (const std::invalid_argument& e) {
+		//	} catch (const std::exception& e) {
 		//	}
 		//}
 
@@ -1113,7 +1159,7 @@ namespace CELL
 		//			//curobj-> = (RE::BGSLightingTemplate*)currentform;
 		//			logger::debug(FMT_STRING("race formid: {:08X} {} changed lightingTemplate {:08X}"), curobj->formID, curobj->fullName, curobj->lightingTemplate->formID);
 		//		}
-		//	} catch (const std::invalid_argument& e) {
+		//	} catch (const std::exception& e) {
 		//	}
 		//}
 		return 0;

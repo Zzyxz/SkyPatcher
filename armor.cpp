@@ -89,6 +89,7 @@ namespace ARMOR
 		extractValueString(line, "maxY\\s*=([^:]+)", l.maxY);
 		extractValueString(line, "maxZ\\s*=([^:]+)", l.maxZ);
 
+		extractValueString(line, "valueMatch\\s*=([^:]+)", l.valueMatch);
 		extractValueString(line, "dwMatch\\s*=([^:]+)", l.dwMatch);
 		extractValueString(line, "modelMatch\\s*=([^:]+)", l.modelMatch);
 
@@ -110,7 +111,7 @@ namespace ARMOR
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESObjectARMO*> ArmorArray = dataHandler->GetFormArray<RE::TESObjectARMO>();
+		const auto& ArmorArray = dataHandler->GetFormArray<RE::TESObjectARMO>();
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
@@ -637,7 +638,7 @@ namespace ARMOR
 								std::list<patch_instruction_armor> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -660,7 +661,7 @@ namespace ARMOR
 		}
 	}
 
-	void* patch(ARMOR::patch_instruction_armor line, RE::TESObjectARMO* curobj)
+	void* patch(const ARMOR::patch_instruction_armor& line, RE::TESObjectARMO* curobj)
 	{
 
 		if (!line.mirrorArmor.empty() && line.mirrorArmor != "none") {
@@ -693,7 +694,7 @@ namespace ARMOR
 					}
 				}
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 
@@ -789,7 +790,7 @@ namespace ARMOR
 			try {
 				curobj->armorRating = stoi(line.damageResist) * 100;
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed armor rating {}"), curobj->formID, curobj->fullName, curobj->armorRating / 100);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -797,7 +798,7 @@ namespace ARMOR
 			try {
 				curobj->armorRating = (uint32_t)(curobj->armorRating * stof(line.damageResistMult));
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed(multiplied) armor rating {}"), curobj->formID, curobj->fullName, curobj->armorRating / 100);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -816,7 +817,7 @@ namespace ARMOR
 					logger::debug(FMT_STRING("armor formid: {:08X} {} object is not an armor {}"), curobj->formID, curobj->fullName, line.damageResistMatch);
 				}
 				
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -887,7 +888,7 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -895,7 +896,7 @@ namespace ARMOR
 			try {
 				curobj->weight = std::stof(line.weight);
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -903,7 +904,7 @@ namespace ARMOR
 			try {
 				curobj->value = std::stoi(line.value);
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -911,7 +912,7 @@ namespace ARMOR
 			try {
 				curobj->weight = curobj->weight * std::stof(line.weightMult);
 				logger::debug(FMT_STRING("armor formid: {:08X} {} multiplied weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -919,7 +920,7 @@ namespace ARMOR
 			try {
 				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
 				logger::debug(FMT_STRING("armor formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -945,7 +946,7 @@ namespace ARMOR
 					curobj->pickupSound = (RE::BGSSoundDescriptorForm*)currentform;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed pickUpSound {:08X}"), curobj->formID, curobj->fullName, curobj->pickupSound->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -958,7 +959,7 @@ namespace ARMOR
 					curobj->putdownSound = (RE::BGSSoundDescriptorForm*)currentform;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed putDownSound {:08X}"), curobj->formID, curobj->fullName, curobj->putdownSound->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -966,7 +967,7 @@ namespace ARMOR
 			try {
 				curobj->worldModels[RE::SEXES::kFemale].SetModel(line.modelFemale.c_str());
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed female model path {}"), curobj->formID, curobj->fullName, curobj->worldModels[RE::SEXES::kFemale].model.c_str());
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -975,7 +976,7 @@ namespace ARMOR
 				curobj->worldModels[RE::SEXES::kMale].SetModel(line.modelMale.c_str());
 				curobj->ReplaceModel();
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed male model path {}"), curobj->formID, curobj->fullName, curobj->worldModels[RE::SEXES::kMale].model.c_str());
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -988,7 +989,7 @@ namespace ARMOR
 					curobj->altBlockMaterialType = (RE::BGSMaterialType*)currentform;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed altBlockMaterialType {:08X}"), curobj->formID, curobj->fullName, curobj->altBlockMaterialType->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1001,7 +1002,7 @@ namespace ARMOR
 					curobj->blockBashImpactDataSet = (RE::BGSImpactDataSet*)currentform;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed blockBashImpactDataSet {:08X}"), curobj->formID, curobj->fullName, curobj->blockBashImpactDataSet->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1014,7 +1015,7 @@ namespace ARMOR
 					curobj->SetEquipSlot((RE::BGSEquipSlot*)currentform);
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed equipSlot {:08X}"), curobj->formID, curobj->fullName, curobj->equipSlot->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1022,7 +1023,7 @@ namespace ARMOR
 			try {
 				curobj->amountofEnchantment = std::stoi(line.enchantAmount);
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed enchantAmount {}"), curobj->formID, curobj->fullName, curobj->amountofEnchantment);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1095,7 +1096,7 @@ namespace ARMOR
 					curobj->descriptionText = templateArmor->descriptionText;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed templateArmor {:08X}"), curobj->formID, curobj->fullName, curobj->templateArmor->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1110,7 +1111,21 @@ namespace ARMOR
 					curobj->weight = templateArmor->weight;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed damage resist and weight to {:08X} {}"), curobj->formID, curobj->fullName, templateArmor->formID, templateArmor->fullName);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
+			}
+		}
+
+		if (!line.valueMatch.empty() && line.valueMatch != "none") {
+			try {
+				RE::TESForm* currentform = nullptr;
+				std::string  string_form = line.valueMatch;
+				currentform = GetFormFromIdentifier(string_form);
+				if (currentform && currentform->formType == RE::FormType::Armor) {
+					auto templateArmor = (RE::TESObjectARMO*)currentform;
+					curobj->value = templateArmor->value;
+					logger::debug(FMT_STRING("armor formid: {:08X} {} changed value to {:08X} {}"), curobj->formID, curobj->fullName, templateArmor->formID, templateArmor->fullName);
+				}
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1151,7 +1166,7 @@ namespace ARMOR
 					curobj->altBlockMaterialType = templateArmor->altBlockMaterialType;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} changed model to {:08X} {}"), curobj->formID, curobj->fullName, templateArmor->formID, templateArmor->fullName);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1159,7 +1174,7 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed minX to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.minX);
 				curobj->boundData.boundMin.x = std::stoi(line.minX);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1167,7 +1182,7 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed minY to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.minY);
 				curobj->boundData.boundMin.y = std::stoi(line.minY);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1175,7 +1190,7 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed minZ to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.minZ);
 				curobj->boundData.boundMin.z = std::stoi(line.minZ);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1183,7 +1198,7 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed maxX to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.maxX);
 				curobj->boundData.boundMax.x = std::stoi(line.maxX);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1191,7 +1206,7 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed maxY to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.maxY);
 				curobj->boundData.boundMax.y = std::stoi(line.maxY);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1199,12 +1214,16 @@ namespace ARMOR
 			try {
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed maxZ to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.maxZ);
 				curobj->boundData.boundMax.z = std::stoi(line.maxZ);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
 		if (!line.armaRaceToAdd.empty()) {
 			for (const auto& objectToAdd : line.armaRaceToAdd) {
+				if (objectToAdd.empty()) {
+					logger::warn("armor formid: {:08X}: ignoring empty armaRaceToAdd entry", curobj->formID);
+					continue;
+				}
 				std::string  armaToAddTo = objectToAdd[0];  // Armature identifier
 				RE::TESForm* currentform = GetFormFromIdentifier(armaToAddTo);
 
@@ -1212,7 +1231,7 @@ namespace ARMOR
 					// Find the correct armorAddon by matching formID
 					auto it = std::find_if(curobj->armorAddons.begin(), curobj->armorAddons.end(),
 						[&](const RE::TESObjectARMA* addon) {
-							return addon->formID == currentform->formID;
+							return addon && addon->formID == currentform->formID;
 						});
 
 					if (it != curobj->armorAddons.end()) {
@@ -1228,7 +1247,7 @@ namespace ARMOR
 								// Check if the race already exists in the armorAddon->races
 								bool raceExists = std::any_of(armorAddon->additionalRaces.begin(), armorAddon->additionalRaces.end(),
 									[&](RE::TESForm* existingRace) {
-										return existingRace->formID == raceToAdd->formID;
+								return existingRace && existingRace->formID == raceToAdd->formID;
 									});
 
 								if (!raceExists) {

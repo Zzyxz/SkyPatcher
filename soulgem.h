@@ -86,7 +86,7 @@ namespace SOULGEM
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
-	void* patch(SOULGEM::patch_instruction line, RE::TESSoulGem* curobj);
+	void* patch(const SOULGEM::patch_instruction& line, RE::TESSoulGem* curobj);
 }
 
 #endif

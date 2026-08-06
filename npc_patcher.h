@@ -7,7 +7,7 @@ using namespace std;
 #include "npc.h"
 #include <string>
 
-void* patch(NPC::patch_instruction line, RE::TESNPC* curobj, bool bEnableSetLevelDirectlyByPCMult, NPC::ActorData aData);
+void* patch(const NPC::patch_instruction& line, RE::TESNPC* curobj, bool bEnableSetLevelDirectlyByPCMult, const NPC::ActorData& aData);
 
 
 #endif

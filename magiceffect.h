@@ -111,7 +111,7 @@ namespace MGEF
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
-	void* patch(MGEF::patch_instruction line, RE::EffectSetting* curobj);
+	void* patch(const MGEF::patch_instruction& line, RE::EffectSetting* curobj);
 }
 
 #endif

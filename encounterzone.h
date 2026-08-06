@@ -41,7 +41,7 @@ namespace ENCOUNTERZONE
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
-	void* patch(ENCOUNTERZONE::patch_instruction line, RE::BGSEncounterZone* curobj);
+	void* patch(const ENCOUNTERZONE::patch_instruction& line, RE::BGSEncounterZone* curobj);
 }
 
 #endif

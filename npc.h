@@ -222,10 +222,10 @@ namespace NPC
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	ActorData readConfig(const std::string& folder);
-	void*     patch(NPC::patch_instruction line, RE::TESNPC* curobj);
-	void*     patchActor(NPC::patch_instruction line, RE::Character* curActObj);
+	void*     patch(const NPC::patch_instruction& line, RE::TESNPC* curobj);
+	void*     patchActor(const NPC::patch_instruction& line, RE::Character* curActObj);
 	void      setbEnableSetLevelDirectlyByPCMult();
-	bool      findObject(patch_instruction line, RE::TESNPC* curobj);
+	bool      findObject(const patch_instruction& line, RE::TESNPC* curobj, const std::string& lowerEditorID);
 	void*     readConfigHook(const std::string& folder);
 }
 

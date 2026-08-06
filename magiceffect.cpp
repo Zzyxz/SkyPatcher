@@ -76,7 +76,7 @@ namespace MGEF
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::EffectSetting*> ObjectArray = dataHandler->GetFormArray<RE::EffectSetting>();
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::EffectSetting>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -687,7 +687,7 @@ namespace MGEF
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -710,7 +710,7 @@ namespace MGEF
 		}
 	}
 
-	void* patch(MGEF::patch_instruction line, RE::EffectSetting* curobj)
+	void* patch(const MGEF::patch_instruction& line, RE::EffectSetting* curobj)
 	{
 		
 		if (!line.enchantArt.empty() && line.enchantArt != "none") {
@@ -725,7 +725,7 @@ namespace MGEF
 					curobj->data.enchantEffectArt = nullptr;
 					logger::debug(FMT_STRING("mgef formid: {:08X} changed enchantEffectArt null (none)"), curobj->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -741,7 +741,7 @@ namespace MGEF
 					curobj->data.enchantShader = nullptr;
 					logger::debug(FMT_STRING("mgef formid: {:08X} changed enchantShader null (none)"), curobj->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -757,7 +757,7 @@ namespace MGEF
 					curobj->data.effectShader = nullptr;
 					logger::debug(FMT_STRING("mgef formid: {:08X} changed hitShader null (none)"), curobj->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -907,7 +907,7 @@ namespace MGEF
 			try {
 				logger::debug(FMT_STRING("mgef formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -943,7 +943,7 @@ namespace MGEF
 				logger::debug(FMT_STRING("mgef formid: {:08X} {} changed impactDataSet to null"), curobj->formID, curobj->fullName);
 
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1004,7 +1004,7 @@ namespace MGEF
 
 				}
 
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1023,7 +1023,7 @@ namespace MGEF
 				logger::debug(FMT_STRING("mgef formid: {:08X} {} changed castingArt to null"), curobj->formID, curobj->fullName);
 				}
 
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1042,7 +1042,7 @@ namespace MGEF
 					logger::debug(FMT_STRING("mgef formid: {:08X} {} changed perk to null"), curobj->formID, curobj->fullName);
 				}
 
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1152,7 +1152,7 @@ namespace MGEF
 		//			curobj->data.so = (RE::BGSSoundDescriptorForm*)currentform;
 		//			logger::debug(FMT_STRING("projectile formid: {:08X} {} changed sound {:08X}"), curobj->formID, curobj->fullName, curobj->data.activeSoundLoop->formID);
 		//		}
-		//	} catch (const std::invalid_argument& e) {
+		//	} catch (const std::exception& e) {
 		//	}
 		//}
 

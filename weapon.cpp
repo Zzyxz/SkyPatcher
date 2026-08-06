@@ -100,6 +100,8 @@ namespace WEAPON
 		extractValueString(line, "soundLevel\\s*=([^:]+)", l.soundlevel);
 		extractValueString(line, "weaponHitType\\s*=([^:]+)", l.hittype);
 
+		extractValueString(line, "valueMatch\\s*=([^:]+)", l.valueMatch);
+
 		return l;
 	}  //endStruct
 
@@ -107,7 +109,7 @@ namespace WEAPON
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESObjectWEAP*> ObjectArray = dataHandler->GetFormArray<RE::TESObjectWEAP>();
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectWEAP>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -125,7 +127,7 @@ namespace WEAPON
 				}
 			}
 
-			if (!line.object.empty() && line.keywords.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.filterAnimationTypeOr.empty() && line.embeddedAVs.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
+			if (!line.object.empty() && line.keywords.empty() && line.filterByWFlags.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.filterAnimationTypeOr.empty() && line.embeddedAVs.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
 				continue;
 			}
 
@@ -358,8 +360,8 @@ namespace WEAPON
 				}
 
 
-
-				if (line.object.empty() && line.keywords.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.embeddedAVs.empty() && line.filterAnimationTypeOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
+				//if (!line.object.empty() && line.keywords.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.filterAnimationTypeOr.empty() && line.embeddedAVs.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty())
+				if (line.object.empty() && line.keywords.empty() && line.filterByWFlags.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.embeddedAVs.empty() && line.filterAnimationTypeOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
 					found = true;
 				}
 
@@ -397,7 +399,7 @@ namespace WEAPON
 
 							if (curobj->formID == npc->formID) {
 								found = false;
-								logger::info("Weapon Excluded.");
+								//logger::info("Weapon Excluded.");
 								break;
 							}
 						}
@@ -437,59 +439,6 @@ namespace WEAPON
 					if (!foundType)
 						found = false;
 				}
-
-
-
-				//if (!line.filterByFlagsExclude.empty()) {
-				//	for (const auto& flag : line.filterByFlagsExclude) {
-				//		//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude"), curobj->formID, curobj->fullName);
-				//		if (toLowerCase(flag) == "notplayable" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kNotPlayable) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude nonplayable set to false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "cantdrop" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kCantDrop) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "embeddedweapon" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kEmbeddedWeapon) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "chargingattack" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kChargingAttack) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "criteffectondeath" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kCritEffectOnDeath) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "boltaction" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kBoltAction) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "automatic" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kAutomatic) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "secondaryweapon" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kSecondaryWeapon) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "chargingreload" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kChargingReload) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		} else if (toLowerCase(flag) == "holdinputtopower" && curobj->weaponData.flags & RE::WEAPONDATAFLAGS::kHoldInputToPower) {
-				//			//logger::debug(FMT_STRING("weapon formid: {:08X} {} filterByFlagsExclude cantdrop false"), curobj->formID, curobj->fullName);
-				//			found = false;
-				//		}
-				//	}
-				//}
-
-				//		const auto vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-				//if (!vm) {
-				//	return false;
-				//}
-
-				//const auto policy = vm->GetObjectHandlePolicy();
-				//if (!policy) {
-				//	return false;
-				//}
-
-				//const auto handle = policy->GetHandleForObject(GetFormType(), this);
-				//return handle != policy->EmptyHandle();
-
 				
 				if (found) {
 					patch(line, curobj);
@@ -541,7 +490,7 @@ namespace WEAPON
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -564,7 +513,7 @@ namespace WEAPON
 		}
 	}
 
-	void* patch(WEAPON::patch_instruction line, RE::TESObjectWEAP* curobj)
+	void* patch(const WEAPON::patch_instruction& line, RE::TESObjectWEAP* curobj)
 	{
 		
 
@@ -597,7 +546,7 @@ namespace WEAPON
 					}
 				}
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 
@@ -605,7 +554,7 @@ namespace WEAPON
 			try {
 				curobj->attackDamage = std::stof(line.attackDamage);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed damage {}"), curobj->formID, curobj->fullName, curobj->attackDamage);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -613,7 +562,7 @@ namespace WEAPON
 			try {
 				curobj->attackDamage = curobj->attackDamage + std::stof(line.attackDamageToAdd);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} added damage {} total {}"), curobj->formID, curobj->fullName, line.attackDamageToAdd, curobj->attackDamage);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -621,7 +570,7 @@ namespace WEAPON
 			try {
 				curobj->criticalData.damage = curobj->attackDamage;
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} set critDamage {} to weapon base damage"), curobj->formID, curobj->fullName, curobj->criticalData.damage);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -629,7 +578,7 @@ namespace WEAPON
 			try {
 				curobj->criticalData.damage = std::stof(line.critDamage);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed critDamage {}"), curobj->formID, curobj->fullName, curobj->criticalData.damage);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -638,7 +587,7 @@ namespace WEAPON
 				curobj->criticalData.damage = curobj->criticalData.damage + std::stof(line.critDamageToAdd);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} added critDamage {} total {}"), curobj->formID, curobj->fullName, line.critDamageToAdd, curobj->criticalData.damage);
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 
@@ -647,7 +596,7 @@ namespace WEAPON
 				curobj->criticalData.damage = curobj->criticalData.damage * std::stof(line.critDamageMult);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} multiplied critDamage by {} total {}"), curobj->formID, curobj->fullName, line.critDamageMult, curobj->criticalData.damage);
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 
@@ -655,7 +604,7 @@ namespace WEAPON
 			try {
 				curobj->criticalData.prcntMult = std::stof(line.critPercentMult);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed critPercentMult {}"), curobj->formID, curobj->fullName, curobj->criticalData.prcntMult);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -665,7 +614,7 @@ namespace WEAPON
 			try {
 				curobj->weaponData.speed = std::stof(line.speed);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed speed {}"), curobj->formID, curobj->fullName, curobj->weaponData.speed);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -673,7 +622,7 @@ namespace WEAPON
 			try {
 				curobj->weaponData.speed = curobj->weaponData.speed * std::stof(line.speedMult);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} multiplied by {} total {}"), curobj->formID, curobj->fullName, line.speedMult, curobj->weaponData.speed);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -681,7 +630,7 @@ namespace WEAPON
 			try {
 				curobj->weaponData.reach = std::stof(line.reach);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed reach {}"), curobj->formID, curobj->fullName, curobj->weaponData.reach);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -689,7 +638,7 @@ namespace WEAPON
 			try {
 				curobj->weaponData.minRange = std::stof(line.rangeMin);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed rangeMin {}"), curobj->formID, curobj->fullName, curobj->weaponData.minRange);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -697,7 +646,7 @@ namespace WEAPON
 			try {
 				curobj->weaponData.maxRange = std::stof(line.rangeMax);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed rangeMax {}"), curobj->formID, curobj->fullName, curobj->weaponData.maxRange);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -705,7 +654,7 @@ namespace WEAPON
 			try {
 				curobj->weaponData.staggerValue = std::stof(line.stagger);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed stagger {}"), curobj->formID, curobj->fullName, curobj->weaponData.staggerValue);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -713,7 +662,7 @@ namespace WEAPON
 			try {
 				curobj->attackDamage = curobj->attackDamage * std::stof(line.attackDamageMult);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} multiplied attackDamage to {}"), curobj->formID, curobj->fullName, curobj->attackDamage);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -726,7 +675,7 @@ namespace WEAPON
 					curobj->impactDataSet = (RE::BGSImpactDataSet*)currentform;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed impactDataSet {:08X}"), curobj->formID, curobj->fullName, curobj->impactDataSet->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -742,7 +691,7 @@ namespace WEAPON
 					curobj->equipSound = nullptr;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed equipSound to null"), curobj->formID, curobj->fullName);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -758,7 +707,7 @@ namespace WEAPON
 					curobj->unequipSound = nullptr;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed unequipSound to null"), curobj->formID, curobj->fullName);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -771,7 +720,7 @@ namespace WEAPON
 					curobj->attackFailSound = (RE::BGSSoundDescriptorForm*)currentform;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed attackFailSound {:08X}"), curobj->formID, curobj->fullName, curobj->attackFailSound->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -794,7 +743,7 @@ namespace WEAPON
 					curobj->weaponData.hitBehavior = RE::WEAPONHITBEHAVIOR::kNoDismemberOrExplode;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed hit behavior to no dismember or explode"), curobj->formID, curobj->fullName);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -820,7 +769,7 @@ namespace WEAPON
 					curobj->soundLevel = RE::SOUND_LEVEL::kQuiet;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed sound level to quiet"), curobj->formID, curobj->fullName);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -828,7 +777,7 @@ namespace WEAPON
 			try {
 				curobj->weight = std::stof(line.weight);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -836,7 +785,7 @@ namespace WEAPON
 			try {
 				curobj->value = std::stoi(line.value);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -844,7 +793,7 @@ namespace WEAPON
 			try {
 				curobj->weight = curobj->weight * std::stof(line.weightMult);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} multiplied weight {}"), curobj->formID, curobj->fullName, curobj->weight);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -852,7 +801,7 @@ namespace WEAPON
 			try {
 				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -862,7 +811,7 @@ namespace WEAPON
 				std::string  string_form = line.keywordsToAdd[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Keyword) {
-					if(curobj->AddKeyword((RE::BGSKeyword*)currentform))
+					if (curobj->AddKeyword((RE::BGSKeyword*)currentform))
 						logger::debug(FMT_STRING("weapon formid: {:08X} added keyword {:08X} {} "), curobj->formID, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
 				}
 			}
@@ -900,7 +849,7 @@ namespace WEAPON
 				curobj->SetModel(line.model.c_str());
 				curobj->ReplaceModel();
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed model path {}"), curobj->formID, curobj->fullName, curobj->model.c_str());
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -913,7 +862,7 @@ namespace WEAPON
 					curobj->firstPersonModelObject = (RE::TESObjectSTAT*)currentform;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed first person model {:08X}"), curobj->formID, curobj->fullName, curobj->firstPersonModelObject->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -921,7 +870,21 @@ namespace WEAPON
 			try {
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
+			}
+		}
+
+		if (!line.valueMatch.empty() && line.valueMatch != "none") {
+			try {
+				RE::TESForm* currentform = nullptr;
+				std::string  string_form = line.valueMatch;
+				currentform = GetFormFromIdentifier(string_form);
+				if (currentform && currentform->formType == RE::FormType::Weapon) {
+					auto templateWeap = (RE::TESObjectWEAP*)currentform;
+					curobj->value = templateWeap->value;
+					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed value to {:08X} {}"), curobj->formID, curobj->fullName, templateWeap->formID, templateWeap->fullName);
+				}
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -966,7 +929,7 @@ namespace WEAPON
 					curobj->equipSlot = templateWeapon->equipSlot;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed templateWeapon {:08X}"), curobj->formID, curobj->fullName, curobj->templateWeapon->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -979,7 +942,7 @@ namespace WEAPON
 					curobj->altBlockMaterialType = (RE::BGSMaterialType*)currentform;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed altBlockMaterialType {:08X}"), curobj->formID, curobj->fullName, curobj->altBlockMaterialType->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -992,7 +955,7 @@ namespace WEAPON
 					curobj->blockBashImpactDataSet = (RE::BGSImpactDataSet*)currentform;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed blockBashImpactDataSet {:08X}"), curobj->formID, curobj->fullName, curobj->blockBashImpactDataSet->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1005,7 +968,7 @@ namespace WEAPON
 					curobj->SetEquipSlot((RE::BGSEquipSlot*)currentform);
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed equipSlot {:08X}"), curobj->formID, curobj->fullName, curobj->equipSlot->formID);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1014,7 +977,7 @@ namespace WEAPON
 				//logger::debug(FMT_STRING("weapon formid: {:08X} {} changed old enchantAmount {}"), curobj->formID, curobj->fullName, curobj->amountofEnchantment);
 				curobj->amountofEnchantment = std::stoi(line.enchantAmount);
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed enchantAmount {}"), curobj->formID, curobj->fullName, curobj->amountofEnchantment);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1033,7 +996,7 @@ namespace WEAPON
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} object is not an weapon {}"), curobj->formID, curobj->fullName, line.attackDamageMatch);
 				}
 
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 		
@@ -1211,7 +1174,7 @@ namespace WEAPON
 			try {
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed minX to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.minX);
 				curobj->boundData.boundMin.x = std::stoi(line.minX);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1219,7 +1182,7 @@ namespace WEAPON
 			try {
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed minY to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.minY);
 				curobj->boundData.boundMin.y = std::stoi(line.minY);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1227,7 +1190,7 @@ namespace WEAPON
 			try {
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed minZ to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.minZ);
 				curobj->boundData.boundMin.z = std::stoi(line.minZ);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1235,7 +1198,7 @@ namespace WEAPON
 			try {
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed maxX to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.maxX);
 				curobj->boundData.boundMax.x = std::stoi(line.maxX);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1243,7 +1206,7 @@ namespace WEAPON
 			try {
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed maxY to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.maxY);
 				curobj->boundData.boundMax.y = std::stoi(line.maxY);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1251,7 +1214,7 @@ namespace WEAPON
 			try {
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed maxZ to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), line.maxZ);
 				curobj->boundData.boundMax.z = std::stoi(line.maxZ);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1268,7 +1231,7 @@ namespace WEAPON
 					curobj->weight = templateArmor->weight;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed attackDamage, critical data, speed, weight to {:08X} {}"), curobj->formID, curobj->fullName, templateArmor->formID, templateArmor->fullName);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -1283,7 +1246,7 @@ namespace WEAPON
 					curobj->weight = templateWeapon->weight;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed damage and weight to {:08X} {}"), curobj->formID, curobj->fullName, templateWeapon->formID, templateWeapon->fullName);
 				}
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 

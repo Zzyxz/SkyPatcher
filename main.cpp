@@ -31,6 +31,12 @@
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 
+// SkyPatcher uses narrow INI paths and section names.
+#ifdef GetPrivateProfileInt
+#undef GetPrivateProfileInt
+#endif
+#define GetPrivateProfileInt GetPrivateProfileIntA
+
 const char* configFile = ".\\Data\\SKSE\\Plugins\\SkyPatcher.ini";
 const char* settingsSection = "Patcher";
 const char* settingsSectionLog = "Log";
@@ -134,12 +140,37 @@ bool read_formID(SKSE::SerializationInterface* a_intfc, RE::FormID& a_formID)
 class UpdateClass
 {
 public:
-	void updateNPCVisuals(RE::Actor* a_this)
+	static RE::Actor* lookupActor(RE::FormID formID)
 	{
+		if (auto* form = RE::TESForm::LookupByID(formID)) {
+			return form->As<RE::Actor>();
+		}
+		return nullptr;
+	}
+
+	static RE::TESObjectREFR* lookupReference(RE::FormID formID)
+	{
+		if (auto* form = RE::TESForm::LookupByID(formID)) {
+			return form->As<RE::TESObjectREFR>();
+		}
+		return nullptr;
+	}
+
+	void updateNPCVisuals(RE::FormID actorID)
+	{
+		auto* a_this = lookupActor(actorID);
+		if (!a_this) {
+			return;
+		}
 		if (a_this && a_this->currentProcess && a_this->currentProcess->InHighProcess()) {
 			int count = 0;
 			while (!a_this->Get3D(false) && count < 10) {
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+				a_this = lookupActor(actorID);
+				if (!a_this) {
+					return;
+				}
 
 				if (a_this->data.objectReference) {
 					logger::debug("3DUpdate: Actor: {:08X} NPC: {:08X} wait for 3D... times waited {}", a_this->formID, a_this->data.objectReference->formID, count);
@@ -151,9 +182,11 @@ public:
 				count++;
 			}  // After enabling an actor their 3D model isn't accessible immediately (?). A hook would do the same job but would be more complex
 
-			SKSE::GetTaskInterface()->AddTask([this, a_this] {
-				a_this->DoReset3D(true);
-				a_this->UpdateSkinColor();
+			SKSE::GetTaskInterface()->AddTask([actorID] {
+				if (auto* actor = lookupActor(actorID)) {
+					actor->DoReset3D(true);
+					actor->UpdateSkinColor();
+				}
 				});
 
 			if (a_this->data.objectReference) {
@@ -167,9 +200,12 @@ public:
 		}
 		else {
 			if (a_this && a_this->data.objectReference) {
-				SKSE::GetTaskInterface()->AddTask([this, a_this] {
-					a_this->DoReset3D(true);
-					a_this->UpdateSkinColor();
+				const auto actorID = a_this->formID;
+				SKSE::GetTaskInterface()->AddTask([actorID] {
+					if (auto* actor = lookupActor(actorID)) {
+						actor->DoReset3D(true);
+						actor->UpdateSkinColor();
+					}
 					});
 				logger::debug("3DUpdate: Actor: {:08X} NPC: {:08X} is currently not a high process, 3D has been reset without wait.", a_this->formID, a_this->data.objectReference->formID);
 			}
@@ -177,73 +213,77 @@ public:
 		}
 	}
 
-	void updateNPCVisualsByEnable(RE::Actor* a_this)
+	void updateNPCVisualsByEnable(RE::FormID actorID)
 	{
 		//while (!a_this->Get3D(false))  // After enabling an actor their 3D model isn't accessible immediately (?). A hook would do the same job but would be more complex
 		//std::this_thread::sleep_for(std::chrono::milliseconds(500));
-		if (a_this) {
-			a_this->Disable();
+		if (auto* actor = lookupActor(actorID)) {
+			actor->Disable();
 			std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-			Enable(a_this, true);
+			if (auto* currentActor = lookupActor(actorID)) {
+				Enable(currentActor, true);
+			}
 		}
 	}
 
-	void updateREFRAndDisable(RE::TESObjectREFR* a_this)
+	void updateREFRAndDisable(RE::FormID refrID)
 	{
 		//while (!a_this->Get3D(false))  // After enabling an actor their 3D model isn't accessible immediately (?). A hook would do the same job but would be more complex
 		//std::this_thread::sleep_for(std::chrono::milliseconds(500));
-		if (a_this) {
-			a_this->Disable();
-
+		if (auto* refr = lookupReference(refrID)) {
+			refr->Disable();
 		}
 	}
 
-	void updateNPCVisualsController(RE::Actor* a_this)
+	void updateNPCVisualsController(RE::FormID actorID)
 	{
-		std::future<void> futureA = std::async(std::launch::deferred, &UpdateClass::updateNPCVisuals, this, a_this);
-		futureA.get();
+		updateNPCVisuals(actorID);
 	}
 
-	void updateNPCVisualsControllerEnable(RE::Actor* a_this)
+	void updateNPCVisualsControllerEnable(RE::FormID actorID)
 	{
-		std::future<void> futureA = std::async(std::launch::deferred, &UpdateClass::updateNPCVisualsByEnable, this, a_this);
-		futureA.get();
+		updateNPCVisualsByEnable(actorID);
 	}
 
-	void disableREFR(RE::TESObjectREFR* a_this)
+	void disableREFR(RE::FormID refrID)
 	{
-		std::future<void> futureA = std::async(std::launch::deferred, &UpdateClass::updateREFRAndDisable, this, a_this);
-		futureA.get();
+		updateREFRAndDisable(refrID);
 	}
 
 	void startUpdate(RE::Actor* a_this)
 	{
-		SKSE::GetTaskInterface()->AddTask([this, a_this]() {
-			//UpdateClass::updateNPCVisualsController(a_this);
-			std::jthread t(&UpdateClass::updateNPCVisualsController, this, a_this);
+		if (!a_this) {
+			return;
+		}
+		const auto actorID = a_this->formID;
+		SKSE::GetTaskInterface()->AddTask([this, actorID]() {
+			std::jthread t(&UpdateClass::updateNPCVisualsController, this, actorID);
 			t.detach();
 			});
-		// No need to call t.detach() as std::jthread will join on destruction
 	}
 
 	void disableAndUpdate(RE::TESObjectREFR* a_this)
 	{
-		SKSE::GetTaskInterface()->AddTask([this, a_this]() {
-			//UpdateClass::updateNPCVisualsController(a_this);
-			std::jthread t(&UpdateClass::disableREFR, this, a_this);
+		if (!a_this) {
+			return;
+		}
+		const auto refrID = a_this->formID;
+		SKSE::GetTaskInterface()->AddTask([this, refrID]() {
+			std::jthread t(&UpdateClass::disableREFR, this, refrID);
 			t.detach();
 			});
-		// No need to call t.detach() as std::jthread will join on destruction
 	}
 
 	void startUpdateByEnable(RE::Actor* a_this)
 	{
-		SKSE::GetTaskInterface()->AddTask([this, a_this]() {
-			//UpdateClass::updateNPCVisualsController(a_this);
-			std::jthread t(&UpdateClass::updateNPCVisualsControllerEnable, this, a_this);
+		if (!a_this) {
+			return;
+		}
+		const auto actorID = a_this->formID;
+		SKSE::GetTaskInterface()->AddTask([this, actorID]() {
+			std::jthread t(&UpdateClass::updateNPCVisualsControllerEnable, this, actorID);
 			t.detach();
 			});
-		// No need to call t.detach() as std::jthread will join on destruction
 	}
 };
 
@@ -313,6 +353,7 @@ void SaveCallback(SKSE::SerializationInterface* serde) {
 
 	// Write the size of the map first
 	std::size_t mapSize = 0; // We will count valid entries here
+	std::vector<RE::FormID> invalidFormIDs;
 	for (const auto& pair : npcStyles) {
 		// Check if the NPC (FormID) is still valid
 		if (RE::TESForm::LookupByID(pair.first)) {
@@ -333,9 +374,12 @@ void SaveCallback(SKSE::SerializationInterface* serde) {
 			logger::debug("SaveCallback FormID {:08X} saved.", pair.first);
 		}
 		else {
-			npcStyles.erase(pair.first);
+			invalidFormIDs.push_back(pair.first);
 			logger::debug("SaveCallback FormID {:08X} failed to look up and is not saved.", pair.first);
 		}
+	}
+	for (const auto formID : invalidFormIDs) {
+		npcStyles.erase(formID);
 	}
 	// Log how long the saving process took
 	const auto elapsed{ std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start_time) };
@@ -371,14 +415,25 @@ void LoadCallback(SKSE::SerializationInterface* serde) {
 	while (serde->GetNextRecordInfo(type, version, length)) {
 		if (type == 'STYL' && version == 1) {
 			std::size_t npcCount;
-			serde->ReadRecordData(&npcCount, sizeof(npcCount));
+			if (length < sizeof(npcCount) || serde->ReadRecordData(&npcCount, sizeof(npcCount)) != sizeof(npcCount)) {
+				logger::warn("LoadCallback encountered an invalid STYL record.");
+				continue;
+			}
+			const auto bytesPerEntry = sizeof(RE::FormID) + sizeof(int);
+			if (npcCount > (length - sizeof(npcCount)) / bytesPerEntry) {
+				logger::warn("LoadCallback encountered a truncated STYL record.");
+				continue;
+			}
 			npcStyles.clear(); // Clear existing map
 
 			for (std::size_t i = 0; i < npcCount; ++i) {
 				RE::FormID formID;
 				int style;
-				serde->ReadRecordData(&formID, sizeof(formID));
-				serde->ReadRecordData(&style, sizeof(style));
+				if (serde->ReadRecordData(&formID, sizeof(formID)) != sizeof(formID) ||
+					serde->ReadRecordData(&style, sizeof(style)) != sizeof(style)) {
+					logger::warn("LoadCallback failed to read an entry from the STYL record.");
+					break;
+				}
 
 				if (auto npc = RE::TESForm::LookupByID(formID)) {
 					npcStyles[formID] = style;  // Load saved styles
@@ -902,7 +957,7 @@ struct Load3D
 						std::uniform_int_distribution<size_t> disForms(0, forms.size() - 1);
 						size_t randomIndex = disForms(gen);  // Generate a random index
 						// Access the random form
-						auto randomForm = forms[randomIndex]->As<RE::TESCombatStyle>();
+						auto* randomForm = forms[randomIndex] ? forms[randomIndex]->As<RE::TESCombatStyle>() : nullptr;
 						if (randomForm) {
 							auto dataCS = (RE::ExtraCombatStyle*)a_this->extraList.GetByType(RE::ExtraDataType::kCombatStyle);
 							if (dataCS) {
@@ -939,45 +994,48 @@ struct Load3DREFR
 {
 	static RE::NiAVObject* thunk(RE::TESObjectREFR* a_this, bool a_arg1)
 	{
-		//RE::NiAVObject* const root;
+		// RE::NiAVObject* const root;
 		const auto root = func(a_this, a_arg1);
 
 		if (a_this == nullptr) {
 			return root;
 		}
 
-		//logger::debug("TESObjectREFR {:08X}", a_this->formID);
+		// logger::debug("TESObjectREFR {:08X}", a_this->formID);
+
 		auto it = refData.refrDataMap.find(a_this->formID);
 		if (it != refData.refrDataMap.end()) {
 			if (it->second.disable) {
-				logger::debug("TESObjectREFR {:08X} disable ref  ", a_this->formID);
+				logger::debug("TESObjectREFR {:08X} disable ref ", a_this->formID);
+
 				SKSE::GetTaskInterface()->AddTask([a_this]() {
 					if (a_this) {
 						a_this->Disable();
 					}
-					});
+				});
 			}
 
 			if (it->second.replaceWith) {
-
 				RE::TESBoundObject* boundobj = it->second.replaceWith;
-				//logger::debug("TESObjectREFR {:08X} replace ref", a_this->formID);
+
+				// logger::debug("TESObjectREFR {:08X} replace ref", a_this->formID);
+
 				if (boundobj) {
 					SKSE::GetTaskInterface()->AddTask([a_this, boundobj]() {
 						if (a_this) {
 							a_this->SetObjectReference(boundobj);
 							a_this->Enable(false);
-							
-							//a_this->data.objectReference = boundobj;
+
+							// a_this->data.objectReference = boundobj;
 						}
-						});
+					});
 				}
 			}
-
 		}
 
 		return root;
 	}
+
 
 
 	static inline REL::Relocation<decltype(thunk)> func;
@@ -1094,7 +1152,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 										size_t randomIndex = disForms(gen);  // Generate a random index
 
 										// Access the random form
-										auto randomForm = forms[randomIndex]->As<RE::TESCombatStyle>();
+						auto* randomForm = forms[randomIndex] ? forms[randomIndex]->As<RE::TESCombatStyle>() : nullptr;
 										if (randomForm) {
 											auto dataCS = (RE::ExtraCombatStyle*)actor->extraList.GetByType(RE::ExtraDataType::kCombatStyle);
 											if (dataCS) {
@@ -1799,8 +1857,8 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 		if (GetPrivateProfileInt(settingsSectionFeatures, "iEnableUnlevelNPCs", 0, configFile)) {
 			const auto                          dataHandler = RE::TESDataHandler::GetSingleton();
-			RE::BSTArray<RE::BGSEncounterZone*> EncounterZoneArray = dataHandler->GetFormArray<RE::BGSEncounterZone>();
-			RE::BSTArray<RE::TESLevCharacter*>  LevCharArray = dataHandler->GetFormArray<RE::TESLevCharacter>();
+			const auto& EncounterZoneArray = dataHandler->GetFormArray<RE::BGSEncounterZone>();
+			const auto& LevCharArray = dataHandler->GetFormArray<RE::TESLevCharacter>();
 
 			std::for_each(std::execution::par, EncounterZoneArray.begin(), EncounterZoneArray.end(), [&](auto& encounterZone) {
 				encounterZone->data.maxLevel = 127;

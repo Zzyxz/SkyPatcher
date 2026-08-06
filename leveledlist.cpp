@@ -296,7 +296,7 @@ namespace LEVELEDLIST
 			}
 
 			if (!line.noFilterLL.empty() && toLowerCase(line.noFilterLL) == "true") {
-				RE::BSTArray<RE::TESLevItem*> objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
+				const auto& objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
 				for (const auto& curobj : objectArray) {
 					if (static_cast<uint32_t>(curobj->numEntries) > 120) {
 						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
@@ -308,7 +308,7 @@ namespace LEVELEDLIST
 			}
 
 			if (!line.filterByEditorIdContains.empty() || !line.filterByEditorIdContainsOr.empty() || !line.filterByEditorIdContainsExcluded.empty()) {
-				RE::BSTArray<RE::TESLevItem*> objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
+				const auto& objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
 				for (const auto& curobj : objectArray) {
 
 					bool contains = false;
@@ -371,7 +371,7 @@ namespace LEVELEDLIST
 
 
 			if (!line.noFilterLLNPC.empty() && toLowerCase(line.noFilterLLNPC) == "true") {
-				RE::BSTArray<RE::TESLevCharacter*> tesLevCharArray = dataHandler->GetFormArray<RE::TESLevCharacter>();
+				const auto& tesLevCharArray = dataHandler->GetFormArray<RE::TESLevCharacter>();
 				for (const auto& curobj : tesLevCharArray) {
 					if (static_cast<uint32_t>(curobj->numEntries) > 120) {
 						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
@@ -431,7 +431,7 @@ namespace LEVELEDLIST
 								std::list<line_content> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -455,7 +455,7 @@ namespace LEVELEDLIST
 		}
 	}
 	template <typename T>
-	void patch(LEVELEDLIST::line_content line, T* curobj)
+	void patch(const LEVELEDLIST::line_content& line, T* curobj)
 	{
 
 
@@ -716,6 +716,7 @@ namespace LEVELEDLIST
 			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
 			//logger::debug(FMT_STRING("leveled Lists {:08X} size before adding {}"), curobj->formID, line.addedObjects.size());
 			for (const auto& objectToAdd : line.addedObjects) {
+				if (objectToAdd.empty()) { logger::warn("leveled list {:08X}: empty addedObjects entry", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				uint16_t level = 1;
 				uint16_t count = 1;
@@ -747,6 +748,7 @@ namespace LEVELEDLIST
 			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
 			//logger::debug(FMT_STRING("leveled Lists {:08X} size before adding {}"), curobj->formID, line.addedObjectsOnce.size());
 			for (const auto& objectToAdd : line.addedObjectsOnce) {
+				if (objectToAdd.empty()) { logger::warn("leveled list {:08X}: empty addedObjectsOnce entry", curobj->formID); continue; }
 				uint16_t level = 1;
 				uint16_t count = 1;
 

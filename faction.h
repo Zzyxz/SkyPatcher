@@ -54,7 +54,9 @@ namespace FACTION
 		std::string              recoilPerShotMin;
 		std::string              recoilPerShotMax;
 		std::vector<std::string> filterByFlagsExclude;
-
+		std::vector<std::vector<std::string>> rsAdd;
+		std::vector<std::vector<std::string>> rsChange;
+		std::vector<std::string>              rsRemove;
 		std::string impactDataSet;
 		std::string equipSound;
 		std::string unequipSound;
@@ -76,7 +78,7 @@ namespace FACTION
 	void process_patch_instructions(const std::list<patch_instruction>& tokens);
 
 	void* readConfig(const std::string& folder);
-	void* patch(FACTION::patch_instruction line, RE::TESFaction* curobj);
+	void* patch(const FACTION::patch_instruction& line, RE::TESFaction* curobj);
 }
 
 #endif

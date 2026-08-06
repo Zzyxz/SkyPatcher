@@ -76,7 +76,7 @@ namespace CONTAINER
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESObjectCONT*> ObjectArray = dataHandler->GetFormArray<RE::TESObjectCONT>();
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectCONT>();
 
 		for (const auto& line : tokens) {
 
@@ -168,7 +168,7 @@ namespace CONTAINER
 
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -236,7 +236,7 @@ namespace CONTAINER
 								std::list<line_content> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -262,7 +262,7 @@ namespace CONTAINER
 
 
 
-	void patchContainer(CONTAINER::line_content line, RE::TESObjectCONT* curobj)
+	void patchContainer(const CONTAINER::line_content& line, RE::TESObjectCONT* curobj)
 	{
 
 
@@ -271,7 +271,7 @@ namespace CONTAINER
 				curobj->RemoveAllObjectFromContainer();
 				logger::debug(FMT_STRING("container formid: {:08X} cleared all objects"), curobj->formID);
 			}
-			catch (const std::invalid_argument& e) {
+			catch (const std::exception& e) {
 			}
 		}
 
@@ -292,6 +292,7 @@ namespace CONTAINER
 
 		if (!line.removeContainerObjectsByCount.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjectsByCount) {
+				if (objectToAdd.size() < 2) { logger::warn("container {:08X}: invalid removeContainerObjectsByCount entry, expected 2 values", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string         addFormStr = objectToAdd[0];
 				uint32_t            count = std::stoi(objectToAdd[1]);
@@ -324,6 +325,7 @@ namespace CONTAINER
 
 		if (!line.addedContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjects) {
+				if (objectToAdd.empty()) { logger::warn("container {:08X}: empty addedContainerObjects entry", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				uint32_t            count = 1;
 				std::string         addFormStr = objectToAdd[0];
@@ -347,6 +349,7 @@ namespace CONTAINER
 
 		if (!line.addedContainerObjectsOnce.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjectsOnce) {
+				if (objectToAdd.empty()) { logger::warn("container {:08X}: empty addedContainerObjectsOnce entry", curobj->formID); continue; }
 				uint32_t            count = 1;
 				std::string         addFormStr = objectToAdd[0];
 				if (objectToAdd.size() > 1) {
@@ -396,6 +399,7 @@ namespace CONTAINER
 
 		if (!line.objectsToReplace.empty()) {
 			for (const auto& objectToAdd : line.objectsToReplace) {
+				if (objectToAdd.size() < 2) { logger::warn("container {:08X}: invalid objectsToReplace entry, expected 2 values", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string         object1 = objectToAdd[0];
 				std::string         object2 = objectToAdd[1];
@@ -416,7 +420,7 @@ namespace CONTAINER
 	}
 
 
-	bool findObject(line_content line, RE::TESObjectCONT* curobj)
+	bool findObject(const line_content& line, RE::TESObjectCONT* curobj)
 	{
 		bool found = false;
 		bool keywordAnd = false;

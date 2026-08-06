@@ -53,7 +53,7 @@ namespace COBJ
 	{
 		logger::debug("processing patch instructions");
 		const auto                                dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::BGSConstructibleObject*> ObjectArray = dataHandler->GetFormArray<RE::BGSConstructibleObject>();
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::BGSConstructibleObject>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -421,7 +421,7 @@ namespace COBJ
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -444,7 +444,7 @@ namespace COBJ
 		}
 	}
 
-	void* patch(COBJ::patch_instruction line, RE::BGSConstructibleObject* curobj)
+	void* patch(const COBJ::patch_instruction& line, RE::BGSConstructibleObject* curobj)
 	{
 
 
@@ -452,12 +452,13 @@ namespace COBJ
 			try {
 				curobj->requiredItems.RemoveAllObjectFromContainer();
 				logger::debug(FMT_STRING("cobj formid: {:08X} cleared all ingredients"), curobj->formID);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
 		if (!line.removeContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjects) {
+				if (objectToAdd.size() < 2) { logger::warn("cobj {:08X}: invalid removeContainerObjects entry, expected 2 values", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string         addFormStr = objectToAdd[0];
 				uint32_t            count = std::stoi(objectToAdd[1]);
@@ -489,6 +490,7 @@ namespace COBJ
 
 		if (!line.addedContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjects) {
+				if (objectToAdd.size() < 2) { logger::warn("cobj {:08X}: invalid addedContainerObjects entry, expected 2 values", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string         addFormStr = objectToAdd[0];
 				uint32_t            count = std::stoi(objectToAdd[1]);
@@ -505,6 +507,7 @@ namespace COBJ
 
 		if (!line.addedContainerObjectsAdjusted.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjectsAdjusted) {
+				if (objectToAdd.size() < 3) { logger::warn("cobj {:08X}: invalid addedContainerObjectsAdjusted entry, expected 3 values", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string         addFormStr = objectToAdd[0];
 				uint32_t            count = std::stoi(objectToAdd[1]);
@@ -525,6 +528,7 @@ namespace COBJ
 
 		if (!line.replaceObjectInContainer.empty()) {
 			for (const auto& objectToAdd : line.replaceObjectInContainer) {
+				if (objectToAdd.size() < 2) { logger::warn("cobj {:08X}: invalid replaceObjectInContainer entry, expected 2 values", curobj->formID); continue; }
 				//logger::debug(FMT_STRING("LL found: {} {} {} {}"), objectToAdd[0], objectToAdd[1], objectToAdd[2], objectToAdd[3]);
 				std::string         object1 = objectToAdd[0];
 				std::string         object2 = (objectToAdd[1]);
@@ -637,7 +641,7 @@ namespace COBJ
 			try {
 				curobj->data.numConstructed = std::stoi(line.count);
 				logger::debug(FMT_STRING("cobj formid: {:08X} changed count {}"), curobj->formID, curobj->data.numConstructed);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 
@@ -645,7 +649,7 @@ namespace COBJ
 			try {
 				curobj->data.numConstructed = curobj->data.numConstructed * std::stof(line.countMult);
 				logger::debug(FMT_STRING("cobj formid: {:08X} multiplied count {}"), curobj->formID, curobj->data.numConstructed);
-			} catch (const std::invalid_argument& e) {
+			} catch (const std::exception& e) {
 			}
 		}
 

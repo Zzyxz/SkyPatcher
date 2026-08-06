@@ -8,69 +8,18 @@ namespace FACTION
 	{
 		patch_instruction l;
 
-		
-		//// extract objects
-		//std::regex  objects_regex("filterByFactions\\s*=([^:]+)", regex::icase);
-		//std::smatch objects_match;
-		//std::regex_search(line, objects_match, objects_regex);
-		//std::vector<std::string> objects;
-		//if (objects_match.empty() || objects_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objects_str = objects_match[1];
-		//	std::regex           objects_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objects_iterator(objects_str.begin(), objects_str.end(), objects_list_regex);
-		//	std::sregex_iterator objects_end;
-		//	while (objects_iterator != objects_end) {
-		//		std::string tempVar = (*objects_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Projectile String: {}"), tempVar);
-		//		if (tempVar != "none") {
-		//			objects.push_back(tempVar);
-		//		}
-		//		++objects_iterator;
-		//	}
-		//	l.object = objects;
-		//}
-
 		extractData(line, "filterByFactions\\s*=([^:]+)", l.object);
 
-
-		//// extract objectsExcluded
-		//std::regex  objectsExcluded_regex("filterByFactionsExcluded\\s*=([^:]+)", regex::icase);
-		//std::smatch objectsExcluded_match;
-		//std::regex_search(line, objectsExcluded_match, objectsExcluded_regex);
-		//std::vector<std::string> objectsExcluded;
-		//if (objectsExcluded_match.empty() || objectsExcluded_match[1].str().empty()) {
-		//	//empty
-		//} else {
-		//	std::string          objectsExcluded_str = objectsExcluded_match[1];
-		//	std::regex           objectsExcluded_list_regex("[^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8}", regex::icase);
-		//	std::sregex_iterator objectsExcluded_iterator(objectsExcluded_str.begin(), objectsExcluded_str.end(), objectsExcluded_list_regex);
-		//	std::sregex_iterator objectsExcluded_end;
-		//	while (objectsExcluded_iterator != objectsExcluded_end) {
-		//		std::string tempVar = (*objectsExcluded_iterator)[0].str();
-		//		tempVar.erase(tempVar.begin(), std::find_if_not(tempVar.begin(), tempVar.end(), ::isspace));
-		//		tempVar.erase(std::find_if_not(tempVar.rbegin(), tempVar.rend(), ::isspace).base(), tempVar.end());
-		//		//logger::info(FMT_STRING("Race: {}"), race);
-		//		if (tempVar != "none") {
-		//			objectsExcluded.push_back(tempVar);
-		//		}
-		//		++objectsExcluded_iterator;
-		//	}
-		//	l.objectExcluded = objectsExcluded;
-		//}
-
 		extractData(line, "filterByFactionsExcluded\\s*=([^:]+)", l.objectExcluded);
-
-
-		
-
 
 		extractDataStrings(line, "setFlags\\s*=([^:]+)", l.setFlags);
 		extractDataStrings(line, "removeFlags\\s*=([^:]+)", l.removeFlags);
 		extractDataStrings(line, "filterByModNames\\s*=([^:]+)", l.modNames);
+
+		extractToArr2D(line, "relationshipToAdd\\s*=([^:]+)", l.rsAdd);
+		extractToArr2D(line, "relationshipToChange\\s*=([^:]+)", l.rsChange);
+		extractData(line, "relationshipToRemove\\s*=([^:]+)", l.rsRemove);
+
 		return l;
 	}  //endStruct
 
@@ -78,7 +27,7 @@ namespace FACTION
 	{
 		logger::debug("processing patch instructions");
 		const auto                       dataHandler = RE::TESDataHandler::GetSingleton();
-		RE::BSTArray<RE::TESFaction*> ObjectArray = dataHandler->GetFormArray<RE::TESFaction>();
+		const auto& ObjectArray = dataHandler->GetFormArray<RE::TESFaction>();
 
 		for (const auto& line : tokens) {
 			if (!line.object.empty()) {
@@ -130,7 +79,6 @@ namespace FACTION
 				if (!found && line.object.empty()  && line.keywords.empty() && line.keywordsOr.empty()) {
 					found = true;
 				}
-
 
 
 				if (!line.objectExcluded.empty() && found) {
@@ -208,7 +156,7 @@ namespace FACTION
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
-									if (line[0] == skipChar) {
+									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
 
@@ -231,7 +179,7 @@ namespace FACTION
 		}
 	}
 
-	void* patch(FACTION::patch_instruction line, RE::TESFaction* curobj)
+	void* patch(const FACTION::patch_instruction& line, RE::TESFaction* curobj)
 	{
 
 
@@ -351,9 +299,132 @@ namespace FACTION
 		}
 
 		
-		//auto test = *curobj->reactions.begin();
-		//test->fightReaction = RE::FIGHT_REACTION::kEnemy;
+		if (!line.rsAdd.empty()) {
+			for (const auto& rs : line.rsAdd) {
+				if (rs.size() < 3) {
+					continue;
+				}
+
+				std::string        factionStr = rs[0];
+				int32_t            modifier = std::stoi(rs[1]);
+				RE::FIGHT_REACTION fightReaction = GetFightReaction(rs[2]);
+
+				RE::TESForm* form = GetFormFromIdentifier(factionStr);
+
+				if (!form || form->formType != RE::FormType::Faction) {
+					continue;
+				}
+
+				auto* reaction = new RE::GROUP_REACTION();
+				reaction->form = form;
+				reaction->reaction = modifier;
+				reaction->fightReaction = fightReaction;
+
+				curobj->reactions.push_front(reaction);
+
+				logger::debug(
+					FMT_STRING("faction {:08X} {} added relationship to {:08X}, modifier {}, reaction {}"),
+					curobj->formID,
+					curobj->fullName,
+					form->formID,
+					modifier,
+					static_cast<int>(fightReaction));
+			}
+		}
 		
+		if (!line.rsChange.empty()) {
+			for (const auto& rs : line.rsChange) {
+				if (rs.size() < 3) {
+					continue;
+				}
+
+				std::string        factionStr = rs[0];
+				int32_t            modifier = std::stoi(rs[1]);
+				RE::FIGHT_REACTION fightReaction = GetFightReaction(rs[2]);
+
+				RE::TESForm* form = GetFormFromIdentifier(factionStr);
+
+				if (!form || form->formType != RE::FormType::Faction) {
+					continue;
+				}
+
+				bool found = false;
+
+				for (auto* reaction : curobj->reactions) {
+					if (!reaction || reaction->form != form) {
+						continue;
+					}
+
+					reaction->reaction = modifier;
+					reaction->fightReaction = fightReaction;
+					found = true;
+
+					logger::debug(
+						FMT_STRING("faction {:08X} {} changed relationship to {:08X}, modifier {}, reaction {}"),
+						curobj->formID,
+						curobj->fullName,
+						form->formID,
+						modifier,
+						static_cast<int>(fightReaction));
+
+					break;
+				}
+
+				if (!found) {
+					logger::debug(
+						FMT_STRING("faction {:08X} {} relationship to {:08X} not found, change skipped"),
+						curobj->formID,
+						curobj->fullName,
+						form->formID);
+				}
+			}
+		}
+
+		if (!line.rsRemove.empty()) {
+			for (const auto& factionStr : line.rsRemove) {
+				RE::TESForm* form = GetFormFromIdentifier(factionStr);
+
+				if (!form || form->formType != RE::FormType::Faction) {
+					continue;
+				}
+
+				bool                                  found = false;
+				RE::BSSimpleList<RE::GROUP_REACTION*> kept;
+
+				while (!curobj->reactions.empty()) {
+					auto* reaction = curobj->reactions.front();
+					curobj->reactions.pop_front();
+
+					if (reaction && reaction->form == form) {
+						found = true;
+						delete reaction;
+						continue;
+					}
+
+					kept.push_front(reaction);
+				}
+
+				while (!kept.empty()) {
+					auto* reaction = kept.front();
+					kept.pop_front();
+					curobj->reactions.push_front(reaction);
+				}
+
+				if (found) {
+					logger::debug(
+						FMT_STRING("faction {:08X} {} removed relationship to {:08X}"),
+						curobj->formID,
+						curobj->fullName,
+						form->formID);
+				} else {
+					logger::debug(
+						FMT_STRING("faction {:08X} {} relationship to {:08X} not found, remove skipped"),
+						curobj->formID,
+						curobj->fullName,
+						form->formID);
+				}
+			}
+		}
 
 	}
 

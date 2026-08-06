@@ -49,6 +49,7 @@ struct patch_instruction_armor
 	std::string health;
 	std::string              templateArmor;
 	std::string              dwMatch;
+	std::string              valueMatch;
 	std::string              modelMatch;
 	
 	
@@ -104,7 +105,7 @@ struct patch_instruction_armor
 struct patch_instruction_armor create_patch_instruction_armor(const std::string& line);
 void process_patch_instructions_armor(const std::list<patch_instruction_armor>& tokens);
 void* readConfig(const std::string& folder);
-void*                          patch(ARMOR::patch_instruction_armor line, RE::TESObjectARMO* curobj);
+void*                          patch(const ARMOR::patch_instruction_armor& line, RE::TESObjectARMO* curobj);
 
 }
 

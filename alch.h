@@ -51,7 +51,7 @@ namespace ALCH
 	struct line_content create_patch_instruction(const std::string& line);
 	void process_patch_instructions(const std::list<line_content>& tokens);
 	void* readConfig(const std::string& folder);
-	void                patch(ALCH::line_content line, RE::AlchemyItem* curobj);
+	void                patch(const ALCH::line_content& line, RE::AlchemyItem* curobj);
 }
 
 #endif
