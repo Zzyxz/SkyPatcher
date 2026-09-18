@@ -773,7 +773,7 @@ namespace CELL
 		}
 
 		if (!line.acousticSpace.empty() &&
-			line.acousticSpace != "none") {
+			line.acousticSpace != "none" && toLowerCase(line.acousticSpace) != "null") {
 			RE::TESForm* form = GetFormFromIdentifier(line.acousticSpace);
 			if (form && form->formType == RE::FormType::AcousticSpace) {
 				auto* asp = static_cast<RE::BGSAcousticSpace*>(form);
@@ -801,7 +801,7 @@ namespace CELL
 		}
 
 		if (!line.musicType.empty() &&
-			line.musicType != "none") {
+			line.musicType != "none" && toLowerCase(line.musicType) != "null") {
 			RE::TESForm* form = GetFormFromIdentifier(line.musicType);
 			if (form && form->formType == RE::FormType::MusicType) {
 				auto* mus = static_cast<RE::BGSMusicType*>(form);
@@ -829,7 +829,7 @@ namespace CELL
 		}
 		
 		if (!line.location.empty() &&
-			line.location != "none") {
+			line.location != "none" && toLowerCase(line.location) != "null") {
 			RE::TESForm* form = GetFormFromIdentifier(line.location);
 			if (form && form->formType == RE::FormType::Location) {
 				auto* loc = static_cast<RE::BGSLocation*>(form);
@@ -857,7 +857,7 @@ namespace CELL
 		}
 		
 		if (!line.skyRegion.empty() &&
-			line.skyRegion != "none") {
+			line.skyRegion != "none" && toLowerCase(line.skyRegion) != "null") {
 			RE::TESForm* form = GetFormFromIdentifier(line.skyRegion);
 			if (form && form->formType == RE::FormType::Region) {
 				auto* reg = static_cast<RE::TESRegion*>(form);
@@ -885,7 +885,7 @@ namespace CELL
 		}
 
 		if (!line.imageSpace.empty() &&
-			line.imageSpace != "none") {
+			line.imageSpace != "none" && toLowerCase(line.imageSpace) != "null") {
 			RE::TESForm* form = GetFormFromIdentifier(line.imageSpace);
 			if (form && form->formType == RE::FormType::ImageSpace) {
 				auto* imsp = static_cast<RE::TESImageSpace*>(form);
@@ -913,7 +913,7 @@ namespace CELL
 		}
 
 		if (!line.encounterZone.empty() &&
-			line.encounterZone != "none") {
+			line.encounterZone != "none" && toLowerCase(line.encounterZone) != "null") {
 			RE::TESForm* form = GetFormFromIdentifier(line.encounterZone);
 			if (form && form->formType == RE::FormType::EncounterZone) {
 				auto* imsp = static_cast<RE::BGSEncounterZone*>(form);
