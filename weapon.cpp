@@ -410,6 +410,7 @@ namespace WEAPON
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 	namespace
@@ -771,12 +772,14 @@ namespace WEAPON
 			RE::TESForm* currentform = nullptr;
 			std::string  string_form = line.objectEffect;
 			currentform = GetFormFromIdentifier(string_form);
-			if (currentform) {
-				curobj->formEnchanting = (RE::EnchantmentItem*)currentform;
-				logger::debug(FMT_STRING("weapon formid: {:08X} changed objectEffect {:08X} "), curobj->formID, ((RE::EnchantmentItem*)currentform)->formID);
+			if (auto* enchantment = currentform ? currentform->As<RE::EnchantmentItem>() : nullptr) {
+				curobj->formEnchanting = enchantment;
+				logger::debug(FMT_STRING("weapon formid: {:08X} changed objectEffect {:08X} "), curobj->formID, enchantment->formID);
 			} else if (line.objectEffect == "null") {
 				curobj->formEnchanting = nullptr;
 				logger::debug(FMT_STRING("weapon formid: {:08X} changed objectEffect null (none)"), curobj->formID);
+			} else {
+				logger::warn(FMT_STRING("weapon formid: {:08X} objectEffect is not a valid enchantment: {}"), curobj->formID, string_form);
 			}
 		}
 
@@ -904,7 +907,7 @@ namespace WEAPON
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::EquipSlot) {
 					curobj->SetEquipSlot((RE::BGSEquipSlot*)currentform);
-					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed equipSlot {:08X}"), curobj->formID, curobj->fullName, curobj->equipSlot->formID);
+					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed equipSlot {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
 				}
 			} catch (const std::exception& e) {
 			}
@@ -1059,7 +1062,7 @@ namespace WEAPON
 			} catch (const std::exception& e) {
 			}
 		}
-
+		return nullptr;
 	}
 
 }

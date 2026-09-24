@@ -242,6 +242,7 @@ namespace MISC
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 	void* patch(const MISC::patch_instruction& line, RE::TESObjectMISC* curobj)
@@ -369,6 +370,10 @@ namespace MISC
 
 		if (!line.alternateTextures.empty()) {
 			for (const auto& objectToAdd : line.alternateTextures) {
+				if (objectToAdd.size() < 3) {
+					logger::warn(FMT_STRING("alternateTexturesToAdd requires texture, 3D name and index; skipped invalid entry"));
+					continue;
+				}
 				std::string  texture = objectToAdd[0];
 				std::string  name = objectToAdd[1];
 				int32_t      index = std::stoi(objectToAdd[2]);
@@ -383,7 +388,7 @@ namespace MISC
 				}
 			}
 		}
-
+		return nullptr;
 	}
 
 }

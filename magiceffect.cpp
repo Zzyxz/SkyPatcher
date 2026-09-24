@@ -319,7 +319,8 @@ namespace MGEF
 				{
 					bool modFound = false;
 					for (auto const modName : line.ModNamesExcluded) {
-						if (modName == curobj->GetFile(0)->fileName) {
+						const auto* file = curobj->GetFile(0);
+						if (file && modName == file->fileName) {
 							modFound = true;
 							break;
 						}
@@ -568,10 +569,11 @@ namespace MGEF
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
-
 	void* patch(const MGEF::patch_instruction& line, RE::EffectSetting* curobj)
 	{
+		try {
 		
 		if (!line.enchantArt.empty() && line.enchantArt != "none") {
 			try {
@@ -962,7 +964,8 @@ namespace MGEF
 					continue;
 				}
 
-				RE::BGSSoundDescriptorForm* spellSound = (RE::BGSSoundDescriptorForm*)GetFormFromIdentifier(spellFormStr);
+				auto* resolvedSound = GetFormFromIdentifier(spellFormStr);
+				auto* spellSound = resolvedSound ? resolvedSound->As<RE::BGSSoundDescriptorForm>() : nullptr;
 				if (!spellSound) {
 					logger::critical(FMT_STRING("mgef {:08X} spell sound not found: {}"), curobj->formID, spellFormStr);
 					continue;
@@ -993,6 +996,10 @@ namespace MGEF
 
 		
 
+		} catch (const std::exception& e) {
+			logger::warn(FMT_STRING("magic effect {:08X}: skipped remaining operations after invalid value: {}"), curobj ? curobj->formID : 0, e.what());
+		}
+		return nullptr;
 	}
 
 }

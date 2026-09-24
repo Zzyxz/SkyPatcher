@@ -333,11 +333,14 @@ void extractToArr2D(const std::string& line, const std::string& regex_pattern_st
 	}
 }
 
-void moveEffectToPosition0(RE::BSTArray<RE::Effect*>& effects, const RE::Effect* targetEffect)
-{
-	auto it = std::find_if(effects.begin(), effects.end(), [targetEffect](const RE::Effect* x) {
-		return x->baseEffect->formID == targetEffect->baseEffect->formID;
-	});
+	void moveEffectToPosition0(RE::BSTArray<RE::Effect*>& effects, const RE::Effect* targetEffect)
+	{
+		if (!targetEffect || !targetEffect->baseEffect) {
+			return;
+		}
+		auto it = std::find_if(effects.begin(), effects.end(), [targetEffect](const RE::Effect* x) {
+			return x && x->baseEffect && x->baseEffect->formID == targetEffect->baseEffect->formID;
+		});
 
 	if (it != effects.end()) {
 		std::rotate(effects.begin(), it, it + 1);

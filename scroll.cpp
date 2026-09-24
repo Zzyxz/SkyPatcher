@@ -309,7 +309,7 @@ namespace SCROLL
 					if (!mgefOr) {
 						for (const RE::FormID id : extra.mgefsOr) {
 							for (const auto& effect : curobj->effects) {
-								if (effect && effect->baseEffect->formID == id) {
+						if (effect && effect->baseEffect && effect->baseEffect->formID == id) {
 									mgefOr = true;
 									break;
 								}
@@ -333,7 +333,7 @@ namespace SCROLL
 				if (!line.mgefsExcluded.empty() && found) {
 					for (const RE::FormID id : extra.mgefsExcluded) {
 						for (const auto& effect : curobj->effects) {
-							if (effect && effect->baseEffect->formID == id) {
+							if (effect && effect->baseEffect && effect->baseEffect->formID == id) {
 								found = false;
 								break;
 							}
@@ -360,7 +360,7 @@ namespace SCROLL
 				if (found && !line.restrictToSchool.empty()) {
 					bool foundSchool = false;
 
-					if (curobj && !curobj->effects.empty() && curobj->effects.front()->baseEffect) {
+					if (curobj && !curobj->effects.empty() && curobj->effects.front() && curobj->effects.front()->baseEffect) {
 						const auto skill = curobj->effects.front()->baseEffect->data.associatedSkill;
 
 						for (const auto s : extra.schools) {
@@ -463,9 +463,10 @@ namespace SCROLL
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
-
 	void* patch(const SCROLL::line_content& line, RE::ScrollItem* curobj) {
+		try {
 		if (!line.keywordsToAdd.empty()) {
 			for (size_t i = 0; i < line.keywordsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
@@ -498,7 +499,8 @@ namespace SCROLL
 		if ( !line.removedObjects.empty()) {
 			for (const auto& objectToRemove : line.removedObjects) {
 				std::string        removeFormStr = objectToRemove;
-				RE::EffectSetting* removeForm = (RE::EffectSetting*)GetFormFromIdentifier(removeFormStr);
+				auto* resolvedRemoveForm = GetFormFromIdentifier(removeFormStr);
+				auto* removeForm = resolvedRemoveForm ? resolvedRemoveForm->As<RE::EffectSetting>() : nullptr;
 				if (removeForm) {
 					auto it = curobj->effects.begin();
 					while (it != curobj->effects.end()) {
@@ -520,7 +522,8 @@ namespace SCROLL
 				float              magnitude = std::stof(objectToAdd[1]);
 				int32_t            duration = std::stoi(objectToAdd[2]);
 				int32_t            area = std::stoi(objectToAdd[3]);
-				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
+				auto* resolvedAddForm = GetFormFromIdentifier(addFormStr);
+				auto* addForm = resolvedAddForm ? resolvedAddForm->As<RE::EffectSetting>() : nullptr;
 				if (addForm) {
 					RE::Effect* tempEffectItem = new RE::Effect;
 					tempEffectItem->baseEffect = addForm;
@@ -534,7 +537,7 @@ namespace SCROLL
 					tempEffectItem->cost = addForm->data.baseCost * pow(magnitude * durationForCalc * 0.1, 1.1);
 					
 				curobj->effects.push_back(tempEffectItem);
-				logger::debug(FMT_STRING("scroll {:08X} {} added effect {:08X} {} magitude {} duration {} area {} cost {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, objectToAdd[1], objectToAdd[2], objectToAdd[3], tempEffectItem->cost);
+				logger::debug(FMT_STRING("scroll {:08X} {} added effect {:08X} {} magnitude {} duration {} area {} cost {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, objectToAdd[1], objectToAdd[2], objectToAdd[3], tempEffectItem->cost);
 				if (objectToAdd.size() == 5) {
 					moveEffectToPosition0(curobj->effects, tempEffectItem);
 					logger::debug(FMT_STRING("scroll {:08X} {} added effect {:08X} {} moved to first position"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName);
@@ -548,7 +551,8 @@ namespace SCROLL
 			if (objectToAdd.empty()) { logger::warn("scroll {:08X}: empty changedObjects entry", curobj->formID); continue; }
 			objectToAdd.resize(5, "null");
 				std::string        addFormStr = objectToAdd[0];
-				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
+				auto* resolvedAddForm = GetFormFromIdentifier(addFormStr);
+				auto* addForm = resolvedAddForm ? resolvedAddForm->As<RE::EffectSetting>() : nullptr;
 				if (addForm) {
 					float magnitude = 0.0f;
 					if (objectToAdd[1] != "null") {
@@ -599,7 +603,8 @@ namespace SCROLL
 			if (objectToAdd.empty()) { logger::warn("scroll {:08X}: empty changedAddObjects entry", curobj->formID); continue; }
 			objectToAdd.resize(4, "null");
 				std::string        addFormStr = objectToAdd[0];
-				RE::EffectSetting* addForm = (RE::EffectSetting*)GetFormFromIdentifier(addFormStr);
+				auto* resolvedAddForm = GetFormFromIdentifier(addFormStr);
+				auto* addForm = resolvedAddForm ? resolvedAddForm->As<RE::EffectSetting>() : nullptr;
 				if (addForm) {
 					float magnitude = 0.0f;
 					if (objectToAdd[1] != "null") {
@@ -660,8 +665,9 @@ namespace SCROLL
 					multiplier = multiplier + std::stof(objectToAdd[3]);
 				}
 
-				auto& effect = curobj->effects.front();
-				if (effect && effect->baseEffect) {
+				if (!curobj->effects.empty()) {
+					auto& effect = curobj->effects.front();
+					if (effect && effect->baseEffect) {
 					if (objectToAdd[0] != "null") {
 						effect->effectItem.magnitude = magnitude;
 						logger::debug(FMT_STRING("scroll {:08X} {} changed first {} to magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, magnitude, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
@@ -677,6 +683,7 @@ namespace SCROLL
 					if (objectToAdd[3] != "null") {
 						effect->effectItem.magnitude = effect->effectItem.magnitude * multiplier;
 						logger::debug(FMT_STRING("scroll {:08X} {} changed(multiplied) first magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
+					}
 					}
 				}
 			}
@@ -710,19 +717,19 @@ namespace SCROLL
 					if (effect && effect->baseEffect && effect->baseEffect->IsDetrimental() && (effect->baseEffect->data.primaryAV == RE::ActorValue::kHealth || effect->baseEffect->data.secondaryAV == RE::ActorValue::kHealth)) {
 						if (objectToAdd[0] != "null") {
 							effect->effectItem.magnitude = magnitude;
-							logger::debug(FMT_STRING("spell {:08X} {} changed damage effect {} to magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, magnitude, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
+							logger::debug(FMT_STRING("scroll {:08X} {} changed damage effect {} to magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, magnitude, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
 						}
 						if (objectToAdd[1] != "null") {
 							effect->effectItem.duration = duration;
-							logger::debug(FMT_STRING("spell {:08X} {} changed damage effect {} to duration of {:08X} {} to {}"), curobj->formID, curobj->fullName, duration, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.duration);
+							logger::debug(FMT_STRING("scroll {:08X} {} changed damage effect {} to duration of {:08X} {} to {}"), curobj->formID, curobj->fullName, duration, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.duration);
 						}
 						if (objectToAdd[2] != "null") {
 							effect->effectItem.area = area;
-							logger::debug(FMT_STRING("spell {:08X} {} changed damage effect {} to area of {:08X} {} to {}"), curobj->formID, curobj->fullName, area, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.area);
+							logger::debug(FMT_STRING("scroll {:08X} {} changed damage effect {} to area of {:08X} {} to {}"), curobj->formID, curobj->fullName, area, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.area);
 						}
 						if (objectToAdd[3] != "null") {
 							effect->effectItem.magnitude = effect->effectItem.magnitude * multiplier;
-							logger::debug(FMT_STRING("spell {:08X} {} changed(multiplied) damage effect magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
+							logger::debug(FMT_STRING("scroll {:08X} {} changed(multiplied) damage effect magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
 						}
 					}
 				}
@@ -909,6 +916,10 @@ namespace SCROLL
 
 		if (!line.alternateTextures.empty()) {
 			for (const auto& objectToAdd : line.alternateTextures) {
+				if (objectToAdd.size() < 3) {
+					logger::warn(FMT_STRING("alternateTexturesToAdd requires texture, 3D name and index; skipped invalid entry"));
+					continue;
+				}
 				std::string  texture = objectToAdd[0];
 				std::string  name = objectToAdd[1];
 				int32_t      index = std::stoi(objectToAdd[2]);
@@ -923,8 +934,10 @@ namespace SCROLL
 				}
 			}
 		}
-
-
+		} catch (const std::exception& e) {
+			logger::warn(FMT_STRING("scroll {:08X}: skipped remaining operations after invalid value: {}"), curobj ? curobj->formID : 0, e.what());
+		}
+		return nullptr;
 	}
 
 }

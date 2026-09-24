@@ -175,6 +175,7 @@ namespace MOVETYPE
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 	void* patch(const MOVETYPE::patch_instruction& line, RE::BGSMovementType* curobj)
@@ -258,10 +259,7 @@ namespace MOVETYPE
 			} catch (const std::exception& e) {
 			}
 		}
-
-		
-
-
+		return nullptr;
 	}
 
 }

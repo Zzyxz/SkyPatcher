@@ -1,6 +1,7 @@
 #include "leveledlist.h"
 #include "formfilter.h"
 #include "parsetable.h"
+#include <limits>
 namespace LEVELEDLIST
 {
 	namespace
@@ -339,23 +340,54 @@ namespace LEVELEDLIST
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 	template <typename T>
 	void patch(const LEVELEDLIST::line_content& line, T* curobj)
 	{
+		const auto parseUInt16 = [curobj](const std::string& text, std::string_view operation, std::uint16_t& result) {
+			try {
+				const auto value = std::stoul(text);
+				if (value > std::numeric_limits<std::uint16_t>::max()) {
+					throw std::out_of_range("value exceeds uint16 range");
+				}
+				result = static_cast<std::uint16_t>(value);
+				return true;
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("leveled list {:08X}: invalid {} value '{}': {}"), curobj->formID, operation, text, e.what());
+				return false;
+			}
+		};
 
+		const auto parseFloat = [curobj](const std::string& text, std::string_view operation, float& result) {
+			try {
+				result = std::stof(text);
+				return true;
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("leveled list {:08X}: invalid {} value '{}': {}"), curobj->formID, operation, text, e.what());
+				return false;
+			}
+		};
 
 		if (!line.replaceObjects.empty()) {
 			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
 
 			for (const auto& objectToreplace : line.replaceObjects) {
+				if (objectToreplace.size() < 2) {
+					logger::warn(FMT_STRING("leveled list {:08X}: invalid replacement entry, expected 2 forms"), curobj->formID);
+					continue;
+				}
 				std::string formToReplaceString = objectToreplace[0];
 				std::string formToReplaceWithString = objectToreplace[1];
 				int          count = 0;
 				RE::TESForm* formToReplace = GetFormFromIdentifier(formToReplaceString);
 				RE::TESForm* formToReplaceWith = GetFormFromIdentifier(formToReplaceWithString);
+				if (!formToReplace || !formToReplaceWith) {
+					logger::warn(FMT_STRING("leveled list {:08X}: invalid replacement form '{}' -> '{}', skipping"), curobj->formID, formToReplaceString, formToReplaceWithString);
+					continue;
+				}
 				for (auto& obj : llVec) {
-					if (obj.form->formID == formToReplace->formID) {
+					if (obj.form && obj.form->formID == formToReplace->formID) {
 						obj.form = formToReplaceWith;
 						count++;
 					}
@@ -379,6 +411,10 @@ namespace LEVELEDLIST
 			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
 
 			for (const auto& objectsToRemove : line.removedObjects) {
+				if (objectsToRemove.empty()) {
+					logger::warn(FMT_STRING("leveled list {:08X}: empty remove entry"), curobj->formID);
+					continue;
+				}
 				RE::TESForm* delForm = GetFormFromIdentifier(objectsToRemove[0]);
 				if (!delForm) {
 					logger::debug(FMT_STRING("Form not found {}, skipping."), objectsToRemove[0]);
@@ -393,12 +429,12 @@ namespace LEVELEDLIST
 				if (objectsToRemove.size() >= 2) {
 					std::vector<std::string> templvl = splitRelationNumber(objectsToRemove[1]);
 					if (templvl.size() == 2 && templvl[0] != "none") {
-						number = std::stoi(templvl[0]);
+						if (!parseUInt16(templvl[0], "remove level", number)) { continue; }
 						relationSign = templvl[1];
 						hasNumberLvl = true;
 					}
 					else if (templvl.size() == 1 && templvl[0] != "none") {
-						number = std::stoi(templvl[0]);
+						if (!parseUInt16(templvl[0], "remove level", number)) { continue; }
 						hasNumberLvl = true;
 					}
 
@@ -447,12 +483,12 @@ namespace LEVELEDLIST
 					relationSign = "";
 
 					if (tempcount.size() == 2 && tempcount[0] != "none") {
-						number = std::stoi(tempcount[0]);
+						if (!parseUInt16(tempcount[0], "remove count", number)) { continue; }
 						relationSign = tempcount[1];
 						hasNumberCount = true;
 					}
 					else if (tempcount.size() == 1 && tempcount[0] != "none") {
-						number = std::stoi(tempcount[0]);
+						if (!parseUInt16(tempcount[0], "remove count", number)) { continue; }
 						hasNumberCount = true;
 					}
 
@@ -524,7 +560,7 @@ namespace LEVELEDLIST
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Keyword) {
 					llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-						RE::BGSKeywordForm* keyForm = x.form->As<RE::BGSKeywordForm>();
+						RE::BGSKeywordForm* keyForm = x.form ? x.form->As<RE::BGSKeywordForm>() : nullptr;
 						if (keyForm && keyForm->HasKeyword((RE::BGSKeyword*)currentform)) {
 							logger::debug(FMT_STRING("leveled Lists {:08X} removed item {:08X} with keyword {:08X} {} "), curobj->formID, x.form->formID, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
 							return true;
@@ -593,10 +629,10 @@ namespace LEVELEDLIST
 
 				std::string  addFormStr = objectToAdd[0];
 				if (objectToAdd.size() > 1) {
-					level = std::stoi(objectToAdd[1]);
+					if (!parseUInt16(objectToAdd[1], "add level", level)) { continue; }
 				}
 				if (objectToAdd.size() > 2) {
-					count = std::stoi(objectToAdd[2]);
+					if (!parseUInt16(objectToAdd[2], "add count", count)) { continue; }
 				}
 				RE::TESForm* addForm = GetFormFromIdentifier(addFormStr);
 				if (addForm) {
@@ -622,16 +658,16 @@ namespace LEVELEDLIST
 
 				std::string  addFormStr = objectToAdd[0];
 				if (objectToAdd.size() > 1) {
-					level = std::stoi(objectToAdd[1]);
+					if (!parseUInt16(objectToAdd[1], "add-once level", level)) { continue; }
 				}
 				if (objectToAdd.size() > 2) {
-					count = std::stoi(objectToAdd[2]);
+					if (!parseUInt16(objectToAdd[2], "add-once count", count)) { continue; }
 				}
 				RE::TESForm* addForm = GetFormFromIdentifier(addFormStr);
 
 				if (addForm) {
 					auto it = std::find_if(llVec.begin(), llVec.end(), [addForm](const RE::LEVELED_OBJECT& obj) {
-						return obj.form->formID == addForm->formID;
+						return obj.form && obj.form->formID == addForm->formID;
 						});
 
 					if (it == llVec.end()) {
@@ -670,20 +706,28 @@ namespace LEVELEDLIST
 		}
 
 		if (!line.chanceNone.empty() && line.chanceNone != "none") {
-			curobj->chanceNone = static_cast<int8_t>(std::stoi(line.chanceNone));
-			logger::debug(FMT_STRING("leveled Lists {:08X} set chance of none to {}"), curobj->formID, curobj->chanceNone);
+			std::uint16_t chance = 0;
+			if (parseUInt16(line.chanceNone, "chanceNone", chance)) {
+				curobj->chanceNone = static_cast<int8_t>(chance);
+				logger::debug(FMT_STRING("leveled Lists {:08X} set chance of none to {}"), curobj->formID, curobj->chanceNone);
+			}
 		}
 
 		if (!line.objectMultCount.empty() && curobj->numEntries > 0) {
 			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
 			for (const auto& objectToreplace : line.objectMultCount) {
+				if (objectToreplace.size() < 2) {
+					logger::warn(FMT_STRING("leveled list {:08X}: invalid objectMultCount entry, expected form and multiplier"), curobj->formID);
+					continue;
+				}
 				std::string formToReplaceString = objectToreplace[0];
-				float multiplier = std::stof(objectToreplace[1]);
+				float multiplier = 1.0f;
+				if (!parseFloat(objectToreplace[1], "objectMultCount multiplier", multiplier)) { continue; }
 				int          count = 0;
 				RE::TESForm* formToReplace = GetFormFromIdentifier(formToReplaceString);
 				if (formToReplace  ) {
 					for (auto& obj : llVec) {
-						if (obj.form->formID == formToReplace->formID) {
+						if (obj.form && obj.form->formID == formToReplace->formID) {
 							obj.count = static_cast<uint16_t>(std::ceil(obj.count * multiplier));
 							count++;
 						}

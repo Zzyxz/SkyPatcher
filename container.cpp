@@ -98,6 +98,7 @@ namespace CONTAINER
 
 	void* readConfigHook(const std::string& folder)
 	{
+		hooktokens.clear();
 		char        skipChar = ';';
 		std::string extension = ".ini";
 
@@ -151,6 +152,7 @@ namespace CONTAINER
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 	void* readConfig(const std::string& folder)
@@ -219,6 +221,7 @@ namespace CONTAINER
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 
@@ -239,7 +242,8 @@ namespace CONTAINER
 		if (!line.removedContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.removedContainerObjects) {
 				std::string         addFormStr = objectToAdd;
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
+				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
+				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 				if (addForm) {
 					curobj->RemoveObjectInstancesFromContainer(addForm);
 					logger::debug(FMT_STRING("container {:08X} removed Form {:08X}"), curobj->formID, addForm->formID);
@@ -265,7 +269,8 @@ namespace CONTAINER
 					logger::warn(FMT_STRING("Invalid count for removeContainerObjectsByCount: {}"), objectToAdd[1]);
 					continue;
 				}
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
+				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
+				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
 					curobj->RemoveObjectFromContainer(addForm, count);
@@ -280,7 +285,8 @@ namespace CONTAINER
 		if (!line.removeContainerObjectsByKeyword.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjectsByKeyword) {
 				std::string         addFormStr = objectToAdd;
-				RE::BGSKeyword* addForm = (RE::BGSKeyword*)GetFormFromIdentifier(addFormStr);
+				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
+				auto* addForm = resolvedForm ? resolvedForm->As<RE::BGSKeyword>() : nullptr;
 				if (addForm) {
 					curobj->RemoveObjectFromContainerByKeyword(addForm);
 					logger::debug(FMT_STRING("container formid: {:08X} removed by keyword Form {:08X}"), curobj->formID, addForm->formID);
@@ -304,7 +310,8 @@ namespace CONTAINER
 						continue;
 					}
 				}
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
+				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
+				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 				if (addForm) {
 					if (addForm->As<RE::TESLevItem>() && iAllowLeveledListsAddedToContainers == 0) {
 						logger::debug(FMT_STRING("container {:08X} add container objects skipped Leveled Item {:08X}"), curobj->formID, addForm->formID);
@@ -332,7 +339,8 @@ namespace CONTAINER
 						continue;
 					}
 				}
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
+				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
+				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 				if (addForm) {
 					if (addForm->As<RE::TESLevItem>() && iAllowLeveledListsAddedToContainers == 0) {
 						logger::debug(FMT_STRING("container {:08X} add container objects once skipped Leveled Item {:08X}"), curobj->formID, addForm->formID);
@@ -355,6 +363,10 @@ namespace CONTAINER
 
 		if (!line.objectMultCount.empty()) {
 			for (const auto& objectToreplace : line.objectMultCount) {
+				if (objectToreplace.empty()) {
+					logger::warn(FMT_STRING("container {:08X}: empty objectMultCount entry"), curobj->formID);
+					continue;
+				}
 				std::string formToReplaceString = objectToreplace[0];
 				float multiplier = 1;
 				if (objectToreplace.size() > 1) {
@@ -383,8 +395,10 @@ namespace CONTAINER
 				}
 				std::string         object1 = objectToAdd[0];
 				std::string         object2 = objectToAdd[1];
-				RE::TESBoundObject* oldObject = (RE::TESBoundObject*)GetFormFromIdentifier(object1);
-				RE::TESBoundObject* newObject = (RE::TESBoundObject*)GetFormFromIdentifier(object2);
+				auto* resolvedOldObject = GetFormFromIdentifier(object1);
+				auto* resolvedNewObject = GetFormFromIdentifier(object2);
+				auto* oldObject = resolvedOldObject ? resolvedOldObject->As<RE::TESBoundObject>() : nullptr;
+				auto* newObject = resolvedNewObject ? resolvedNewObject->As<RE::TESBoundObject>() : nullptr;
 
 				if (oldObject && newObject) {
 				replaceObjectInContainer(*curobj, oldObject, newObject);

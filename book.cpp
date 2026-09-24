@@ -164,7 +164,7 @@ namespace BOOK
 							if (curobj->TeachesSpell() && spell && keyword) {
 								for (const auto& effect : spell->effects)
 								{
-									if (effect->baseEffect->HasKeyword(keyword)) {
+									if (effect && effect->baseEffect && effect->baseEffect->HasKeyword(keyword)) {
 										found = true;
 										break;
 									}
@@ -297,6 +297,7 @@ namespace BOOK
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 	void* patch(const BOOK::patch_instruction& line, RE::TESObjectBOOK* curobj)
@@ -426,7 +427,7 @@ namespace BOOK
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::SoundRecord) {
 					curobj->pickupSound = (RE::BGSSoundDescriptorForm*)currentform;
-					logger::debug(FMT_STRING("book formid: {:08X} {} changed pickUpSound {:08X}"), curobj->formID, curobj->fullName, curobj->pickupSound->formID);
+					logger::debug(FMT_STRING("book formid: {:08X} {} changed pickUpSound {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
 				}
 			} catch (const std::exception& e) {
 			}
@@ -439,7 +440,7 @@ namespace BOOK
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::SoundRecord) {
 					curobj->putdownSound = (RE::BGSSoundDescriptorForm*)currentform;
-					logger::debug(FMT_STRING("book formid: {:08X} {} changed putDownSound {:08X}"), curobj->formID, curobj->fullName, curobj->putdownSound->formID);
+					logger::debug(FMT_STRING("book formid: {:08X} {} changed putDownSound {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
 				}
 			} catch (const std::exception& e) {
 			}
@@ -556,6 +557,10 @@ namespace BOOK
 
 		if (!line.alternateTextures.empty()) {
 			for (const auto& objectToAdd : line.alternateTextures) {
+				if (objectToAdd.size() < 3) {
+					logger::warn(FMT_STRING("alternateTexturesToAdd requires texture, 3D name and index; skipped invalid entry"));
+					continue;
+				}
 				std::string texture = objectToAdd[0];
 				std::string name = objectToAdd[1];
 				int32_t     index = std::stoi(objectToAdd[2]);
@@ -626,11 +631,7 @@ namespace BOOK
 			} catch (const std::exception& e) {
 			}
 		}
-
-
-
-
-
+		return nullptr;
 	}
 
 }

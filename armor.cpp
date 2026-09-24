@@ -42,7 +42,11 @@ namespace ARMOR
 			std::vector<std::uint64_t> out;
 			out.reserve(a_in.size());
 			for (const auto& s : a_in) {
-				out.push_back(static_cast<std::uint32_t>(getBipedObjectSlot(std::stoi(s))));
+				try {
+					out.push_back(static_cast<std::uint32_t>(getBipedObjectSlot(std::stoi(s))));
+				} catch (const std::exception& e) {
+					logger::warn(FMT_STRING("Invalid armor slot '{}': {}"), s, e.what());
+				}
 			}
 			return out;
 		}
@@ -187,8 +191,8 @@ namespace ARMOR
 				formfilter::addKeywordSignals(a_index, static_cast<const RE::BGSKeywordForm*>(armor), i);
 
 				bits.clear();
-				formfilter::appendMaskBits(bits, formfilter::kTagArmorType,
-					static_cast<std::uint32_t>(armor->bipedModelData.armorType.underlying()));
+				bits.push_back(formfilter::sigTagged(formfilter::kTagArmorType,
+					static_cast<std::uint32_t>(armor->bipedModelData.armorType.underlying())));
 				formfilter::appendMaskBits(bits, formfilter::kTagBipedSlot,
 					static_cast<std::uint32_t>(armor->bipedModelData.bipedObjectSlots.underlying()));
 				for (const std::uint64_t key : bits) {
@@ -439,6 +443,7 @@ namespace ARMOR
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 	namespace
@@ -461,6 +466,7 @@ namespace ARMOR
 
 	void* patch(const ARMOR::patch_instruction_armor& line, RE::TESObjectARMO* curobj)
 	{
+		try {
 
 		if (!line.mirrorArmor.empty() && line.mirrorArmor != "none") {
 			try {
@@ -498,6 +504,10 @@ namespace ARMOR
 
 		if (!line.reCalcArmorRating.empty()) {
 			for (const auto& objectToAdd : line.reCalcArmorRating) {
+				if (objectToAdd.size() < 7) {
+					logger::warn(FMT_STRING("armor {:08X}: reCalcArmorRating requires 7 values; skipped invalid entry"), curobj->formID);
+					continue;
+				}
 				float startRating = std::stof(objectToAdd[0]);
 				float multiplierBase = std::stof(objectToAdd[1]);
 				float multiplierSoft = std::stof(objectToAdd[2]);
@@ -723,7 +733,7 @@ namespace ARMOR
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::SoundRecord) {
 					curobj->pickupSound = (RE::BGSSoundDescriptorForm*)currentform;
-					logger::debug(FMT_STRING("armor formid: {:08X} {} changed pickUpSound {:08X}"), curobj->formID, curobj->fullName, curobj->pickupSound->formID);
+					logger::debug(FMT_STRING("armor formid: {:08X} {} changed pickUpSound {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
 				}
 			} catch (const std::exception& e) {
 			}
@@ -736,7 +746,7 @@ namespace ARMOR
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::SoundRecord) {
 					curobj->putdownSound = (RE::BGSSoundDescriptorForm*)currentform;
-					logger::debug(FMT_STRING("armor formid: {:08X} {} changed putDownSound {:08X}"), curobj->formID, curobj->fullName, curobj->putdownSound->formID);
+					logger::debug(FMT_STRING("armor formid: {:08X} {} changed putDownSound {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
 				}
 			} catch (const std::exception& e) {
 			}
@@ -792,7 +802,7 @@ namespace ARMOR
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::EquipSlot) {
 					curobj->SetEquipSlot((RE::BGSEquipSlot*)currentform);
-					logger::debug(FMT_STRING("armor formid: {:08X} {} changed equipSlot {:08X}"), curobj->formID, curobj->fullName, curobj->equipSlot->formID);
+					logger::debug(FMT_STRING("armor formid: {:08X} {} changed equipSlot {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
 				}
 			} catch (const std::exception& e) {
 			}
@@ -816,7 +826,8 @@ namespace ARMOR
 		if (!line.armorAddonToRemove.empty()) {
 			for (const auto& objectToRemove : line.armorAddonToRemove) {
 				std::string        removeFormStr = objectToRemove;
-				RE::TESObjectARMA* removeForm = (RE::TESObjectARMA*)GetFormFromIdentifier(removeFormStr);
+				auto* resolvedRemoveForm = GetFormFromIdentifier(removeFormStr);
+				auto* removeForm = resolvedRemoveForm ? resolvedRemoveForm->As<RE::TESObjectARMA>() : nullptr;
 				if (removeForm) {
 					auto it = curobj->armorAddons.begin();
 					while (it != curobj->armorAddons.end()) {
@@ -1076,11 +1087,10 @@ namespace ARMOR
 				curobj->AddChange(RE::TESForm::ChangeFlags::kFlags);
 			}
 		}
-
-
-
-		
-
+		} catch (const std::exception& e) {
+			logger::warn(FMT_STRING("armor {:08X}: skipped remaining operations after invalid value: {}"), curobj ? curobj->formID : 0, e.what());
+		}
+		return nullptr;
 	}
 
 }

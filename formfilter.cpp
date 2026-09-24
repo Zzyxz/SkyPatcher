@@ -34,7 +34,14 @@ namespace formfilter
 
 	bool matchesModName(const CommonFilterView& a_v, const RE::TESForm* a_form)
 	{
-		const char* const fileName = a_form->GetFile(0)->fileName;
+		if (!a_form) {
+			return false;
+		}
+		const auto* const file = a_form->GetFile(0);
+		if (!file) {
+			return false;
+		}
+		const char* const fileName = file->fileName;
 		for (const auto& modName : a_v.modNames) {
 			if (modName == fileName) {
 				return true;
@@ -249,7 +256,14 @@ namespace formfilter
 
 	bool matchesModName(const ResolvedCommonFilters& a_r, const RE::TESForm* a_form)
 	{
-		const char* const fileName = a_form->GetFile(0)->fileName;
+		if (!a_form || !a_r.modNames) {
+			return false;
+		}
+		const auto* const file = a_form->GetFile(0);
+		if (!file) {
+			return false;
+		}
+		const char* const fileName = file->fileName;
 		for (const auto& modName : *a_r.modNames) {
 			if (modName == fileName) {
 				return true;
@@ -534,8 +548,8 @@ namespace formfilter
 				       a_t.weapon->weaponData.flags2.any(RE::TESObjectWEAP::Data::Flag2::kBoundWeapon);
 
 			case Op::ArmorType:
-				return (static_cast<std::uint32_t>(a_t.armor->bipedModelData.armorType.underlying()) &
-				           static_cast<std::uint32_t>(ops[a_i])) != 0;
+				return static_cast<std::uint32_t>(a_t.armor->bipedModelData.armorType.underlying()) ==
+				       static_cast<std::uint32_t>(ops[a_i]);
 
 			case Op::BipedSlot:
 				return (static_cast<std::uint32_t>(a_t.armor->bipedModelData.bipedObjectSlots.underlying()) &
@@ -619,7 +633,14 @@ namespace formfilter
 
 	bool matchesModName(const MatchProgram& a_p, const RE::TESForm* a_form)
 	{
-		const char* const fileName = a_form->GetFile(0)->fileName;
+		if (!a_form || !a_p.modNames) {
+			return false;
+		}
+		const auto* const file = a_form->GetFile(0);
+		if (!file) {
+			return false;
+		}
+		const char* const fileName = file->fileName;
 		for (const auto& modName : *a_p.modNames) {
 			if (modName == fileName) {
 				return true;
@@ -781,7 +802,7 @@ namespace formfilter
 				a_keys.push_back(sigTagged(kTagWeapSkill, static_cast<std::uint32_t>(v)));
 				return true;
 			case Op::ArmorType:
-				appendMaskBits(a_keys, kTagArmorType, static_cast<std::uint32_t>(v));
+				a_keys.push_back(sigTagged(kTagArmorType, static_cast<std::uint32_t>(v)));
 				return true;
 			case Op::BipedSlot:
 				appendMaskBits(a_keys, kTagBipedSlot, static_cast<std::uint32_t>(v));

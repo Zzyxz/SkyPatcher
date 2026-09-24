@@ -1,5 +1,4 @@
 #include "dirent.h"
-#include <ShlObj.h>
 #include <alch.h>
 #include <ammo.h>
 #include <armor.h>
@@ -14,6 +13,7 @@
 #include <future>
 #include <ingredient.h>
 #include <leveledlist.h>
+#include <light.h>
 #include <magiceffect.h>
 #include <misc.h>
 #include <movementType.h>
@@ -501,7 +501,7 @@ struct Load3D
 		bool refreshStamina = false;
 		bool refreshMagicka = false;
 
-		if (const auto npc = a_this->GetActorBase()) {
+		if (const auto npc = a_this->GetActorBase(); npc && a_this->data.objectReference) {
 			auto data = (RE::ExtraLeveledCreature*)a_this->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
 			auto it = actData.npcData.find(a_this->data.objectReference->formID);
 			bool originalBaseHasStyleList = false;
@@ -544,23 +544,36 @@ struct Load3D
 				if (data->templateBase) {
 					it = actData.npcData.find(data->templateBase->formID);
 					if (it != actData.npcData.end()) {
+						auto* objectBase = a_this->data.objectReference->As<RE::TESNPC>();
 						if (statRefreshEnabled && !(npc->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats && npc->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kPCLevelMult)) {
 							if (it->second.health >= 0) {
 								data->templateBase->actorData.healthOffset = it->second.health;
-								data->originalBase->actorData.healthOffset = data->templateBase->actorData.healthOffset;
-								a_this->data.objectReference->As<RE::TESNPC>()->actorData.healthOffset = data->templateBase->actorData.healthOffset;
+								if (data->originalBase) {
+									data->originalBase->actorData.healthOffset = data->templateBase->actorData.healthOffset;
+								}
+								if (objectBase) {
+									objectBase->actorData.healthOffset = data->templateBase->actorData.healthOffset;
+								}
 								refreshHealth = true;
 							}
 							if (it->second.stamina >= 0) {
 								data->templateBase->actorData.staminaOffset = it->second.stamina;
-								data->originalBase->actorData.staminaOffset = data->templateBase->actorData.staminaOffset;
-								a_this->data.objectReference->As<RE::TESNPC>()->actorData.staminaOffset = data->templateBase->actorData.staminaOffset;
+								if (data->originalBase) {
+									data->originalBase->actorData.staminaOffset = data->templateBase->actorData.staminaOffset;
+								}
+								if (objectBase) {
+									objectBase->actorData.staminaOffset = data->templateBase->actorData.staminaOffset;
+								}
 								refreshStamina = true;
 							}
 							if (it->second.magicka >= 0) {
 								data->templateBase->actorData.magickaOffset = it->second.magicka;
-								data->originalBase->actorData.magickaOffset = data->templateBase->actorData.magickaOffset;
-								a_this->data.objectReference->As<RE::TESNPC>()->actorData.magickaOffset = data->templateBase->actorData.magickaOffset;
+								if (data->originalBase) {
+									data->originalBase->actorData.magickaOffset = data->templateBase->actorData.magickaOffset;
+								}
+								if (objectBase) {
+									objectBase->actorData.magickaOffset = data->templateBase->actorData.magickaOffset;
+								}
 								refreshMagicka = true;
 							}
 						}
@@ -606,13 +619,13 @@ struct Load3D
 
 			}
 
-			if (refreshHealth) {
+			if (refreshHealth && npc->race) {
 				a_this->SetBaseActorValue(RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
 			}
-			if (refreshStamina) {
+			if (refreshStamina && npc->race) {
 				a_this->SetBaseActorValue(RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
 			}
-			if (refreshMagicka) {
+			if (refreshMagicka && npc->race) {
 				a_this->SetBaseActorValue(RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
 			}
 
@@ -841,13 +854,25 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 		const auto start_time{ std::chrono::system_clock::now() };
 
 		const auto processLists = RE::ProcessLists::GetSingleton();
+		if (!processLists) {
+			logger::warn("PostLoadGame: ProcessLists is not available; skipped actor refresh");
+			return;
+		}
 		for (auto actorHandles : processLists->allProcesses) {
+			if (!actorHandles) {
+				continue;
+			}
 			for (const auto actorHandle : *actorHandles) {
 				const auto& actorPtr = actorHandle;
 				const auto  actorHand = actorPtr.get();
 				auto        actor = actorHand.get();
 				if (actor) {
 					if (actor->data.objectReference) {
+						auto* actorBase = actor->data.objectReference->As<RE::TESNPC>();
+						if (!actorBase) {
+							logger::warn(FMT_STRING("PostLoadGame: actor {:08X} has a non-NPC base form; skipped refresh"), actor->formID);
+							continue;
+						}
 						auto it = actData.npcData.find(actor->data.objectReference->formID);
 						auto data = (RE::ExtraLeveledCreature*)actor->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
 						bool originalBaseHasStyleList = false;
@@ -868,7 +893,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 						if (it != actData.npcData.end()) {
 							if (it->second.npcClass) {
-								actor->data.objectReference->As<RE::TESNPC>()->npcClass = it->second.npcClass;
+								actorBase->npcClass = it->second.npcClass;
 							}
 
 							if (it->second.npcCombatStyleList) {
@@ -889,9 +914,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 												dataCS->combatStyle = randomForm;
 											}
 
-											if (actor->data.objectReference->As<RE::TESNPC>()) {
-												actor->data.objectReference->As<RE::TESNPC>()->combatStyle = randomForm;
-											}
+											actorBase->combatStyle = randomForm;
 										}
 									}
 								}
@@ -899,15 +922,11 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 
 							if (it->second.skinWasSet) {
-								if (actor->data.objectReference->As<RE::TESNPC>()) {
-									actor->data.objectReference->As<RE::TESNPC>()->skin = it->second.skin;
-								}
+								actorBase->skin = it->second.skin;
 							}
 
 							if (it->second.npcRace) {
-								if (actor->data.objectReference->As<RE::TESNPC>()) {
-									actor->data.objectReference->As<RE::TESNPC>()->race = it->second.npcRace;
-								}
+								actorBase->race = it->second.npcRace;
 							}
 
 
@@ -1135,9 +1154,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 	case SKSE::MessagingInterface::kNewGame:
 	{
 		auto player = RE::PlayerCharacter::GetSingleton();
-		if (player) {
+		if (player && player->data.objectReference) {
 			auto npc = player->data.objectReference->As<RE::TESNPC>();
-			if (npc) {
+			if (npc && npc->race) {
 			auto it = actData.npcData.find(npc->formID);
 				if (it != actData.npcData.end()) {
 					if (it->second.health >= 0)
@@ -1254,6 +1273,14 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 			const auto elapsed{ std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start_time) };
 			double     seconds = static_cast<double>(elapsed.count()) / 1000000.0;
 			logger::info(">>>>>>>>>>>>>>>>>>>>>>>>>>> Projectile Patcher finished in {} seconds", seconds);
+		}
+
+		if (GetPrivateProfileInt(settingsSection, "iEnableLightPatching", 0, configFile)) {
+			const auto start_time{ std::chrono::system_clock::now() };
+			LIGHT::readConfig(".\\Data\\SKSE\\Plugins\\SkyPatcher\\light\\");
+			const auto elapsed{ std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start_time) };
+			double seconds = static_cast<double>(elapsed.count()) / 1000000.0;
+			logger::info(">>>>>>>>>>>>>>>>>>>>>>>>>>> Light Patcher finished in {} seconds", seconds);
 		}
 
 		if (GetPrivateProfileInt(settingsSection, "iEnableOutfitPatching", 0, configFile)) {
@@ -1380,11 +1407,13 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 			logger::info(">>>>>>>>>>>>>>>>>>>>>>>>>>> Encounterzone Patcher finished in {} seconds", seconds);
 		}
 
-		auto player = RE::PlayerCharacter::GetSingleton();
-		auto npc = player->data.objectReference->As<RE::TESNPC>();
-		player->SetBaseActorValue(RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
-		player->SetBaseActorValue(RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
-		player->SetBaseActorValue(RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
+		if (auto* player = RE::PlayerCharacter::GetSingleton(); player && player->data.objectReference) {
+			if (auto* npc = player->data.objectReference->As<RE::TESNPC>(); npc && npc->race) {
+				player->SetBaseActorValue(RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
+				player->SetBaseActorValue(RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
+				player->SetBaseActorValue(RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
+			}
+		}
 
 		const auto processLists = RE::ProcessLists::GetSingleton();
 		for (auto actorHandles : processLists->allProcesses) {
@@ -1400,15 +1429,19 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 							auto data = (RE::ExtraLeveledCreature*)actor->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
 							if (data) {
 								if (data->templateBase) {
-									data->originalBase->actorData.healthOffset = data->templateBase->actorData.healthOffset;
-									data->originalBase->actorData.staminaOffset = data->templateBase->actorData.staminaOffset;
-									data->originalBase->actorData.magickaOffset = data->templateBase->actorData.magickaOffset;
-									actor->data.objectReference->As<RE::TESNPC>()->actorData = data->templateBase->actorData;
+									if (data->originalBase) {
+										data->originalBase->actorData.healthOffset = data->templateBase->actorData.healthOffset;
+										data->originalBase->actorData.staminaOffset = data->templateBase->actorData.staminaOffset;
+										data->originalBase->actorData.magickaOffset = data->templateBase->actorData.magickaOffset;
+									}
+									if (auto* objectBase = actor->data.objectReference->As<RE::TESNPC>()) {
+										objectBase->actorData = data->templateBase->actorData;
+									}
 								}
 							}
 						}
 						auto npc = actor->data.objectReference->As<RE::TESNPC>();
-						if (npc) {
+						if (npc && npc->race) {
 							actor->SetBaseActorValue(RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
 							actor->SetBaseActorValue(RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
 							actor->SetBaseActorValue(RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
@@ -1516,24 +1549,13 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 
 void InitializeLog()
 {
-	PWSTR documentsPath = nullptr;
-	if (FAILED(::SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, nullptr, &documentsPath)) || !documentsPath) {
-		stl::report_and_fail("Failed to find the Documents directory"sv);
+	auto path = SKSE::log::log_directory();
+	if (!path) {
+		stl::report_and_fail("Failed to find the SKSE log directory"sv);
 	}
 
-	std::filesystem::path path{ documentsPath };
-	::CoTaskMemFree(documentsPath);
-	path /= "My Games";
-#ifdef SKYRIMVR
-	path /= "Skyrim VR";
-#else
-	path /= "Skyrim Special Edition";
-#endif
-	path /= "SKSE";
-	std::filesystem::create_directories(path);
-
-	path /= fmt::format(FMT_STRING("{}.log"), Version::PROJECT);
-	auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path.string(), true);
+	*path /= fmt::format(FMT_STRING("{}.log"), Version::PROJECT);
+	auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path->string(), true);
 
 	auto log = std::make_shared<spdlog::logger>("global log"s, std::move(sink));
 

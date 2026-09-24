@@ -617,6 +617,7 @@ namespace RACE
 
 	void patch(const RACE::patch_instruction& line, RE::TESRace* curobj)
 	{
+		try {
 		if (!line.avifs.empty()) {
 			for (size_t i = 0; i < line.avifs.size(); i++) {
 				std::string  string_form = line.avifs[i];
@@ -1052,6 +1053,9 @@ namespace RACE
 			} catch (const std::exception& e) {
 			}
 		}
+		} catch (const std::exception& e) {
+			logger::warn(FMT_STRING("race {:08X}: skipped remaining operations after invalid value: {}"), curobj ? curobj->formID : 0, e.what());
+		}
 	}
 
 	void* readConfig(const std::string& folder)
@@ -1118,10 +1122,11 @@ namespace RACE
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
-
 	void* readConfigHook(const std::string& folder)
 	{
+		hooktokens.clear();
 		char        skipChar = ';';
 		std::string extension = ".ini";
 
@@ -1173,6 +1178,7 @@ namespace RACE
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 	void LoadRaceDataHook::InstallHook()
@@ -1261,5 +1267,6 @@ namespace RACE
 
 			return result;
 		}
+		return result;
 	}
 }

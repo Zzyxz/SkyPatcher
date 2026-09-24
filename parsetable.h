@@ -428,15 +428,24 @@ namespace sp
 					if (name == "none") {
 						break;
 					}
-					names.push_back(name);
 					const std::string lo = (*it)[2].str();
 					const std::string hi = (*it)[3].str() != "" ? (*it)[3].str() : lo;
-					if (a_spec.kind == FieldKind::MultiInt) {
-						at<std::vector<int>>(a_dest, a_spec.off2)->push_back(std::stoi(lo));
-						at<std::vector<int>>(a_dest, a_spec.off3)->push_back(std::stoi(hi));
-					} else {
-						at<std::vector<float>>(a_dest, a_spec.off2)->push_back(std::stof(lo));
-						at<std::vector<float>>(a_dest, a_spec.off3)->push_back(std::stof(hi));
+					try {
+						if (a_spec.kind == FieldKind::MultiInt) {
+							const int parsedLo = std::stoi(lo);
+							const int parsedHi = std::stoi(hi);
+							names.push_back(name);
+							at<std::vector<int>>(a_dest, a_spec.off2)->push_back(parsedLo);
+							at<std::vector<int>>(a_dest, a_spec.off3)->push_back(parsedHi);
+						} else {
+							const float parsedLo = std::stof(lo);
+							const float parsedHi = std::stof(hi);
+							names.push_back(name);
+							at<std::vector<float>>(a_dest, a_spec.off2)->push_back(parsedLo);
+							at<std::vector<float>>(a_dest, a_spec.off3)->push_back(parsedHi);
+						}
+					} catch (const std::exception& e) {
+						logger::warn(FMT_STRING("Invalid numeric range for config key {} ({}~{}): {}"), a_spec.key, lo, hi, e.what());
 					}
 					++it;
 				}
@@ -455,9 +464,17 @@ namespace sp
 					if (name == "none") {
 						break;
 					}
-					names.push_back(name);
-					lo.push_back(std::stof((*it)[2].str()));
-					hi.push_back((*it)[3].str() != "" ? std::stof((*it)[3].str()) : std::stof((*it)[2].str()));
+					const std::string loText = (*it)[2].str();
+					const std::string hiText = (*it)[3].str() != "" ? (*it)[3].str() : loText;
+					try {
+						const float parsedLo = std::stof(loText);
+						const float parsedHi = std::stof(hiText);
+						names.push_back(name);
+						lo.push_back(parsedLo);
+						hi.push_back(parsedHi);
+					} catch (const std::exception& e) {
+						logger::warn(FMT_STRING("Invalid faction rank range for config key {} ({}~{}): {}"), a_spec.key, loText, hiText, e.what());
+					}
 					++it;
 				}
 				*at<std::vector<std::string>>(a_dest, a_spec.off1) = std::move(names);

@@ -252,6 +252,7 @@ namespace OUTFIT
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 	void patch(const OUTFIT::patch_instruction& line, RE::BGSOutfit* curobj)
@@ -270,7 +271,8 @@ namespace OUTFIT
 		if (!line.objectsRemove.empty()) {
 			for (const auto& objectToRemove : line.objectsRemove) {
 				std::string        removeFormStr = objectToRemove;
-				RE::EffectSetting* removeForm = (RE::EffectSetting*)GetFormFromIdentifier(removeFormStr);
+				auto* resolvedRemoveForm = GetFormFromIdentifier(removeFormStr);
+				auto* removeForm = resolvedRemoveForm ? resolvedRemoveForm->As<RE::EffectSetting>() : nullptr;
 				if (removeForm) {
 					auto it = curobj->outfitItems.begin();
 					while (it != curobj->outfitItems.end()) {

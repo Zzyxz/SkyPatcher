@@ -352,6 +352,7 @@ namespace COBJ
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 	void* patch(const COBJ::patch_instruction& line, RE::BGSConstructibleObject* curobj)
@@ -381,7 +382,8 @@ namespace COBJ
 					logger::warn(FMT_STRING("Invalid count for removeFromCobjsByCount: {}"), objectToAdd[1]);
 					continue;
 				}
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
+				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
+				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
 					curobj->requiredItems.RemoveObjectFromContainer(addForm, count);
@@ -395,7 +397,8 @@ namespace COBJ
 		if (!line.removeInstancesContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.removeInstancesContainerObjects) {
 				std::string         addFormStr = objectToAdd;
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
+				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
+				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
 					auto removedObjectsCount = curobj->requiredItems.RemoveObjectInstancesFromContainer(addForm);
@@ -419,7 +422,8 @@ namespace COBJ
 						continue;
 					}
 				}
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
+				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
+				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
 					curobj->requiredItems.AddObjectToContainer(addForm, count, nullptr);
@@ -452,7 +456,8 @@ namespace COBJ
 					continue;
 				}
 				uint32_t            createdItemCount = curobj->data.numConstructed;
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(addFormStr);
+				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
+				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
 					double proportion = static_cast<double>(createdItemCount) / maxAmount;
@@ -474,8 +479,10 @@ namespace COBJ
 				}
 				std::string         object1 = objectToAdd[0];
 				std::string         object2 = (objectToAdd[1]);
-				RE::TESBoundObject* oldObject = (RE::TESBoundObject*)GetFormFromIdentifier(object1);
-				RE::TESBoundObject* newObject = (RE::TESBoundObject*)GetFormFromIdentifier(object2);
+				auto* resolvedOldObject = GetFormFromIdentifier(object1);
+				auto* resolvedNewObject = GetFormFromIdentifier(object2);
+				auto* oldObject = resolvedOldObject ? resolvedOldObject->As<RE::TESBoundObject>() : nullptr;
+				auto* newObject = resolvedNewObject ? resolvedNewObject->As<RE::TESBoundObject>() : nullptr;
 
 				if (oldObject && newObject) {
 					replaceObjectInContainer(curobj->requiredItems, oldObject, newObject);
@@ -494,7 +501,8 @@ namespace COBJ
 
 			RE::TESBoundObject* oldObject = nullptr;
 			if (!identifier.empty() && identifier != "null") {
-				oldObject = (RE::TESBoundObject*)GetFormFromIdentifier(identifier);
+				auto* resolvedObject = GetFormFromIdentifier(identifier);
+				oldObject = resolvedObject ? resolvedObject->As<RE::TESBoundObject>() : nullptr;
 				if (!oldObject) {
 					logger::warn(FMT_STRING("Invalid object identifier: {}"), identifier);
 					continue;
@@ -530,7 +538,8 @@ namespace COBJ
 
 			RE::TESBoundObject* oldObject = nullptr;
 			if (!identifier.empty() && identifier != "null") {
-				oldObject = (RE::TESBoundObject*)GetFormFromIdentifier(identifier);
+				auto* resolvedObject = GetFormFromIdentifier(identifier);
+				oldObject = resolvedObject ? resolvedObject->As<RE::TESBoundObject>() : nullptr;
 				if (!oldObject) {
 					logger::warn(FMT_STRING("Invalid object identifier: {}"), identifier);
 					continue;
@@ -628,6 +637,7 @@ namespace COBJ
 				}
 			}
 		}
+		return nullptr;
 	}
 
 }

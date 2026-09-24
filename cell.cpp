@@ -115,7 +115,8 @@ namespace CELL
 						if (!line.skipLT.empty()) {
 							bool modFound = false;
 							for (const auto& modName : line.skipLT) {
-								if (curobj->lightingTemplate && modName == curobj->lightingTemplate->GetFile(0)->fileName) {
+							if (const auto* file = curobj->lightingTemplate ? curobj->lightingTemplate->GetFile(0) : nullptr;
+								file && modName == file->fileName) {
 									modFound = true;
 								}
 							}
@@ -154,7 +155,8 @@ namespace CELL
 				if (!line.skipLT.empty()) {
 					bool modFound = false;
 					for (const auto& modName : line.skipLT) {
-						if (curobj->lightingTemplate && modName == curobj->lightingTemplate->GetFile(0)->fileName) {
+						if (const auto* file = curobj->lightingTemplate ? curobj->lightingTemplate->GetFile(0) : nullptr;
+							file && modName == file->fileName) {
 							modFound = true;
 						}
 					}
@@ -329,6 +331,7 @@ namespace CELL
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 	void* patch(const CELL::patch_instruction& line, RE::TESObjectCELL* curobj)
@@ -570,6 +573,30 @@ namespace CELL
 			}
 		}
 
+		const std::string* interiorValues[] = {
+			&line.fogNear, &line.fogFar, &line.fogPower, &line.clipDist,
+			&line.ambientRed, &line.ambientGreen, &line.ambientBlue,
+			&line.directionalRed, &line.directionalGreen, &line.directionalBlue,
+			&line.fogColorNearRed, &line.fogColorNearGreen, &line.fogColorNearBlue,
+			&line.directionalAmbientXMinRed, &line.directionalAmbientXMinGreen, &line.directionalAmbientXMinBlue,
+			&line.directionalAmbientXMaxRed, &line.directionalAmbientXMaxGreen, &line.directionalAmbientXMaxBlue,
+			&line.directionalAmbientYMinRed, &line.directionalAmbientYMinGreen, &line.directionalAmbientYMinBlue,
+			&line.directionalAmbientYMaxRed, &line.directionalAmbientYMaxGreen, &line.directionalAmbientYMaxBlue,
+			&line.directionalAmbientZMinRed, &line.directionalAmbientZMinGreen, &line.directionalAmbientZMinBlue,
+			&line.directionalAmbientZMaxRed, &line.directionalAmbientZMaxGreen, &line.directionalAmbientZMaxBlue,
+			&line.directionalAmbientSpecularRed, &line.directionalAmbientSpecularGreen, &line.directionalAmbientSpecularBlue,
+			&line.directionalXY, &line.directionalZ
+		};
+		bool hasInteriorOperation = !line.removeInheritanceFlags.empty() || !line.setInheritanceFlags.empty();
+		for (const auto* value : interiorValues) {
+			if (value && !value->empty() && *value != "none") {
+				hasInteriorOperation = true;
+				break;
+			}
+		}
+
+		if (curobj->cellData.interior) {
+		try {
 		if (!line.removeInheritanceFlags.empty()) {
 			static const std::unordered_map<std::string, RE::INTERIOR_DATA::Inherit> inheritFlagMap = {
 				{ "ambientcolor", RE::INTERIOR_DATA::Inherit::kAmbientColor },
@@ -630,89 +657,115 @@ namespace CELL
 			try {
 				curobj->cellData.interior->fogColorNear.red = static_cast<std::uint8_t>(std::stoi(line.fogColorNearRed));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogColorNear.red to {}"), curobj->formID, curobj->cellData.interior->fogColorNear.red);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.fogColorNearGreen.empty() && line.fogColorNearGreen != "none") {
 			try {
 				curobj->cellData.interior->fogColorNear.green = static_cast<std::uint8_t>(std::stoi(line.fogColorNearGreen));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogColorNear.green to {}"), curobj->formID, curobj->cellData.interior->fogColorNear.green);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.fogColorNearBlue.empty() && line.fogColorNearBlue != "none") {
 			try {
 				curobj->cellData.interior->fogColorNear.blue = static_cast<std::uint8_t>(std::stoi(line.fogColorNearBlue));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogColorNear.blue to {}"), curobj->formID, curobj->cellData.interior->fogColorNear.blue);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.directionalRed.empty() && line.directionalRed != "none") {
 			try {
 				curobj->cellData.interior->directional.red = static_cast<std::uint8_t>(std::stoi(line.directionalRed));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed directionalRed to {}"), curobj->formID, curobj->cellData.interior->directional.red);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 		if (!line.directionalGreen.empty() && line.directionalGreen != "none") {
 			try {
 				curobj->cellData.interior->directional.green = static_cast<std::uint8_t>(std::stoi(line.directionalGreen));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed directionalGreen to {}"), curobj->formID, curobj->cellData.interior->directional.green);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 		if (!line.directionalBlue.empty() && line.directionalBlue != "none") {
 			try {
 				curobj->cellData.interior->directional.blue = static_cast<std::uint8_t>(std::stoi(line.directionalBlue));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed directionalBlue to {}"), curobj->formID, curobj->cellData.interior->directional.blue);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.ambientBlue.empty() && line.ambientBlue != "none") {
 			try {
 				curobj->cellData.interior->ambient.blue = static_cast<std::uint8_t>(std::stoi(line.ambientBlue));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed ambientBlue to {}"), curobj->formID, curobj->cellData.interior->ambient.blue);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.ambientRed.empty() && line.ambientRed != "none") {
 			try {
 				curobj->cellData.interior->ambient.red = static_cast<std::uint8_t>(std::stoi(line.ambientRed));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed ambientRed to {}"), curobj->formID, curobj->cellData.interior->ambient.red);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.ambientGreen.empty() && line.ambientGreen != "none") {
 			try {
 				curobj->cellData.interior->ambient.green = static_cast<std::uint8_t>(std::stoi(line.ambientGreen));
 				logger::debug(FMT_STRING("cell formid: {:08X} changed ambientGreen to {}"), curobj->formID, curobj->cellData.interior->ambient.green);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.fogNear.empty() && line.fogNear != "none") {
 			try {
 				curobj->cellData.interior->fogNear = std::stof(line.fogNear);
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogNear to {}"), curobj->formID, curobj->cellData.interior->fogNear);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.fogFar.empty() && line.fogFar != "none") {
 			try {
 				curobj->cellData.interior->fogFar = std::stof(line.fogFar);
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogFar to {}"), curobj->formID, curobj->cellData.interior->fogFar);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.fogPower.empty() && line.fogPower != "none") {
 			try {
 				curobj->cellData.interior->fogPower = std::stof(line.fogPower);
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogPower to {}"), curobj->formID, curobj->cellData.interior->fogPower);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.clipDist.empty() && line.clipDist != "none") {
 			try {
 				curobj->cellData.interior->clipDist = std::stof(line.clipDist);
 				logger::debug(FMT_STRING("cell formid: {:08X} changed clipDist to {}"), curobj->formID, curobj->cellData.interior->clipDist);
-			} catch (const std::exception&) {}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.directionalAmbientXMinRed.empty() && line.directionalAmbientXMinRed != "none") {
@@ -817,6 +870,12 @@ namespace CELL
 			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalZ to {}"),
 				curobj->formID,
 				curobj->cellData.interior->directionalZ);
+		}
+		} catch (const std::exception& e) {
+			logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+		}
+		} else if (hasInteriorOperation) {
+			logger::warn(FMT_STRING("cell formid: {:08X} is exterior; skipped interior-only operations"), curobj->formID);
 		}
 
 		if (!line.lightingTemplate.empty() && line.lightingTemplate != "none") {

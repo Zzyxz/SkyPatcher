@@ -168,10 +168,12 @@ namespace FACTION
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 	void* patch(const FACTION::patch_instruction& line, RE::TESFaction* curobj)
 	{
+		try {
 
 
 		if (!line.removeFlags.empty()) {
@@ -410,7 +412,10 @@ namespace FACTION
 				}
 			}
 		}
-
+		} catch (const std::exception& e) {
+			logger::warn(FMT_STRING("faction {:08X}: skipped remaining operations after invalid value: {}"), curobj ? curobj->formID : 0, e.what());
+		}
+		return nullptr;
 	}
 
 }

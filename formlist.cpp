@@ -201,6 +201,7 @@ namespace FORMLIST
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 }

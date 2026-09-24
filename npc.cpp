@@ -2,6 +2,7 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <algorithm>
+#include <limits>
 #include <unordered_map>
 
 namespace NPC
@@ -400,6 +401,7 @@ namespace NPC
 
 	void* patch(const NPC::patch_instruction& line, RE::TESNPC* curobj)
 	{
+		try {
 
 
 
@@ -480,14 +482,22 @@ namespace NPC
 
 		if (!line.rcslist.empty()) {
 			for (const auto& tempCs : line.rcslist) {
+				if (tempCs.empty()) {
+					logger::warn(FMT_STRING("NPC {:08X}: empty setRandomCombatStyle entry"), curobj->formID);
+					continue;
+				}
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(tempCs[0]);
 				if (currentform && currentform->formType == RE::FormType::FormList) {
 					aData.npcData[curobj->formID].npcCombatStyleList = ((RE::BGSListForm*)currentform);
 
 					if (tempCs.size() > 1) {
-						aData.npcData[curobj->formID].npcCombatStyleChance = std::stoi(tempCs[1]);
-						logger::debug(FMT_STRING("NPC {:08X} {} will get random combat style from {:08X} with a chance of {}%"), curobj->formID, curobj->fullName, currentform->formID, tempCs[1]);
+						try {
+							aData.npcData[curobj->formID].npcCombatStyleChance = std::stoi(tempCs[1]);
+							logger::debug(FMT_STRING("NPC {:08X} {} will get random combat style from {:08X} with a chance of {}%"), curobj->formID, curobj->fullName, currentform->formID, tempCs[1]);
+						} catch (const std::exception& e) {
+							logger::warn(FMT_STRING("NPC {:08X}: invalid combat style chance '{}': {}"), curobj->formID, tempCs[1], e.what());
+						}
 					}
 					else {
 						logger::debug(FMT_STRING("NPC {:08X} {} will get random combat style from {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
@@ -597,7 +607,7 @@ namespace NPC
 
 
 
-		if (!line.setRandomVisualStyle.empty()) {
+		if (!line.setRandomVisualStyle.empty() && !line.setRandomVisualStyle[0].empty()) {
 			RE::TESForm* currentform = nullptr;
 			currentform = GetFormFromIdentifier(line.setRandomVisualStyle[0][0]);
 			if (currentform && currentform->formType == RE::FormType::FormList) {
@@ -605,7 +615,11 @@ namespace NPC
 
 				if (line.setRandomVisualStyle[0].size() > 1) {
 					logger::debug(FMT_STRING("NPC {:08X} {} will get random visual style from {:08X} with a chance of {}%"), curobj->formID, curobj->fullName, currentform->formID, line.setRandomVisualStyle[0][1]);
-					aData.npcData[curobj->formID].styleChance = std::stoi(line.setRandomVisualStyle[0][1]);
+					try {
+						aData.npcData[curobj->formID].styleChance = std::stoi(line.setRandomVisualStyle[0][1]);
+					} catch (const std::exception& e) {
+						logger::warn(FMT_STRING("NPC {:08X}: invalid visual style chance '{}': {}"), curobj->formID, line.setRandomVisualStyle[0][1], e.what());
+					}
 				}
 				else {
 					logger::debug(FMT_STRING("NPC {:08X} {} will get random visual style from {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
@@ -620,7 +634,7 @@ namespace NPC
 			}
 		}
 
-		if (!line.addRandomVisualStyle.empty()) {
+		if (!line.addRandomVisualStyle.empty() && !line.addRandomVisualStyle[0].empty()) {
 			RE::TESForm* currentform = nullptr;
 			currentform = GetFormFromIdentifier(line.addRandomVisualStyle[0][0]);
 			int added = 0;
@@ -645,7 +659,11 @@ namespace NPC
 
 				if (line.addRandomVisualStyle[0].size() > 1) {
 					logger::debug(FMT_STRING("NPC {:08X} {} will get random visual style from {:08X} with a chance of {}%  (added random visual styles {})"), curobj->formID, curobj->fullName, currentform->formID, line.addRandomVisualStyle[0][1], added);
-					aData.npcData[curobj->formID].styleChance = std::stoi(line.addRandomVisualStyle[0][1]);
+					try {
+						aData.npcData[curobj->formID].styleChance = std::stoi(line.addRandomVisualStyle[0][1]);
+					} catch (const std::exception& e) {
+						logger::warn(FMT_STRING("NPC {:08X}: invalid added visual style chance '{}': {}"), curobj->formID, line.addRandomVisualStyle[0][1], e.what());
+					}
 				}
 				else {
 					logger::debug(FMT_STRING("NPC {:08X} {} will get random visual style from {:08X}   (added random visual styles {})"), curobj->formID, curobj->fullName, currentform->formID, added);
@@ -1174,12 +1192,11 @@ namespace NPC
 			for (size_t i = 0; i < line.objectsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.objectsToRemove[i]);
-				if (currentform) {
-					RE::TESBoundObject* bo = (RE::TESBoundObject*)currentform;
-					if (bo) {
+				if (auto* bo = currentform ? currentform->As<RE::TESBoundObject>() : nullptr) {
 						curobj->RemoveObjectInstancesFromContainer(bo);
 						logger::debug(FMT_STRING("npc formid: {:08X} {} removed all object instances {:08X} "), curobj->formID, curobj->fullName, bo->formID);
-					}
+				} else if (currentform) {
+					logger::warn(FMT_STRING("npc formid: {:08X} cannot remove non-bound form {}"), curobj->formID, line.objectsToRemove[i]);
 				}
 			}
 		}
@@ -1188,12 +1205,11 @@ namespace NPC
 			for (size_t i = 0; i < line.objectsToRemoveNew.size(); i++) {
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.objectsToRemoveNew[i]);
-				if (currentform) {
-					RE::TESBoundObject* bo = (RE::TESBoundObject*)currentform;
-					if (bo) {
+				if (auto* bo = currentform ? currentform->As<RE::TESBoundObject>() : nullptr) {
 						curobj->RemoveObjectInstancesFromContainer(bo);
 						logger::debug(FMT_STRING("npc formid: {:08X} {} removed all object instances {:08X} "), curobj->formID, curobj->fullName, bo->formID);
-					}
+				} else if (currentform) {
+					logger::warn(FMT_STRING("npc formid: {:08X} cannot remove non-bound form {}"), curobj->formID, line.objectsToRemoveNew[i]);
 				}
 			}
 		}
@@ -1203,50 +1219,87 @@ namespace NPC
 		if (!line.removeContainerObjectsByCount.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjectsByCount) {
 				if (objectToAdd.size() < 2) { logger::warn("npc {:08X}: invalid removeContainerObjectsByCount entry, expected 2 values", curobj->formID); continue; }
-				uint32_t            count = std::stoi(objectToAdd[1]);
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(objectToAdd[0]);
+				uint32_t count = 0;
+				try {
+					const auto parsed = std::stoul(objectToAdd[1]);
+					if (parsed > std::numeric_limits<std::uint32_t>::max()) {
+						throw std::out_of_range("count exceeds uint32 range");
+					}
+					count = static_cast<std::uint32_t>(parsed);
+				} catch (const std::exception& e) {
+					logger::warn(FMT_STRING("npc {:08X}: invalid remove count '{}': {}"), curobj->formID, objectToAdd[1], e.what());
+					continue;
+				}
+				auto* form = GetFormFromIdentifier(objectToAdd[0]);
+				auto* addForm = form ? form->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
 					curobj->RemoveObjectFromContainer(addForm, count);
 					logger::debug(FMT_STRING("npc formid: {:08X} removed by count Form {:08X}"), curobj->formID, addForm->formID);
 				}
 				else {
-					logger::critical(FMT_STRING("npc formid: {:08X} Form not found: {} (removeContainerObjectsByCount)"), curobj->formID, objectToAdd[0]);
+					logger::warn(FMT_STRING("npc formid: {:08X} invalid bound Form: {} (removeContainerObjectsByCount)"), curobj->formID, objectToAdd[0]);
 				}
 			}
 		}
 
 		if (!line.removeContainerObjectsByKeyword.empty()) {
 			for (const auto& objectToAdd : line.removeContainerObjectsByKeyword) {
-				RE::BGSKeyword* addForm = (RE::BGSKeyword*)GetFormFromIdentifier(objectToAdd);
+				auto* form = GetFormFromIdentifier(objectToAdd);
+				auto* addForm = form ? form->As<RE::BGSKeyword>() : nullptr;
 				if (addForm) {
 					curobj->RemoveObjectFromContainerByKeyword(addForm);
 					logger::debug(FMT_STRING("npc formid: {:08X} removed by keyword Form {:08X}"), curobj->formID, addForm->formID);
 				}
 				else {
-					logger::critical(FMT_STRING("npc formid: {:08X} Form not found: {} (remove by keyword)"), curobj->formID, objectToAdd[0]);
+					logger::warn(FMT_STRING("npc formid: {:08X} invalid keyword Form: {} (remove by keyword)"), curobj->formID, objectToAdd);
 				}
 			}
 		}
 
 		if (!line.objectsToAdd.empty()) {
 			for (size_t i = 0; i < line.objectsToAdd.size(); i++) {
+				if (i >= line.objectsToAddValue.size()) {
+					logger::warn(FMT_STRING("npc formid: {:08X} missing count for object {}"), curobj->formID, line.objectsToAdd[i]);
+					continue;
+				}
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.objectsToAdd[i]);
-				if (currentform) {
-					RE::TESBoundObject* bo = (RE::TESBoundObject*)currentform;
-					if (bo) {
-						curobj->AddObjectToContainer(bo, std::stoi(line.objectsToAddValue[i]), nullptr);
-						logger::debug(FMT_STRING("npc formid: {:08X} added object {:08X} {} "), curobj->formID, ((RE::TESBoundObject*)currentform)->formID, line.objectsToAddValue[i]);
+				if (auto* bo = currentform ? currentform->As<RE::TESBoundObject>() : nullptr) {
+					try {
+						const auto count = std::stoi(line.objectsToAddValue[i]);
+						curobj->AddObjectToContainer(bo, count, nullptr);
+						logger::debug(FMT_STRING("npc formid: {:08X} added object {:08X} {} "), curobj->formID, bo->formID, count);
+					} catch (const std::exception& e) {
+						logger::warn(FMT_STRING("npc formid: {:08X} invalid add count '{}': {}"), curobj->formID, line.objectsToAddValue[i], e.what());
 					}
+				} else if (currentform) {
+					logger::warn(FMT_STRING("npc formid: {:08X} cannot add non-bound form {}"), curobj->formID, line.objectsToAdd[i]);
 				}
 			}
 		}
 
 		if (!line.addedContainerObjectsOnce.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjectsOnce) {
-				uint32_t            count = std::stoi(objectToAdd[1]);
-				RE::TESBoundObject* addForm = (RE::TESBoundObject*)GetFormFromIdentifier(objectToAdd[0]);
+				if (objectToAdd.empty()) {
+					logger::warn(FMT_STRING("npc {:08X}: empty addOnceToInventory entry"), curobj->formID);
+					continue;
+				}
+				uint32_t count = 1;
+				if (objectToAdd.size() > 1 && !objectToAdd[1].empty()) {
+					try {
+						const auto parsed = std::stoul(objectToAdd[1]);
+						if (parsed > std::numeric_limits<std::uint32_t>::max()) {
+							throw std::out_of_range("count exceeds uint32 range");
+						}
+						count = static_cast<std::uint32_t>(parsed);
+					} catch (const std::exception& e) {
+						logger::warn(FMT_STRING("npc {:08X}: invalid add-once count '{}': {}"), curobj->formID, objectToAdd[1], e.what());
+						continue;
+					}
+				}
+				auto* form = GetFormFromIdentifier(objectToAdd[0]);
+				auto* addForm = form ? form->As<RE::TESBoundObject>() : nullptr;
 				if (addForm) {
 					bool formExists = curobj->CountObjectsInContainer(addForm) != 0;
 					if (!formExists) {
@@ -1258,7 +1311,7 @@ namespace NPC
 					}
 				}
 				else {
-					logger::critical(FMT_STRING("npc {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
+					logger::warn(FMT_STRING("npc {:08X} invalid bound Form: {}"), curobj->formID, objectToAdd[0]);
 				}
 			}
 		}
@@ -1268,12 +1321,17 @@ namespace NPC
 				if (objectToAdd.size() < 2) { logger::warn("npc {:08X}: invalid objectsToReplace entry, expected 2 values", curobj->formID); continue; }
 				std::string         object1 = objectToAdd[0];
 				std::string         object2 = objectToAdd[1];
-				RE::TESBoundObject* oldObject = (RE::TESBoundObject*)GetFormFromIdentifier(object1);
-				RE::TESBoundObject* newObject = (RE::TESBoundObject*)GetFormFromIdentifier(object2);
+				auto* oldForm = GetFormFromIdentifier(object1);
+				auto* newForm = GetFormFromIdentifier(object2);
+				auto* oldObject = oldForm ? oldForm->As<RE::TESBoundObject>() : nullptr;
+				auto* newObject = newForm ? newForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (oldObject && newObject) {
 					replaceObjectInContainer(*curobj, oldObject, newObject);
 					logger::debug(FMT_STRING("npc formid: {:08X} replaced Form {:08X} with Form {:08X} "), curobj->formID, oldObject->formID, newObject->formID);
+				}
+				else {
+					logger::warn(FMT_STRING("npc formid: {:08X} invalid bound Form in replacement: {} -> {}"), curobj->formID, object1, object2);
 				}
 			}
 		}
@@ -1397,9 +1455,7 @@ namespace NPC
 		if (!line.copyVisualStyle.empty() && line.copyVisualStyle != "none") {
 			RE::TESForm* currentform = nullptr;
 			currentform = GetFormFromIdentifier(line.copyVisualStyle);
-			if (currentform) {
-				RE::TESNPC* bo = (RE::TESNPC*)currentform;
-				if (bo) {
+			if (auto* bo = currentform ? currentform->As<RE::TESNPC>() : nullptr) {
 					aData.npcData[curobj->formID].npcVisual = bo;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed visual to {:08X} Start"), curobj->formID, curobj->fullName, bo->formID);
 					curobj->height = bo->height;
@@ -1415,7 +1471,8 @@ namespace NPC
 						}
 					}
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed visual to {:08X} Completed"), curobj->formID, curobj->fullName, bo->formID);
-				}
+			} else {
+				logger::warn(FMT_STRING("npc formid: {:08X} copyVisualStyle is not a valid NPC: {}"), curobj->formID, line.copyVisualStyle);
 			}
 		}
 
@@ -1694,10 +1751,15 @@ namespace NPC
 
 			}
 		}
+		} catch (const std::exception& e) {
+			logger::warn(FMT_STRING("npc {:08X}: skipped remaining operations after invalid value: {}"), curobj ? curobj->formID : 0, e.what());
+		}
+		return nullptr;
 	}
 
 	ActorData readConfig(const std::string& folder)
 	{
+		aData.npcData.clear();
 		char        skipChar = ';';
 		std::string extension = ".ini";
 
@@ -1769,6 +1831,7 @@ namespace NPC
 
 	void* readConfigHook(const std::string& folder)
 	{
+		hooktokens.clear();
 		char        skipChar = ';';
 		std::string extension = ".ini";
 
@@ -1822,6 +1885,7 @@ namespace NPC
 				logger::info(FMT_STRING("Couldn't open directory {}."), currentFolder.c_str());
 			}
 		}
+		return nullptr;
 	}
 
 	void setbEnableSetLevelDirectlyByPCMult()
@@ -2045,8 +2109,19 @@ namespace NPC
 		if (!line.skillRestrict.empty()) {
 			std::vector<std::uint64_t> ranges;
 			for (const auto& skillArr : line.skillRestrict) {
-				const int lo = std::stoi(skillArr[1]);
-				const int hi = std::stoi(skillArr[2]);
+				if (skillArr.size() < 3) {
+					logger::warn(FMT_STRING("Invalid restrictToSkill entry: expected skill, minimum and maximum"));
+					continue;
+				}
+				int lo = 0;
+				int hi = 0;
+				try {
+					lo = std::stoi(skillArr[1]);
+					hi = std::stoi(skillArr[2]);
+				} catch (const std::exception& e) {
+					logger::warn(FMT_STRING("Invalid restrictToSkill range '{}~{}': {}"), skillArr[1], skillArr[2], e.what());
+					continue;
+				}
 				std::uint64_t skill = 0;
 				if (!lookupSkill(toLowerCase(skillArr[0]), skill) || lo < 0 || hi < 0) {
 					continue;
@@ -2150,8 +2225,9 @@ namespace NPC
 
 				if (!line.modNames.empty()) {
 					bool modFound = false;
+					const auto* file = curobj->GetFile(0);
 					for (auto const& modName : line.modNames) {
-						if (modName == curobj->GetFile(0)->fileName) {
+						if (file && modName == file->fileName) {
 							modFound = true;
 						}
 					}
