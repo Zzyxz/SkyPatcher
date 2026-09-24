@@ -1281,7 +1281,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 			logger::info(">>>>>>>>>>>>>>>>>>>>>>>>>>> Projectile Patcher finished in {} seconds", seconds);
 		}
 
-		if (GetPrivateProfileInt(settingsSection, "iEnableLightPatching", 0, configFile)) {
+		if (GetPrivateProfileInt(settingsSection, "iEnableLightPatching", 1, configFile)) {
 			const auto start_time{ std::chrono::system_clock::now() };
 			LIGHT::readConfig(".\\Data\\SKSE\\Plugins\\SkyPatcher\\light\\");
 			const auto elapsed{ std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start_time) };
