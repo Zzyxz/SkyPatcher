@@ -1,5 +1,8 @@
 #include "formlist.h"
 #include "parsetable.h"
+
+#include <algorithm>
+#include <unordered_set>
 namespace FORMLIST
 {
 	namespace
@@ -56,28 +59,32 @@ namespace FORMLIST
 		const auto                     dataHandler = RE::TESDataHandler::GetSingleton();
 		auto& objectArray = dataHandler->GetFormArray<RE::BGSListForm>();
 		for (const auto& line : tokens) {
+			const auto modMatches = [&line](const RE::BGSListForm* a_list) {
+				if (line.modNames.empty()) {
+					return true;
+				}
+				const auto* file = a_list->GetFile(0);
+				return file && std::find(line.modNames.begin(), line.modNames.end(), file->fileName) != line.modNames.end();
+			};
 
 			if (!line.objects.empty()) {
+				std::unordered_set<RE::FormID> patched;
 				for (const auto& objectstring : line.objects) {
-					RE::TESForm*     currentform = nullptr;
-					RE::BGSListForm* object = nullptr;
-
-					std::string string_form = objectstring;
-					currentform = GetFormFromIdentifier(string_form);
-					if (currentform && currentform->formType == RE::FormType::FormList) {
-						object = (RE::BGSListForm*)currentform;
-						if (!object || object->IsDeleted()) {
-							continue;
-						}
-						if (object->formID) {
-							patch(line, object);
-							break;
-						}
+					auto* currentform = GetFormFromIdentifier(objectstring);
+					auto* object = currentform ? currentform->As<RE::BGSListForm>() : nullptr;
+					if (!object || object->IsDeleted() || !modMatches(object) || !patched.insert(object->formID).second) {
+						continue;
 					}
+					patch(line, object);
+				}
+			} else {
+				for (auto* object : objectArray) {
+					if (!object || object->IsDeleted() || !modMatches(object)) {
+						continue;
+					}
+					patch(line, object);
 				}
 			}
-
-			
 		}
 	}
 
