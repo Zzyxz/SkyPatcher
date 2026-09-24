@@ -1,6 +1,7 @@
 #include "ingredient.h"
 #include "formfilter.h"
 #include "parsetable.h"
+#include <unordered_set>
 namespace INGR
 {
 	namespace
@@ -59,6 +60,7 @@ namespace INGR
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
 		auto& objectIngredientArray = dataHandler->GetFormArray<RE::IngredientItem>();
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			
 			if (!line.objects.empty()) {
 				for (const auto& npcstring : line.objects) {
@@ -69,7 +71,9 @@ namespace INGR
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Ingredient) {
 						curobj = (RE::IngredientItem*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -226,7 +230,9 @@ namespace INGR
 
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 
 

@@ -2,6 +2,7 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <unordered_set>
 
 namespace ENCOUNTERZONE
 {
@@ -48,6 +49,7 @@ namespace ENCOUNTERZONE
 		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSEncounterZone>();
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -57,7 +59,9 @@ namespace ENCOUNTERZONE
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::EncounterZone) {
 						curobj = (RE::BGSEncounterZone*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -126,7 +130,9 @@ namespace ENCOUNTERZONE
 				
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 			}
 		}

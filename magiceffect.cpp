@@ -2,6 +2,7 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <unordered_set>
 
 namespace MGEF
 {
@@ -273,6 +274,7 @@ namespace MGEF
 		auto& ObjectArray = dataHandler->GetFormArray<RE::EffectSetting>();
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -282,7 +284,9 @@ namespace MGEF
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::MagicEffect) {
 						curobj = (RE::EffectSetting*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -499,7 +503,9 @@ namespace MGEF
 
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 			}
 		}

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace NPC
 {
@@ -195,12 +196,15 @@ namespace NPC
 		std::vector<std::uint32_t>  candidates;
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			indexStale = indexStale || npcRuleInvalidatesIndex(line);
 
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					if (auto* currentform = GetFormFromIdentifier(npcstring); currentform && currentform->formType == RE::FormType::NPC) {
-						patch(line, currentform->As<RE::TESNPC>());
+						if (patched.insert((currentform->As<RE::TESNPC>())->formID).second) {
+							patch(line, currentform->As<RE::TESNPC>());
+						}
 					}
 				}
 			}
@@ -240,7 +244,9 @@ namespace NPC
 					continue;
 				}
 				if (findObject(line, program, curobj)) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 			}
 		}

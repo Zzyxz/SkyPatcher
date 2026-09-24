@@ -2,6 +2,7 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include "utility.h"
+#include <unordered_set>
 
 namespace ARMOR
 {
@@ -311,6 +312,7 @@ namespace ARMOR
 		std::vector<std::uint32_t>  candidates;
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			indexStale = indexStale || armorRuleInvalidatesIndex(line);
 
 			if (!line.object.empty()) {
@@ -322,7 +324,9 @@ namespace ARMOR
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Armor) {
 						curobj = (RE::TESObjectARMO*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -374,7 +378,9 @@ namespace ARMOR
 				target.kf = static_cast<const RE::BGSKeywordForm*>(curobj);
 				target.armor = curobj;
 				if (formfilter::runProgram(program, target, scratch)) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 			}
 		}

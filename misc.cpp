@@ -2,6 +2,7 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <unordered_set>
 
 namespace MISC
 {
@@ -59,6 +60,7 @@ namespace MISC
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectMISC>();
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -68,7 +70,9 @@ namespace MISC
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Misc) {
 						curobj = (RE::TESObjectMISC*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -172,7 +176,9 @@ namespace MISC
 				
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 			}
 		}

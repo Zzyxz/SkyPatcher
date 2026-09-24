@@ -2,6 +2,7 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <unordered_set>
 
 namespace BOOK
 {
@@ -73,6 +74,7 @@ namespace BOOK
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectBOOK>();
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -82,7 +84,9 @@ namespace BOOK
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Book) {
 						curobj = (RE::TESObjectBOOK*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -227,7 +231,9 @@ namespace BOOK
 				}
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 			}
 		}

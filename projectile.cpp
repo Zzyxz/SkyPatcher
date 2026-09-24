@@ -2,6 +2,7 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <unordered_set>
 
 namespace PROJECTILE
 {
@@ -58,6 +59,7 @@ namespace PROJECTILE
 		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSProjectile>();
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -67,7 +69,9 @@ namespace PROJECTILE
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Projectile) {
 						curobj = (RE::BGSProjectile*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -129,7 +133,9 @@ namespace PROJECTILE
 				}
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 			}
 		}

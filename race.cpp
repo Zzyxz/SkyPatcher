@@ -1,6 +1,7 @@
 #include "race.h"
 #include "formfilter.h"
 #include "parsetable.h"
+#include <unordered_set>
 
 namespace RACE
 {
@@ -210,6 +211,7 @@ namespace RACE
 		auto& RaceArray = dataHandler->GetFormArray<RE::TESRace>();
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm* currentform = nullptr;
@@ -219,7 +221,9 @@ namespace RACE
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Race) {
 						curobj = (RE::TESRace*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -314,7 +318,9 @@ namespace RACE
 				}
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 			}
 		}

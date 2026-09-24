@@ -2,6 +2,7 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <unordered_set>
 
 namespace COBJ
 {
@@ -64,6 +65,7 @@ namespace COBJ
 		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSConstructibleObject>();
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*                currentform = nullptr;
@@ -73,7 +75,9 @@ namespace COBJ
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::ConstructibleObject) {
 						curobj = (RE::BGSConstructibleObject*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -282,7 +286,9 @@ namespace COBJ
 				}
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 			}
 		}

@@ -1,6 +1,7 @@
 #include "alch.h"
 #include "formfilter.h"
 #include "parsetable.h"
+#include <unordered_set>
 namespace ALCH
 {
 	namespace
@@ -62,6 +63,7 @@ namespace ALCH
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
 		auto& objectArray = dataHandler->GetFormArray<RE::AlchemyItem>();
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			
 			if (!line.objects.empty()) {
 				for (const auto& npcstring : line.objects) {
@@ -72,7 +74,9 @@ namespace ALCH
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::AlchemyItem) {
 						curobj = (RE::AlchemyItem*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -251,7 +255,9 @@ namespace ALCH
 				}
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 
 			}

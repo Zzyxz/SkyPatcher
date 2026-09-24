@@ -1,6 +1,7 @@
 #include "scroll.h"
 #include "formfilter.h"
 #include "parsetable.h"
+#include <unordered_set>
 namespace SCROLL
 {
 
@@ -214,6 +215,7 @@ namespace SCROLL
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
 		auto& objectSpellArray = dataHandler->GetFormArray<RE::ScrollItem>();
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			
 			
 			if (!line.objects.empty()) {
@@ -225,7 +227,9 @@ namespace SCROLL
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Scroll) {
 						curobj = (RE::ScrollItem*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -392,7 +396,9 @@ namespace SCROLL
 				}
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 				
 			}

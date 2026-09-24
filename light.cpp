@@ -1,4 +1,5 @@
 #include "light.h"
+#include <unordered_set>
 
 #include "dirent.h"
 #include "formfilter.h"
@@ -166,10 +167,13 @@ void process_patch_instructions(const std::list<patch_instruction> &tokens) {
   auto &lights = dataHandler->GetFormArray<RE::TESObjectLIGH>();
 
   for (const auto &line : tokens) {
+    std::unordered_set<RE::FormID> patched;
     for (const auto &identifier : line.object) {
       if (auto *form = GetFormFromIdentifier(identifier);
           form && form->formType == RE::FormType::Light) {
-        patch(line, static_cast<RE::TESObjectLIGH *>(form));
+        if (patched.insert((static_cast<RE::TESObjectLIGH *>(form))->formID).second) {
+          patch(line, static_cast<RE::TESObjectLIGH *>(form));
+        }
       }
     }
 
@@ -219,7 +223,9 @@ void process_patch_instructions(const std::list<patch_instruction> &tokens) {
         found = false;
       }
       if (found) {
-        patch(line, light);
+        if (!patched.contains(light->formID)) {
+          patch(line, light);
+        }
       }
     }
   }

@@ -1,6 +1,7 @@
 #include "spell.h"
 #include "formfilter.h"
 #include "parsetable.h"
+#include <unordered_set>
 namespace SPELL
 {
 
@@ -250,6 +251,7 @@ namespace SPELL
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
 		auto& objectSpellArray = dataHandler->GetFormArray<RE::SpellItem>();
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 
 
 			if (!line.objects.empty()) {
@@ -260,7 +262,9 @@ namespace SPELL
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Spell) {
 						curobj = (RE::SpellItem*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -450,7 +454,9 @@ namespace SPELL
 
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 
 			}

@@ -1,6 +1,7 @@
 #include "enchant.h"
 #include "formfilter.h"
 #include "parsetable.h"
+#include <unordered_set>
 namespace ENCH
 {
 	namespace
@@ -65,6 +66,7 @@ namespace ENCH
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
 		auto& objectSpellArray = dataHandler->GetFormArray<RE::EnchantmentItem>();
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			
 				if (!line.objects.empty()) {
 					for (const auto& npcstring : line.objects) {
@@ -75,7 +77,9 @@ namespace ENCH
 						currentform = GetFormFromIdentifier(string_form);
 						if (currentform && currentform->formType == RE::FormType::Enchantment) {
 							curobj = (RE::EnchantmentItem*)currentform;
-							patch(line, curobj);
+							if (patched.insert(curobj->formID).second) {
+								patch(line, curobj);
+							}
 						}
 					}
 				}
@@ -407,7 +411,9 @@ namespace ENCH
 
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 
 			}

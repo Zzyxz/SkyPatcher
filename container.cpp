@@ -1,6 +1,8 @@
 #include "container.h"
 #include "formfilter.h"
 #include "parsetable.h"
+
+#include <unordered_set>
 namespace CONTAINER
 {
 
@@ -49,6 +51,7 @@ namespace CONTAINER
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectCONT>();
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 
 			if (!line.containerObjects.empty()) {
 				for (const auto& objectstring : line.containerObjects) {
@@ -58,7 +61,9 @@ namespace CONTAINER
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Container) {
 						object = (RE::TESObjectCONT*)currentform;
-						patchContainer(line, object);
+						if (patched.insert(object->formID).second) {
+							patchContainer(line, object);
+						}
 					}
 				}
 			}
@@ -83,7 +88,7 @@ namespace CONTAINER
 					continue;
 				}
 
-				if (findObject(line, view, curobj)) {
+				if (!patched.contains(curobj->formID) && findObject(line, view, curobj)) {
 					patchContainer(line, curobj);
 				}
 

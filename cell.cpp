@@ -2,6 +2,7 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <unordered_set>
 
 namespace CELL
 {
@@ -96,6 +97,7 @@ namespace CELL
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESObjectCELL>();
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			const formfilter::CommonFilterView view{
 				formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
 				formfilter::noStrings(), formfilter::noStrings(), formfilter::noStrings(),
@@ -145,7 +147,9 @@ namespace CELL
 							continue;
 						}
 
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -263,7 +267,9 @@ namespace CELL
 				}
 
 				if (found) {
-					patch(line, curobj);
+					if (!patched.contains(curobj->formID)) {
+						patch(line, curobj);
+					}
 				}
 			}
 		}
