@@ -127,8 +127,8 @@ namespace CELL
 							}
 						}
 
-						if (!line.skipByModContains.empty()) {
-							const std::string& fileName = curobj->GetFile()->fileName;
+						if (const auto* file = curobj->GetFile(); file && !line.skipByModContains.empty()) {
+							const std::string& fileName = file->fileName;
 							bool               allMatched = true;
 							for (const auto& modName : line.skipByModContains) {
 								if (toLowerCase(fileName).find(toLowerCase(modName)) == std::string::npos) {
