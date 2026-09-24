@@ -364,11 +364,17 @@ void LoadCallback(SKSE::SerializationInterface* serde) {
 					break;
 				}
 
-				if (auto npc = RE::TESForm::LookupByID(formID)) {
-					npcStyles[formID] = style;
+				RE::FormID resolvedID = 0;
+				if (!serde->ResolveFormID(formID, resolvedID)) {
+					logger::debug("NPC with FormID {:X} could not be resolved and was not loaded into npcStyles.", formID);
+					continue;
+				}
+
+				if (auto npc = RE::TESForm::LookupByID(resolvedID)) {
+					npcStyles[resolvedID] = style;
 				}
 				else {
-					logger::debug("NPC with FormID {:X} is no longer valid and was not loaded into npcStyles.", formID);
+					logger::debug("NPC with FormID {:X} is no longer valid and was not loaded into npcStyles.", resolvedID);
 				}
 			}
 		}
@@ -798,9 +804,9 @@ struct Load3DREFR
 			if (it->second.disable) {
 				logger::debug("TESObjectREFR {:08X} disable ref ", a_this->formID);
 
-				SKSE::GetTaskInterface()->AddTask([a_this]() {
-					if (a_this) {
-						a_this->Disable();
+				SKSE::GetTaskInterface()->AddTask([refrID = a_this->formID]() {
+					if (auto* refr = RE::TESForm::LookupByID<RE::TESObjectREFR>(refrID)) {
+						refr->Disable();
 					}
 				});
 			}
@@ -809,10 +815,10 @@ struct Load3DREFR
 				RE::TESBoundObject* boundobj = it->second.replaceWith;
 
 				if (boundobj) {
-					SKSE::GetTaskInterface()->AddTask([a_this, boundobj]() {
-						if (a_this) {
-							a_this->SetObjectReference(boundobj);
-							a_this->Enable(false);
+					SKSE::GetTaskInterface()->AddTask([refrID = a_this->formID, boundobj]() {
+						if (auto* refr = RE::TESForm::LookupByID<RE::TESObjectREFR>(refrID)) {
+							refr->SetObjectReference(boundobj);
+							refr->Enable(false);
 						}
 					});
 				}
