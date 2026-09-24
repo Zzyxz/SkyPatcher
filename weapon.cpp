@@ -212,6 +212,7 @@ namespace WEAPON
 			{ "modelFirstPerson", sp::FieldKind::Value, WEAP_F(modelFirstPerson) },
 			{ "value", sp::FieldKind::Value, WEAP_F(value) },
 			{ "valueMult", sp::FieldKind::Value, WEAP_F(valueMult) },
+			{ "valueMatch", sp::FieldKind::Value, WEAP_F(valueMatch) },
 			{ "weight", sp::FieldKind::Value, WEAP_F(weight) },
 			{ "weightMult", sp::FieldKind::Value, WEAP_F(weightMult) },
 			{ "objectEffect", sp::FieldKind::Value, WEAP_F(objectEffect) },

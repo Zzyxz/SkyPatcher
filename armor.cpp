@@ -236,6 +236,7 @@ namespace ARMOR
 			{ "modelMale", sp::FieldKind::Value, ARMO_F(modelMale) },
 			{ "value", sp::FieldKind::Value, ARMO_F(value) },
 			{ "valueMult", sp::FieldKind::Value, ARMO_F(valueMult) },
+			{ "valueMatch", sp::FieldKind::Value, ARMO_F(valueMatch) },
 			{ "weight", sp::FieldKind::Value, ARMO_F(weight) },
 			{ "weightMult", sp::FieldKind::Value, ARMO_F(weightMult) },
 			{ "armorType", sp::FieldKind::Value, ARMO_F(armorType) },

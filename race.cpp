@@ -63,6 +63,8 @@ namespace RACE
 			{ "baseMass", sp::FieldKind::Value, RACE_F(baseMass) },
 			{ "baseCarryweight", sp::FieldKind::Value, RACE_F(baseCarryweight) },
 			{ "skin", sp::FieldKind::Value, RACE_F(skin) },
+			{ "voiceTypeFemale", sp::FieldKind::Value, RACE_F(voiceTypeFemale) },
+			{ "voiceTypeMale", sp::FieldKind::Value, RACE_F(voiceTypeMale) },
 			{ "startingHealth", sp::FieldKind::Value, RACE_F(startingHealth) },
 			{ "startingStamina", sp::FieldKind::Value, RACE_F(startingStamina) },
 			{ "startingMagicka", sp::FieldKind::Value, RACE_F(startingMagicka) },

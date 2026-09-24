@@ -12,6 +12,9 @@ namespace FACTION
 		constexpr sp::KeySpec kFactionKeys[] = {
 			{ "filterByFactions", sp::FieldKind::List, FACTION_F(object) },
 			{ "filterByFactionsExcluded", sp::FieldKind::List, FACTION_F(objectExcluded) },
+			{ "relationshipToAdd", sp::FieldKind::Arr2D, FACTION_F(rsAdd) },
+			{ "relationshipToChange", sp::FieldKind::Arr2D, FACTION_F(rsChange) },
+			{ "relationshipToRemove", sp::FieldKind::List, FACTION_F(rsRemove) },
 			{ "setFlags", sp::FieldKind::ListAssign, FACTION_F(setFlags) },
 			{ "removeFlags", sp::FieldKind::ListAssign, FACTION_F(removeFlags) },
 			{ "filterByModNames", sp::FieldKind::ListAssign, FACTION_F(modNames) },
