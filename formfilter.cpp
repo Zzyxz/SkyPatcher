@@ -454,7 +454,10 @@ namespace formfilter
 		const std::string& lowerFullName(const MatchTarget& a_t, MatchScratch& a_s)
 		{
 			if (!a_s.haveFullName) {
-				a_s.fullName = toLowerCase(a_t.armor->fullName.c_str());
+				const char* const name = a_t.armor ? a_t.armor->fullName.c_str() :
+				                         a_t.weapon ? a_t.weapon->fullName.c_str() :
+				                                      "";
+				a_s.fullName = toLowerCase(name);
 				a_s.haveFullName = true;
 			}
 			return a_s.fullName;

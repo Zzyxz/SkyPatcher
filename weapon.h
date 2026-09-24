@@ -95,6 +95,9 @@ namespace WEAPON
 		std::vector<std::string> filterByEditorIdContains;
 		std::vector<std::string> filterByEditorIdContainsOr;
 		std::vector<std::string> filterByEditorIdContainsExcluded;
+		std::vector<std::string> filterByNameContains;
+		std::vector<std::string> filterByNameContainsOr;
+		std::vector<std::string> filterByNameContainsExcluded;
 		std::vector<std::string> hasPlugin;
 		std::vector<std::string> hasPluginOr;
 		std::string minX;

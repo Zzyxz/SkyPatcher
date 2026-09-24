@@ -102,6 +102,17 @@ namespace WEAPON
 			formfilter::pushDisjunct(p, p.positive, first);
 
 			first = p.preds.size();
+			if (!line.filterByNameContains.empty()) {
+				formfilter::addPred(p, Op::NameContains, Mode::And,
+					formfilter::needleOperands(p, line.filterByNameContains));
+			}
+			if (!line.filterByNameContainsOr.empty()) {
+				formfilter::addPred(p, Op::NameContains, Mode::Or,
+					formfilter::needleOperands(p, line.filterByNameContainsOr));
+			}
+			formfilter::pushDisjunct(p, p.positive, first);
+
+			first = p.preds.size();
 			if (!line.keywords.empty()) {
 				formfilter::addPred(p, Op::Keyword, Mode::And,
 					formfilter::ptrOperands(line.keywords, RE::FormType::Keyword));
@@ -116,7 +127,8 @@ namespace WEAPON
 			p.catchAll = line.object.empty() && line.keywords.empty() &&
 				line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() &&
 				line.embeddedAVs.empty() && line.filterAnimationTypeOr.empty() &&
-				line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty();
+				line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() &&
+				line.filterByNameContains.empty() && line.filterByNameContainsOr.empty();
 
 			if (!line.keywordsExcluded.empty()) {
 				formfilter::addNegative(p, Op::Keyword, Mode::Exclude,
@@ -129,6 +141,10 @@ namespace WEAPON
 			if (!line.filterByEditorIdContainsExcluded.empty()) {
 				formfilter::addNegative(p, Op::EditorId, Mode::Exclude,
 					formfilter::needleOperands(p, line.filterByEditorIdContainsExcluded));
+			}
+			if (!line.filterByNameContainsExcluded.empty()) {
+				formfilter::addNegative(p, Op::NameContains, Mode::Exclude,
+					formfilter::needleOperands(p, line.filterByNameContainsExcluded));
 			}
 			if (!line.filterByWFlags.empty()) {
 				formfilter::addNegative(p, Op::WeapBound, Mode::And,
@@ -223,6 +239,9 @@ namespace WEAPON
 			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, WEAP_F(filterByEditorIdContains) },
 			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, WEAP_F(filterByEditorIdContainsOr) },
 			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, WEAP_F(filterByEditorIdContainsExcluded) },
+			{ "filterByNameContains", sp::FieldKind::ListAssign, WEAP_F(filterByNameContains) },
+			{ "filterByNameContainsOr", sp::FieldKind::ListAssign, WEAP_F(filterByNameContainsOr) },
+			{ "filterByNameContainsExcluded", sp::FieldKind::ListAssign, WEAP_F(filterByNameContainsExcluded) },
 			{ "keywordsToAdd", sp::FieldKind::List, WEAP_F(keywordsToAdd) },
 			{ "keywordsToRemove", sp::FieldKind::List, WEAP_F(keywordsToRemove) },
 			{ "filterByModNames", sp::FieldKind::ListAssign, WEAP_F(modNames) },
@@ -294,7 +313,7 @@ namespace WEAPON
 				}
 			}
 
-			if (!line.object.empty() && line.keywords.empty() && line.filterByWFlags.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.filterAnimationTypeOr.empty() && line.embeddedAVs.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
+			if (!line.object.empty() && line.keywords.empty() && line.filterByWFlags.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.filterAnimationTypeOr.empty() && line.embeddedAVs.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByNameContains.empty() && line.filterByNameContainsOr.empty()) {
 				continue;
 			}
 
