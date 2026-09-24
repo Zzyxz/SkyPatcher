@@ -1,6 +1,8 @@
 #include "utility.h"
+#include <mutex>
 #include <regex>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace {
 const std::regex& cached_regex(const std::string& pattern, std::regex::flag_type flags)
@@ -169,7 +171,18 @@ RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
 		const std::string_view modName{ identifier.data(), delimiter };
 		const std::string      modForm = identifier.substr(delimiter + 1);
 
-		const uint32_t rawFormID = static_cast<uint32_t>(std::stoul(modForm, nullptr, 16));
+		uint32_t rawFormID = 0;
+		try {
+			rawFormID = static_cast<uint32_t>(std::stoul(modForm, nullptr, 16));
+		} catch (const std::exception& e) {
+			static std::mutex                      warnedLock;
+			static std::unordered_set<std::string> warned;
+			const std::scoped_lock                 lock(warnedLock);
+			if (warned.insert(identifier).second) {
+				logger::warn("Invalid form identifier '{}': {}", identifier, e.what());
+			}
+			return nullptr;
+		}
 
 		const ModLookupEntry& mod = cached_mod_lookup(dataHandler, modName);
 
