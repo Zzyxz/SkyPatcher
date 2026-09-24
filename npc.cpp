@@ -236,6 +236,9 @@ namespace NPC
 				if (!curobj || curobj->IsDeleted()) {
 					continue;
 				}
+				if (!line.modNames.empty() && !formfilter::matchesModName(program, curobj)) {
+					continue;
+				}
 				if (findObject(line, program, curobj)) {
 					patch(line, curobj);
 				}
