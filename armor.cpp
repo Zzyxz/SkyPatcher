@@ -175,7 +175,7 @@ namespace ARMOR
 			return !line.keywordsToAdd.empty() || !line.keywordsToRemove.empty() ||
 				live(line.mirrorArmor) || live(line.templateArmor) ||
 				!line.setBipedSlot.empty() || !line.removeBipedSlot.empty() ||
-				live(line.armorType) || live(line.clearArmorAddons) ||
+				live(line.armorType) || live(line.clearArmorAddons) || live(line.modelMatch) ||
 				!line.armorAddonToAdd.empty() || !line.armorAddonToRemove.empty();
 		}
 
