@@ -591,6 +591,12 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 			const auto oldRace = npc->race;
 			const auto oldSkin = npc->skin;
 
+			if (npcToCopyFrom && npc->faceNPC == npcToCopyFrom && oldRace == npcToCopyFrom->race &&
+				oldSkin == npcToCopyFrom->skin && wasFemale == npcToCopyFrom->IsFemale()) {
+				npcStyles[a_this->formID] = styleIndex;
+				return VisualStyleResult::kApplied;
+			}
+
 			if (npcToCopyFrom && CopyVisual(npcToCopyFrom, a_this, *aNPCData, false)) {
 				npcStyles[a_this->formID] = styleIndex;
 				logger::debug("--> Load3D: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.", styleIndex, a_this->formID, aNPCData->npcVisualStyleList->formID, npcToCopyFrom->formID);
@@ -893,9 +899,12 @@ struct Load3DREFR
 
 struct QueueReference3D
 {
+	static inline std::uint32_t mainThreadID = 0;
+
 	static void thunk(void* a_loader, RE::TESObjectREFR* a_ref, std::uint32_t a_priority, bool a_arg4)
 	{
-		if (a_ref && a_ref->GetFormType() == RE::FormType::ActorCharacter && !a_ref->IsPlayerRef()) {
+		if (a_ref && GetCurrentThreadId() == mainThreadID &&
+			a_ref->GetFormType() == RE::FormType::ActorCharacter && !a_ref->IsPlayerRef()) {
 			auto* actor = static_cast<RE::Character*>(a_ref);
 			const auto base = actor->GetActorBase();
 			const bool excluded = statRefreshExcludeEnabled && base && excludedNPCsFormIDs.contains(base->formID);
@@ -910,9 +919,6 @@ struct QueueReference3D
 
 	static bool Install()
 	{
-#ifdef SKYRIMVR
-		return false;
-#else
 		const REL::ID id(OFFSET(12910, 13057));
 		const auto target = id.address();
 		const auto bytes = reinterpret_cast<const std::uint8_t*>(target);
@@ -939,9 +945,9 @@ struct QueueReference3D
 		std::memcpy(gateway + stolen + 6, &resume, sizeof(resume));
 		func = reinterpret_cast<decltype(func)>(gateway);
 
+		mainThreadID = GetCurrentThreadId();
 		trampoline.write_branch<5>(target, thunk);
 		return true;
-#endif
 	}
 };
 
