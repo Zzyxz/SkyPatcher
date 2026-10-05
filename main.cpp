@@ -402,7 +402,7 @@ void RegisterSerialization() {
 
 }
 
-bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, NPC::NPCData npcData) {
+bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData& npcData, bool a_reset3D) {
 	bool shouldCopy = false;
 	auto npc = a_this->GetActorBase();
 
@@ -473,7 +473,9 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, NPC::NPCData npcDa
 					}
 				}
 
-				updater.startUpdate(a_this);
+				if (a_reset3D) {
+					updater.startUpdate(a_this);
+				}
 				return true;
 			}
 		}
@@ -488,14 +490,145 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, NPC::NPCData npcDa
 
 
 
+enum class VisualStyleResult
+{
+	kNone,
+	kApplied,
+	kNeedsReset
+};
+
+static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
+{
+	const auto npc = a_this->GetActorBase();
+	if (!npc || !a_this->data.objectReference) {
+		return VisualStyleResult::kNone;
+	}
+	auto data = (RE::ExtraLeveledCreature*)a_this->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
+	auto it = actData.npcData.find(a_this->data.objectReference->formID);
+	bool originalBaseHasStyleList = false;
+	if (data) {
+		if (data->originalBase) {
+			auto itBase = actData.npcData.find(data->originalBase->formID);
+			originalBaseHasStyleList = itBase != actData.npcData.end() && itBase->second.npcVisualStyleList;
+		}
+		if (data->templateBase) {
+			it = actData.npcData.find(data->templateBase->formID);
+		}
+	}
+
+	if ((it != actData.npcData.end() && it->second.npcVisualStyleList) || originalBaseHasStyleList) {
+		NPC::NPCData* aNPCData = (it != actData.npcData.end()) ? &it->second : nullptr;
+		auto actorData = (RE::ExtraLeveledCreature*)a_this->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
+		if (actorData && actorData->originalBase) {
+			if (auto itr = actData.npcData.find(actorData->originalBase->formID); itr != actData.npcData.end() && itr->second.npcVisualStyleList) {
+				aNPCData = &itr->second;
+			}
+		}
+
+		if (aNPCData \
+			&& aNPCData->npcVisualStyleList \
+			&& aNPCData->npcVisualStyleList->formID \
+			&& !aNPCData->npcVisualStyleList->forms.empty()) {
+
+			auto& forms = aNPCData->npcVisualStyleList->forms;
+
+			auto styleIt = npcStyles.find(a_this->formID);
+			int styleIndex = -1;
+
+			if (styleIt != npcStyles.end()) {
+				styleIndex = styleIt->second;
+
+				if (styleIndex == -1) {
+					logger::debug("Load3D: NPC with FormID {:X} previously failed style roll and will not receive a style.", a_this->formID);
+				}
+				else if (styleIndex >= forms.size()) {
+					logger::debug("Load3D: NPC with FormID {:X} had an invalid style index {} (out of range). Reassigning a new style.", a_this->formID, styleIndex);
+					styleIt = npcStyles.end();
+				}
+				else {
+					logger::debug("Load3D: NPC with FormID {:X} using stored style index {}.", a_this->formID, styleIndex);
+				}
+			}
+
+			if (styleIt == npcStyles.end()) {
+				auto& generator = RandomEngine();
+				std::uniform_int_distribution<int> chanceDist(1, 100);
+				int rolledChance = chanceDist(generator);
+				if (rolledChance > aNPCData->styleChance) {
+					npcStyles[a_this->formID] = -1;
+					logger::debug("Load3D: NPC with FormID {:X} failed style chance {} rolled {} and will not receive a style.", a_this->formID, aNPCData->styleChance, rolledChance);
+					styleIndex = -1;
+				}
+				else if (!forms.empty()) {
+					std::uniform_int_distribution<size_t> distribution(0, forms.size() - 1);
+					styleIndex = distribution(generator);
+					logger::debug("Load3D: Rolled new random style index {} to Actor with FormID {:X} from {} available styles ", styleIndex, a_this->formID, forms.size());
+				}
+				else {
+					npcStyles[a_this->formID] = -1;
+					logger::debug("Load3D: No styles available in the list! NPC with FormID {:X} will not receive a style.", a_this->formID);
+					styleIndex = -1;
+				}
+			}
+
+			RE::TESNPC* npcToCopyFrom = nullptr;
+			if (styleIndex >= 0 && styleIndex < forms.size()) {
+				if (auto form = forms[styleIndex]; form) {
+					npcToCopyFrom = form->As<RE::TESNPC>();
+					if (!npcToCopyFrom) {
+						logger::debug("Load3D: Form {:08X} is not an NPC.", form->formID);
+					}
+				}
+				else {
+					logger::debug("Load3D: Form at index {} is null!", styleIndex);
+				}
+			}
+			else {
+				logger::debug("Load3D: Invalid styleIndex {} (out of range).", styleIndex);
+			}
+
+			const bool wasFemale = npc->IsFemale();
+			const auto oldRace = npc->race;
+			const auto oldSkin = npc->skin;
+
+			if (npcToCopyFrom && CopyVisual(npcToCopyFrom, a_this, *aNPCData, false)) {
+				npcStyles[a_this->formID] = styleIndex;
+				logger::debug("--> Load3D: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.", styleIndex, a_this->formID, aNPCData->npcVisualStyleList->formID, npcToCopyFrom->formID);
+				const bool bodyChanged = npc->IsFemale() != wasFemale || npc->race != oldRace || npc->skin != oldSkin;
+				return bodyChanged ? VisualStyleResult::kNeedsReset : VisualStyleResult::kApplied;
+			}
+		}
+	}
+	return VisualStyleResult::kNone;
+}
+
 struct Load3D
 {
 	static RE::NiAVObject* thunk(RE::Character* a_this, bool a_arg1)
 	{
+		const bool excluded = a_this && statRefreshExcludeEnabled && [&] {
+			const auto base = a_this->GetActorBase();
+			return base && excludedNPCsFormIDs.contains(base->formID);
+		}();
+		auto styleResult = VisualStyleResult::kNone;
+		if (a_this && !excluded) {
+			styleResult = ApplyVisualStyleBeforeLoad(a_this);
+		}
+
 		const auto root = func(a_this, a_arg1);
 
 		if (a_this == nullptr) {
 			return root;
+		}
+
+		if (styleResult == VisualStyleResult::kNeedsReset) {
+			updater.startUpdate(a_this);
+		} else if (styleResult == VisualStyleResult::kApplied) {
+			SKSE::GetTaskInterface()->AddTask([actorID = a_this->formID] {
+				if (auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorID)) {
+					actor->UpdateSkinColor();
+				}
+			});
 		}
 
 		if (statRefreshExcludeEnabled) {
@@ -670,84 +803,6 @@ struct Load3D
 				}
 			}
 
-			if ((it != actData.npcData.end() && it->second.npcVisualStyleList) || originalBaseHasStyleList) {
-				NPC::NPCData* aNPCData = (it != actData.npcData.end()) ? &it->second : nullptr;
-				auto actorData = (RE::ExtraLeveledCreature*)a_this->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
-				if (actorData && actorData->originalBase) {
-					if (auto itr = actData.npcData.find(actorData->originalBase->formID); itr != actData.npcData.end() && itr->second.npcVisualStyleList) {
-						aNPCData = &itr->second;
-					}
-				}
-
-				if (aNPCData \
-					&& aNPCData->npcVisualStyleList \
-					&& aNPCData->npcVisualStyleList->formID \
-					&& !aNPCData->npcVisualStyleList->forms.empty()) {
-
-					auto& forms = aNPCData->npcVisualStyleList->forms;
-
-					auto styleIt = npcStyles.find(a_this->formID);
-					int styleIndex = -1;
-
-					if (styleIt != npcStyles.end()) {
-						styleIndex = styleIt->second;
-
-						if (styleIndex == -1) {
-							logger::debug("Load3D: NPC with FormID {:X} previously failed style roll and will not receive a style.", a_this->formID);
-						}
-						else if (styleIndex >= forms.size()) {
-							logger::debug("Load3D: NPC with FormID {:X} had an invalid style index {} (out of range). Reassigning a new style.", a_this->formID, styleIndex);
-							styleIt = npcStyles.end();
-						}
-						else {
-							logger::debug("Load3D: NPC with FormID {:X} using stored style index {}.", a_this->formID, styleIndex);
-						}
-					}
-
-					if (styleIt == npcStyles.end()) {
-						auto& generator = RandomEngine();
-						std::uniform_int_distribution<int> chanceDist(1, 100);
-						int rolledChance = chanceDist(generator);
-						if (rolledChance > aNPCData->styleChance) {
-							npcStyles[a_this->formID] = -1;
-							logger::debug("Load3D: NPC with FormID {:X} failed style chance {} rolled {} and will not receive a style.", a_this->formID, aNPCData->styleChance, rolledChance);
-							styleIndex = -1;
-						}
-						else if (!forms.empty()) {
-							std::uniform_int_distribution<size_t> distribution(0, forms.size() - 1);
-							styleIndex = distribution(generator);
-							logger::debug("Load3D: Rolled new random style index {} to Actor with FormID {:X} from {} available styles ", styleIndex, a_this->formID, forms.size());
-						}
-						else {
-							npcStyles[a_this->formID] = -1;
-							logger::debug("Load3D: No styles available in the list! NPC with FormID {:X} will not receive a style.", a_this->formID);
-							styleIndex = -1;
-						}
-					}
-
-					RE::TESNPC* npcToCopyFrom = nullptr;
-					if (styleIndex >= 0 && styleIndex < forms.size()) {
-						if (auto form = forms[styleIndex]; form) {
-							npcToCopyFrom = form->As<RE::TESNPC>();
-							if (!npcToCopyFrom) {
-								logger::debug("Load3D: Form {:08X} is not an NPC.", form->formID);
-							}
-						}
-						else {
-							logger::debug("Load3D: Form at index {} is null!", styleIndex);
-						}
-					}
-					else {
-						logger::debug("Load3D: Invalid styleIndex {} (out of range).", styleIndex);
-					}
-
-					if (npcToCopyFrom && CopyVisual(npcToCopyFrom, a_this, *aNPCData)) {
-						npcStyles[a_this->formID] = styleIndex;
-						logger::debug("--> Load3D: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.", styleIndex, a_this->formID, aNPCData->npcVisualStyleList->formID, npcToCopyFrom->formID);
-					}
-				}
-			}
-
 			if (it != actData.npcData.end() && it->second.npcCombatStyleList) {
 				auto& gen = RandomEngine();
 				std::uniform_int_distribution<int> dis(1, 100);
@@ -836,9 +891,66 @@ struct Load3DREFR
 	static inline constexpr std::size_t size{ 0x6A };
 };
 
+struct QueueReference3D
+{
+	static void thunk(void* a_loader, RE::TESObjectREFR* a_ref, std::uint32_t a_priority, bool a_arg4)
+	{
+		if (a_ref && a_ref->GetFormType() == RE::FormType::ActorCharacter && !a_ref->IsPlayerRef()) {
+			auto* actor = static_cast<RE::Character*>(a_ref);
+			const auto base = actor->GetActorBase();
+			const bool excluded = statRefreshExcludeEnabled && base && excludedNPCsFormIDs.contains(base->formID);
+			if (!excluded) {
+				ApplyVisualStyleBeforeLoad(actor);
+			}
+		}
+		func(a_loader, a_ref, a_priority, a_arg4);
+	}
+
+	static inline void (*func)(void*, RE::TESObjectREFR*, std::uint32_t, bool) = nullptr;
+
+	static bool Install()
+	{
+#ifdef SKYRIMVR
+		return false;
+#else
+		const REL::ID id(OFFSET(12910, 13057));
+		const auto target = id.address();
+		const auto bytes = reinterpret_cast<const std::uint8_t*>(target);
+		static constexpr std::uint8_t ae[] = { 0x48, 0x8B, 0xC4, 0x44, 0x88, 0x48, 0x20 };
+		static constexpr std::uint8_t se[] = { 0x48, 0x8B, 0xC4, 0x55, 0x41, 0x54 };
+		std::size_t stolen = 0;
+		if (std::memcmp(bytes, ae, sizeof(ae)) == 0) {
+			stolen = sizeof(ae);
+		} else if (std::memcmp(bytes, se, sizeof(se)) == 0) {
+			stolen = sizeof(se);
+		} else {
+			logger::warn("Visual styles: 3D queue function changed or hooked by another plugin; using Load3D only");
+			return false;
+		}
+
+		auto& trampoline = SKSE::GetTrampoline();
+		SKSE::AllocTrampoline(stolen + 14 + 14);
+		auto* gateway = static_cast<std::uint8_t*>(trampoline.allocate(stolen + 14));
+		std::memcpy(gateway, bytes, stolen);
+		gateway[stolen + 0] = 0xFF;
+		gateway[stolen + 1] = 0x25;
+		std::memset(gateway + stolen + 2, 0, 4);
+		const std::uintptr_t resume = target + stolen;
+		std::memcpy(gateway + stolen + 6, &resume, sizeof(resume));
+		func = reinterpret_cast<decltype(func)>(gateway);
+
+		trampoline.write_branch<5>(target, thunk);
+		return true;
+#endif
+	}
+};
+
 void InstallActorHook()
 {
 	stl::write_vfunc<RE::Character, Load3D>();
+	if (QueueReference3D::Install()) {
+		logger::info("Visual styles are applied before the 3D load is queued");
+	}
 }
 
 void InstallRefHook()
@@ -1083,7 +1195,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 										logger::debug("PostLoadGame: Invalid styleIndex {} (out of range).", styleIndex);
 									}
 
-									if (npcToCopyFrom && CopyVisual(npcToCopyFrom, actor, *aNPCData)) {
+									if (npcToCopyFrom && CopyVisual(npcToCopyFrom, actor, *aNPCData, true)) {
 										npcStyles[actor->formID] = styleIndex;
 										logger::debug("--> PostLoadGame: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.",
 											styleIndex, actor->formID, aNPCData->npcVisualStyleList->formID, npcToCopyFrom->formID);
