@@ -127,7 +127,11 @@ void Enable(RE::TESObjectREFR* obref, bool abFadeIn)
 {
 	using func_t = void(RE::BSScript::Internal::VirtualMachine*, RE::VMStackID, RE::TESObjectREFR*, bool);
 	RE::VMStackID           frame = 0;
+#ifdef SKYRIMVR
+	REL::Relocation<func_t> func{ REL::Offset(0x9CE700) };
+#else
 	REL::Relocation<func_t> func{ RELOCATION_ID(55629, 56158) };
+#endif
 	auto                    vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
 	return func(vm, frame, obref, abFadeIn);
 }

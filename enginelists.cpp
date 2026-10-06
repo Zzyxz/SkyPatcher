@@ -53,10 +53,19 @@ namespace EngineLists
 			bool                     available{ false };
 		};
 
-		template <std::size_t N>
-		std::uintptr_t Resolve(std::uint64_t a_id, const std::uint8_t (&a_prologue)[N], bool& a_ok)
+		std::uintptr_t Address([[maybe_unused]] std::uint64_t a_id, [[maybe_unused]] std::uintptr_t a_vrOffset)
 		{
-			const auto address = REL::ID(a_id).address();
+#ifdef SKYRIMVR
+			return REL::Offset(a_vrOffset).address();
+#else
+			return REL::ID(a_id).address();
+#endif
+		}
+
+		template <std::size_t N>
+		std::uintptr_t Resolve(std::uint64_t a_id, std::uintptr_t a_vrOffset, const std::uint8_t (&a_prologue)[N], bool& a_ok)
+		{
+			const auto address = Address(a_id, a_vrOffset);
 			if (!address || std::memcmp(reinterpret_cast<const void*>(address), a_prologue, N) != 0) {
 				a_ok = false;
 				return 0;
@@ -69,10 +78,10 @@ namespace EngineLists
 			static const Functions functions = [] {
 				Functions f{};
 				bool      ok = true;
-				const auto addLL = Resolve(OFFSET(14577, 14749), kAddLeveledObjectPrologue, ok);
-				const auto removeLL = Resolve(OFFSET(14581, 14753), kRemoveLeveledEntriesPrologue, ok);
-				const auto addCont = Resolve(OFFSET(14377, 14517), kAddContainerObjectPrologue, ok);
-				const auto removeCont = Resolve(OFFSET(14380, 14522), kRemoveContainerObjectPrologue, ok);
+				const auto addLL = Resolve(OFFSET(14577, 14749), 0x1A70F0, kAddLeveledObjectPrologue, ok);
+				const auto removeLL = Resolve(OFFSET(14581, 14753), 0x1A7C80, kRemoveLeveledEntriesPrologue, ok);
+				const auto addCont = Resolve(OFFSET(14377, 14517), 0x19F320, kAddContainerObjectPrologue, ok);
+				const auto removeCont = Resolve(OFFSET(14380, 14522), 0x19F7B0, kRemoveContainerObjectPrologue, ok);
 				if (ok) {
 					f.addLeveledObject = reinterpret_cast<AddLeveledObject_t>(addLL);
 					f.removeLeveledEntries = reinterpret_cast<RemoveLeveledEntries_t>(removeLL);
@@ -93,8 +102,8 @@ namespace EngineLists
 			static const TextureFunctions functions = [] {
 				TextureFunctions f{};
 				bool             ok = true;
-				const auto       add = Resolve(OFFSET(14657, 14834), kAddAlternateTexturePrologue, ok);
-				const auto       clear = Resolve(OFFSET(14656, 14833), kClearAlternateTexturesPrologue, ok);
+				const auto       add = Resolve(OFFSET(14657, 14834), 0x1AB4B0, kAddAlternateTexturePrologue, ok);
+				const auto       clear = Resolve(OFFSET(14656, 14833), 0x1AB400, kClearAlternateTexturesPrologue, ok);
 				if (ok) {
 					f.add = reinterpret_cast<AddAlternateTexture_t>(add);
 					f.clear = reinterpret_cast<ClearAlternateTextures_t>(clear);
