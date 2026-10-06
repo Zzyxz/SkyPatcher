@@ -8,7 +8,7 @@ namespace CONTAINER
 {
 
 	std::list<line_content> hooktokens;
-	int                     iAllowLeveledListsAddedToContainers = 0;
+	int                     iAllowLeveledListsAddedToContainers = 1;
 
 	namespace
 	{

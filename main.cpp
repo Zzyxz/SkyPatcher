@@ -1691,7 +1691,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	RegisterSerialization();
 	const auto messaging = SKSE::GetMessagingInterface();
 	messaging->RegisterListener(MessageHandler);
-	CONTAINER::iAllowLeveledListsAddedToContainers = GetPrivateProfileInt(settingsSectionFeatures, "iAllowLeveledListsAddedToContainers", 0, configFile);
+	CONTAINER::iAllowLeveledListsAddedToContainers = GetPrivateProfileInt(settingsSectionFeatures, "iAllowLeveledListsAddedToContainers", 1, configFile);
 	logger::info("Enabled Features *******");
 	if (CONTAINER::iAllowLeveledListsAddedToContainers == 0) {
 		logger::info("iAllowLeveledListsAddedToContainers false");
