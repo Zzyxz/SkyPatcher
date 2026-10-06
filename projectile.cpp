@@ -273,7 +273,7 @@ namespace PROJECTILE
 			}
 		}
 
-		if (line.removeFlags.empty()) {
+		if (!line.removeFlags.empty()) {
 			for (const auto& removeFlag : line.removeFlags) {
 				if (toLowerCase(removeFlag) == "hitscan") {
 					curobj->data.flags.reset(RE::BGSProjectileData::BGSProjectileFlags::kHitScan);

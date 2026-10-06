@@ -1,6 +1,9 @@
 #include "leveledlist.h"
+#include "enginelists.h"
 #include "formfilter.h"
 #include "parsetable.h"
+#include <algorithm>
+#include <cmath>
 #include <limits>
 namespace LEVELEDLIST
 {
@@ -35,87 +38,6 @@ namespace LEVELEDLIST
 		{
 			static const sp::KeyTable table(kLeveledListKeys, std::size(kLeveledListKeys));
 			return table;
-		}
-	}
-
-	void FreeLeveledList(RE::LEVELED_OBJECT* a_lobj, uint32_t arg2 = 0x3)
-	{
-		if (!a_lobj)
-			return;
-
-		RE::free(a_lobj);
-	}
-
-	struct LL_ALLOC
-	{
-		uint32_t           count;
-		RE::LEVELED_OBJECT ll[];
-	};
-
-	LL_ALLOC* reserveNewLevL(uint32_t entryCnt)
-	{
-		RE::MemoryManager mm = *RE::MemoryManager::GetSingleton();
-		return (LL_ALLOC*)mm.Allocate(sizeof(RE::LEVELED_OBJECT) * entryCnt + sizeof(size_t), 0, 0);
-	}
-
-	std::vector<RE::LEVELED_OBJECT> convertLLtoVec(RE::TESLeveledList* levl)
-	{
-		std::vector<RE::LEVELED_OBJECT> loVec;
-
-		if (!levl || levl->entries.empty() || levl->numEntries == 0)
-			return loVec;
-
-		for (uint32_t i = 0; i < static_cast<uint32_t>(levl->numEntries); i++)
-			loVec.push_back(levl->entries[i]);
-
-		return loVec;
-	}
-
-	void createLL(RE::TESLeveledList* levl, const std::vector<RE::LEVELED_OBJECT>& a_llad)
-	{
-		if (!levl)
-			return;
-
-		if (levl->entries.empty()) {
-			memset(levl->entries.data(), 0, levl->numEntries * sizeof(RE::LEVELED_OBJECT));
-			FreeLeveledList(levl->entries.data());
-
-			levl->entries.clear();
-			levl->numEntries = 0;
-		}
-
-		if (a_llad.empty())
-			return;
-
-		uint32_t  size = static_cast<uint32_t>(a_llad.size());
-		LL_ALLOC* newLL = reserveNewLevL(size);
-		if (!newLL)
-			return;
-
-		newLL->count = size;
-		for (uint32_t ii = 0; ii < size; ii++) {
-			newLL->ll[ii] = a_llad[ii];
-		}
-
-		levl->entries.resize(newLL->count);
-
-		for (int i = 0; i < newLL->count; i++) {
-			levl->entries[i] = newLL->ll[i];
-		}
-
-		levl->numEntries = static_cast<int8_t>(size);
-	}
-
-	void ClearLL(RE::TESLeveledList* levl)
-	{
-		if (!levl)
-			return;
-
-		if (!levl->entries.empty()) {
-			memset(levl->entries.data(), 0, levl->numEntries * sizeof(RE::LEVELED_OBJECT));
-
-			levl->entries.clear();
-			levl->numEntries = 0;
 		}
 	}
 
@@ -345,6 +267,8 @@ namespace LEVELEDLIST
 	template <typename T>
 	void patch(const LEVELEDLIST::line_content& line, T* curobj)
 	{
+		auto* list = static_cast<RE::TESLeveledList*>(curobj);
+
 		const auto parseUInt16 = [curobj](const std::string& text, std::string_view operation, std::uint16_t& result) {
 			try {
 				const auto value = std::stoul(text);
@@ -369,47 +293,56 @@ namespace LEVELEDLIST
 			}
 		};
 
-		if (!line.replaceObjects.empty()) {
-			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
+		const auto matchesRelation = [](std::uint16_t value, const std::string& relation, std::uint16_t number) {
+			if (relation == "<") {
+				return value < number;
+			}
+			if (relation == ">") {
+				return value > number;
+			}
+			if (relation == ">=") {
+				return value >= number;
+			}
+			if (relation == "<=") {
+				return value <= number;
+			}
+			if (relation.empty()) {
+				return value == number;
+			}
+			return false;
+		};
 
+		if (!line.replaceObjects.empty()) {
 			for (const auto& objectToreplace : line.replaceObjects) {
 				if (objectToreplace.size() < 2) {
 					logger::warn(FMT_STRING("leveled list {:08X}: invalid replacement entry, expected 2 forms"), curobj->formID);
 					continue;
 				}
-				std::string formToReplaceString = objectToreplace[0];
-				std::string formToReplaceWithString = objectToreplace[1];
-				int          count = 0;
-				RE::TESForm* formToReplace = GetFormFromIdentifier(formToReplaceString);
-				RE::TESForm* formToReplaceWith = GetFormFromIdentifier(formToReplaceWithString);
+				const std::string& formToReplaceString = objectToreplace[0];
+				const std::string& formToReplaceWithString = objectToreplace[1];
+				RE::TESForm*       formToReplace = GetFormFromIdentifier(formToReplaceString);
+				RE::TESForm*       formToReplaceWith = GetFormFromIdentifier(formToReplaceWithString);
 				if (!formToReplace || !formToReplaceWith) {
 					logger::warn(FMT_STRING("leveled list {:08X}: invalid replacement form '{}' -> '{}', skipping"), curobj->formID, formToReplaceString, formToReplaceWithString);
 					continue;
 				}
-				for (auto& obj : llVec) {
-					if (obj.form && obj.form->formID == formToReplace->formID) {
+				std::string reason;
+				if (!EngineLists::CanHoldForm(curobj, list, formToReplaceWith, reason)) {
+					logger::warn(FMT_STRING("leveled list {:08X}: cannot replace with {:08X}: {}"), curobj->formID, formToReplaceWith->formID, reason);
+					continue;
+				}
+				int count = 0;
+				EngineLists::ForEachLeveledObject(list, [&](RE::LEVELED_OBJECT& obj) {
+					if (obj.form == formToReplace) {
 						obj.form = formToReplaceWith;
 						count++;
 					}
-				}
-				std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
-					return a.level < b.level;
-					});
-				if (llVec.size() >= 1) {
-					createLL(curobj, llVec);
-					logger::debug(FMT_STRING("leveled Lists {:08X} all forms of {:08X} have been replaced by {:08X}. Total replaced: {}"), curobj->formID, formToReplace->formID, formToReplaceWith->formID, count);
-				}
-				else {
-					ClearLL(curobj);
-					logger::debug(FMT_STRING("leveled Lists {:08X} is now empty"), curobj->formID);
-				}
+				});
+				logger::debug(FMT_STRING("leveled Lists {:08X} all forms of {:08X} have been replaced by {:08X}. Total replaced: {}"), curobj->formID, formToReplace->formID, formToReplaceWith->formID, count);
 			}
 		}
 
-
 		if (!line.removedObjects.empty()) {
-			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
-
 			for (const auto& objectsToRemove : line.removedObjects) {
 				if (objectsToRemove.empty()) {
 					logger::warn(FMT_STRING("leveled list {:08X}: empty remove entry"), curobj->formID);
@@ -422,7 +355,7 @@ namespace LEVELEDLIST
 				}
 
 				std::string relationSign = "";
-				uint16_t    number;
+				uint16_t    number = 0;
 				bool        hasNumberLvl = false;
 				bool        hasNumberCount = false;
 
@@ -439,41 +372,10 @@ namespace LEVELEDLIST
 					}
 
 					if (hasNumberLvl) {
-						if (relationSign == "<") {
-							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-								return x.level < number && x.form == delForm;
-								}),
-								llVec.end());
-							logger::debug(FMT_STRING("leveled Lists {:08X} level < {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						}
-						else if (relationSign == ">") {
-							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-								return x.level > number && x.form == delForm;
-								}),
-								llVec.end());
-							logger::debug(FMT_STRING("leveled Lists {:08X} level > {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						}
-						else if (relationSign == ">=") {
-							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-								return x.level >= number && x.form == delForm;
-								}),
-								llVec.end());
-							logger::debug(FMT_STRING("leveled Lists {:08X} level >= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						}
-						else if (relationSign == "<=") {
-							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-								return x.level <= number && x.form == delForm;
-								}),
-								llVec.end());
-							logger::debug(FMT_STRING("leveled Lists {:08X} level <= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						}
-						else if (relationSign == "") {
-							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-								return x.level == number && x.form == delForm;
-								}),
-								llVec.end());
-							logger::debug(FMT_STRING("leveled Lists {:08X} level == {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						}
+						const auto removed = EngineLists::RemoveLeveledObjects(curobj, list, [&](const RE::LEVELED_OBJECT& x) {
+							return x.form == delForm && matchesRelation(x.level, relationSign, number);
+						});
+						logger::debug(FMT_STRING("leveled Lists {:08X} level {}{} removed Form {:08X} ({} entries)"), curobj->formID, relationSign.empty() ? "==" : relationSign, number, delForm->formID, removed);
 					}
 				}
 
@@ -493,97 +395,41 @@ namespace LEVELEDLIST
 					}
 
 					if (hasNumberCount) {
-						if (relationSign == "<") {
-							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-								return x.count < number && x.form == delForm;
-								}),
-								llVec.end());
-							logger::debug(FMT_STRING("leveled Lists {:08X} count < {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						}
-						else if (relationSign == ">") {
-							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-								return x.count > number && x.form == delForm;
-								}),
-								llVec.end());
-							logger::debug(FMT_STRING("leveled Lists {:08X} count > {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						}
-						else if (relationSign == ">=") {
-							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-								return x.count >= number && x.form == delForm;
-								}),
-								llVec.end());
-							logger::debug(FMT_STRING("leveled Lists {:08X} count >= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						}
-						else if (relationSign == "<=") {
-							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-								return x.count <= number && x.form == delForm;
-								}),
-								llVec.end());
-							logger::debug(FMT_STRING("leveled Lists {:08X} count <= {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						}
-						else if (relationSign == "") {
-							llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-								return x.count == number && x.form == delForm;
-								}),
-								llVec.end());
-							logger::debug(FMT_STRING("leveled Lists {:08X} count == {} removed Form {:08X}"), curobj->formID, number, delForm->formID);
-						}
+						const auto removed = EngineLists::RemoveLeveledObjects(curobj, list, [&](const RE::LEVELED_OBJECT& x) {
+							return x.form == delForm && matchesRelation(x.count, relationSign, number);
+						});
+						logger::debug(FMT_STRING("leveled Lists {:08X} count {}{} removed Form {:08X} ({} entries)"), curobj->formID, relationSign.empty() ? "==" : relationSign, number, delForm->formID, removed);
 					}
 				}
 
 				if (!hasNumberLvl && !hasNumberCount) {
-					llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
+					const auto removed = EngineLists::RemoveLeveledObjects(curobj, list, [&](const RE::LEVELED_OBJECT& x) {
 						return x.form == delForm;
-						}),
-						llVec.end());
-					logger::debug(FMT_STRING("leveled Lists {:08X} removed all Forms {:08X}"), curobj->formID, delForm->formID);
+					});
+					logger::debug(FMT_STRING("leveled Lists {:08X} removed all Forms {:08X} ({} entries)"), curobj->formID, delForm->formID, removed);
 				}
-			}
-
-			std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
-				return a.level < b.level;
-				});
-			if (llVec.size() >= 1) {
-				createLL(curobj, llVec);
-			}
-			else {
-				ClearLL(curobj);
-				logger::debug(FMT_STRING("leveled Lists {:08X} is now empty"), curobj->formID);
 			}
 		}
 
 		if (!line.removeItemsByKeyword.empty()) {
-			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
-			for (size_t i = 0; i < line.removeItemsByKeyword.size(); i++) {
-				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.removeItemsByKeyword[i];
-				currentform = GetFormFromIdentifier(string_form);
-				if (currentform && currentform->formType == RE::FormType::Keyword) {
-					llVec.erase(std::remove_if(llVec.begin(), llVec.end(), [&](const RE::LEVELED_OBJECT& x) {
-						RE::BGSKeywordForm* keyForm = x.form ? x.form->As<RE::BGSKeywordForm>() : nullptr;
-						if (keyForm && keyForm->HasKeyword((RE::BGSKeyword*)currentform)) {
-							logger::debug(FMT_STRING("leveled Lists {:08X} removed item {:08X} with keyword {:08X} {} "), curobj->formID, x.form->formID, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
-							return true;
-						}
-
-						return false;
-						}),
-						llVec.end());
+			for (const auto& string_form : line.removeItemsByKeyword) {
+				RE::TESForm* currentform = GetFormFromIdentifier(string_form);
+				auto*        keyword = currentform ? currentform->As<RE::BGSKeyword>() : nullptr;
+				if (!keyword) {
+					continue;
 				}
-			}
-			if (llVec.size() >= 1) {
-				createLL(curobj, llVec);
-			}
-			else {
-				ClearLL(curobj);
-				logger::debug(FMT_STRING("leveled Lists {:08X} is now empty"), curobj->formID);
+				const auto removed = EngineLists::RemoveLeveledObjects(curobj, list, [&](const RE::LEVELED_OBJECT& x) {
+					const auto* keyForm = x.form ? x.form->As<RE::BGSKeywordForm>() : nullptr;
+					return keyForm && keyForm->HasKeyword(keyword);
+				});
+				logger::debug(FMT_STRING("leveled Lists {:08X} removed {} items with keyword {:08X} {}"), curobj->formID, removed, keyword->formID, keyword->formEditorID);
 			}
 		}
 
 		if (!line.clear.empty() && line.clear != "none") {
 			if (line.clear == "yes" || line.clear == "true") {
+				EngineLists::ClearLeveledList(curobj, list);
 				logger::debug(FMT_STRING("leveled lists {:08X} cleared"), curobj->formID);
-				ClearLL(curobj);
 			}
 		}
 
@@ -621,13 +467,12 @@ namespace LEVELEDLIST
 		}
 
 		if (!line.addedObjects.empty()) {
-			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
 			for (const auto& objectToAdd : line.addedObjects) {
 				if (objectToAdd.empty()) { logger::warn("leveled list {:08X}: empty addedObjects entry", curobj->formID); continue; }
 				uint16_t level = 1;
 				uint16_t count = 1;
 
-				std::string  addFormStr = objectToAdd[0];
+				const std::string& addFormStr = objectToAdd[0];
 				if (objectToAdd.size() > 1) {
 					if (!parseUInt16(objectToAdd[1], "add level", level)) { continue; }
 				}
@@ -635,28 +480,23 @@ namespace LEVELEDLIST
 					if (!parseUInt16(objectToAdd[2], "add count", count)) { continue; }
 				}
 				RE::TESForm* addForm = GetFormFromIdentifier(addFormStr);
-				if (addForm) {
-					llVec.push_back({ addForm, count, level });
+				if (!addForm) {
+					logger::critical(FMT_STRING("leveled Lists {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
+					continue;
+				}
+				if (EngineLists::AddLeveledObject(curobj, list, addForm, level, count)) {
 					logger::debug(FMT_STRING("leveled Lists {:08X} added Form {:08X}"), curobj->formID, addForm->formID);
 				}
-				else {
-					logger::critical(FMT_STRING("leveled Lists {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
-				}
 			}
-			std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
-				return a.level < b.level;
-				});
-			createLL(curobj, llVec);
 		}
 
 		if (!line.addedObjectsOnce.empty()) {
-			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
 			for (const auto& objectToAdd : line.addedObjectsOnce) {
 				if (objectToAdd.empty()) { logger::warn("leveled list {:08X}: empty addedObjectsOnce entry", curobj->formID); continue; }
 				uint16_t level = 1;
 				uint16_t count = 1;
 
-				std::string  addFormStr = objectToAdd[0];
+				const std::string& addFormStr = objectToAdd[0];
 				if (objectToAdd.size() > 1) {
 					if (!parseUInt16(objectToAdd[1], "add-once level", level)) { continue; }
 				}
@@ -664,32 +504,23 @@ namespace LEVELEDLIST
 					if (!parseUInt16(objectToAdd[2], "add-once count", count)) { continue; }
 				}
 				RE::TESForm* addForm = GetFormFromIdentifier(addFormStr);
-
-				if (addForm) {
-					auto it = std::find_if(llVec.begin(), llVec.end(), [addForm](const RE::LEVELED_OBJECT& obj) {
-						return obj.form && obj.form->formID == addForm->formID;
-						});
-
-					if (it == llVec.end()) {
-						llVec.push_back({ addForm, count, level });
-						logger::debug(FMT_STRING("leveled Lists {:08X} added once Form {:08X}"), curobj->formID, addForm->formID);
-					}
-					else {
-						logger::debug(FMT_STRING("leveled Lists {:08X} Form {:08X} already exists"), curobj->formID, addForm->formID);
-					}
-				}
-				else {
+				if (!addForm) {
 					logger::critical(FMT_STRING("leveled Lists {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
+					continue;
+				}
+
+				bool exists = false;
+				EngineLists::ForEachLeveledObject(list, [&](RE::LEVELED_OBJECT& obj) {
+					exists = exists || obj.form == addForm;
+				});
+				if (exists) {
+					logger::debug(FMT_STRING("leveled Lists {:08X} Form {:08X} already exists"), curobj->formID, addForm->formID);
+				}
+				else if (EngineLists::AddLeveledObject(curobj, list, addForm, level, count)) {
+					logger::debug(FMT_STRING("leveled Lists {:08X} added once Form {:08X}"), curobj->formID, addForm->formID);
 				}
 			}
-
-			std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
-				return a.level < b.level;
-				});
-
-			createLL(curobj, llVec);
 		}
-
 
 		if (!line.llglobal.empty() && line.llglobal != "none") {
 			if (toLowerCase(line.llglobal) != "null") {
@@ -714,37 +545,30 @@ namespace LEVELEDLIST
 		}
 
 		if (!line.objectMultCount.empty() && curobj->numEntries > 0) {
-			std::vector<RE::LEVELED_OBJECT> llVec = convertLLtoVec(curobj);
 			for (const auto& objectToreplace : line.objectMultCount) {
 				if (objectToreplace.size() < 2) {
 					logger::warn(FMT_STRING("leveled list {:08X}: invalid objectMultCount entry, expected form and multiplier"), curobj->formID);
 					continue;
 				}
-				std::string formToReplaceString = objectToreplace[0];
 				float multiplier = 1.0f;
 				if (!parseFloat(objectToreplace[1], "objectMultCount multiplier", multiplier)) { continue; }
-				int          count = 0;
-				RE::TESForm* formToReplace = GetFormFromIdentifier(formToReplaceString);
-				if (formToReplace  ) {
-					for (auto& obj : llVec) {
-						if (obj.form && obj.form->formID == formToReplace->formID) {
-							obj.count = static_cast<uint16_t>(std::ceil(obj.count * multiplier));
-							count++;
-						}
-					}
-					std::sort(llVec.begin(), llVec.end(), [](const RE::LEVELED_OBJECT& a, const RE::LEVELED_OBJECT& b) {
-						return a.level < b.level;
-						});
-					if (llVec.size() >= 1 && count > 0) {
-						createLL(curobj, llVec);
-						logger::debug(FMT_STRING("leveled Lists {:08X} all matching forms of {:08X} have their count multiplied by {}. Total changes: {}"), curobj->formID, formToReplace->formID, multiplier, count);
-					}
+				RE::TESForm* formToReplace = GetFormFromIdentifier(objectToreplace[0]);
+				if (!formToReplace) {
+					continue;
 				}
-
+				int count = 0;
+				EngineLists::ForEachLeveledObject(list, [&](RE::LEVELED_OBJECT& obj) {
+					if (obj.form == formToReplace) {
+						const auto scaled = std::ceil(static_cast<double>(obj.count) * multiplier);
+						obj.count = static_cast<std::uint16_t>(std::clamp(scaled, 0.0, static_cast<double>(std::numeric_limits<std::uint16_t>::max())));
+						count++;
+					}
+				});
+				if (count > 0) {
+					logger::debug(FMT_STRING("leveled Lists {:08X} all matching forms of {:08X} have their count multiplied by {}. Total changes: {}"), curobj->formID, formToReplace->formID, multiplier, count);
+				}
 			}
 		}
-
-
 	}
 
 }

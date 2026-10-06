@@ -4,6 +4,7 @@
 using namespace std;
 
 #include "PCH.h"
+#include <optional>
 #include <string>
 
 template <typename Enum>
@@ -52,6 +53,9 @@ bool                              changeContainerObjectCount(RE::TESContainer& c
 bool                              multiplyContainerObjectCount(RE::TESContainer& container, RE::TESBoundObject* object, float multiplier);
 void                              setMoralityLevel(RE::TESNPC* npc, RE::ACTOR_MORALITY level);
 void                              setMoodLevel(RE::TESNPC* npc, RE::ACTOR_MOOD level);
+bool                              createsFaceNPCLoop(const RE::TESNPC* target, const RE::TESNPC* source);
+std::optional<float>              tryParseFloat(const std::string& text);
+void                              copyKeywordArray(RE::BGSKeywordForm* target, const RE::BGSKeywordForm* source);
 
 
 #endif

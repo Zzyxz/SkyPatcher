@@ -1,4 +1,5 @@
 #include "utility.h"
+#include "enginelists.h"
 #include <mutex>
 #include <regex>
 #include <unordered_map>
@@ -366,74 +367,19 @@ void extractToArr2D(const std::string& line, const std::string& regex_pattern_st
 
 void addAltTexture(RE::TESModelTextureSwap* curobj, RE::TESModelTextureSwap::AlternateTexture newTex)
 {
-	const auto newSize = curobj->numAlternateTextures + 1;
-
-	RE::MemoryManager mm = *RE::MemoryManager::GetSingleton();
-	auto              newTextures = RE::calloc<RE::TESModelTextureSwap::AlternateTexture>(newSize);
-
-	if (!newTextures) {
-		return;
-	}
-
-	if (curobj->alternateTextures && curobj->numAlternateTextures > 0) {
-		std::copy(curobj->alternateTextures, curobj->alternateTextures + curobj->numAlternateTextures, newTextures);
-	}
-
-
-	newTextures[newSize - 1] = newTex;
-
-	std::sort(newTextures, newTextures + newSize, [](const RE::TESModelTextureSwap::AlternateTexture& a, const RE::TESModelTextureSwap::AlternateTexture& b) {
-		return a.index3D < b.index3D;
-	});
-
-	curobj->alternateTextures = newTextures;
-	curobj->numAlternateTextures = newSize;
+	EngineLists::AddAlternateTexture(curobj, newTex.textureSet, newTex.name3D.c_str(), newTex.index3D);
 }
 
 void clearAltTextures(RE::TESModelTextureSwap* curobj)
 {
-	if (curobj->numAlternateTextures > 0) {
-		curobj->alternateTextures = nullptr;
-		curobj->numAlternateTextures = 0;
-	}
+	EngineLists::ClearAlternateTextures(curobj);
 }
 
 bool removeAltTextureByTextureSet(RE::TESModelTextureSwap* curobj, RE::BGSTextureSet* textureSetToRemove)
 {
-	if (!curobj || !curobj->alternateTextures || curobj->numAlternateTextures == 0) {
-		return false;
-	}
-
-	auto begin = curobj->alternateTextures;
-	auto end = begin + curobj->numAlternateTextures;
-
-	auto newEnd = std::remove_if(begin, end,
-		[textureSetToRemove](const RE::TESModelTextureSwap::AlternateTexture& altTex) {
-			return altTex.textureSet == textureSetToRemove;
-		});
-
-	if (newEnd == end) {
-		return false;
-	}
-
-	std::size_t newSize = static_cast<std::size_t>(std::distance(begin, newEnd));
-
-	if (newSize == 0) {
-		curobj->alternateTextures = nullptr;
-		curobj->numAlternateTextures = 0;
-		return true;
-	}
-
-	auto* newTextures = RE::calloc<RE::TESModelTextureSwap::AlternateTexture>(newSize);
-	if (!newTextures) {
-		return false;
-	}
-
-	std::copy(begin, newEnd, newTextures);
-
-	curobj->alternateTextures = newTextures;
-	curobj->numAlternateTextures = newSize;
-	return true;
+	return EngineLists::RemoveAlternateTextures(curobj, [textureSetToRemove](const RE::TESModelTextureSwap::AlternateTexture& altTex) {
+		return altTex.textureSet == textureSetToRemove;
+	}) > 0;
 }
 
 bool findTextureSet(RE::TESModelTextureSwap* curobj, RE::BGSTextureSet* textureSetToFind)
@@ -674,3 +620,40 @@ RE::FIGHT_REACTION GetFightReaction(const std::string& value)
 }
 
 
+
+bool createsFaceNPCLoop(const RE::TESNPC* target, const RE::TESNPC* source)
+{
+	int depth = 0;
+	for (const auto* npc = source; npc; npc = npc->faceNPC) {
+		if (npc == target || ++depth > 64) {
+			return true;
+		}
+	}
+	return false;
+}
+
+std::optional<float> tryParseFloat(const std::string& text)
+{
+	try {
+		return std::stof(text);
+	} catch (const std::exception&) {
+		return std::nullopt;
+	}
+}
+
+void copyKeywordArray(RE::BGSKeywordForm* target, const RE::BGSKeywordForm* source)
+{
+	if (!target || !source) {
+		return;
+	}
+	RE::BGSKeyword** copy = nullptr;
+	if (source->keywords && source->numKeywords > 0) {
+		copy = RE::calloc<RE::BGSKeyword*>(source->numKeywords);
+		if (!copy) {
+			return;
+		}
+		std::copy_n(source->keywords, source->numKeywords, copy);
+	}
+	target->keywords = copy;
+	target->numKeywords = copy ? source->numKeywords : 0;
+}

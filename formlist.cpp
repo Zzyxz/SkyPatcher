@@ -99,14 +99,11 @@ namespace FORMLIST
 				std::string removeFormStr = objectToRemove;
 				auto        removeForm = GetFormFromIdentifier(removeFormStr);
 				if (removeForm) {
-					auto it = std::remove_if(curobj->forms.begin(), curobj->forms.end(), [&](const RE::TESForm* x) {
-						return x->formID == removeForm->formID;
-					});
-					while (it != curobj->forms.end()) {
-						curobj->forms.erase(it);
-						it = std::remove_if(it, curobj->forms.end(), [&](const RE::TESForm* x) {
-							return x->formID == removeForm->formID;
-						});
+					for (auto i = curobj->forms.size(); i-- > 0;) {
+						const auto* x = curobj->forms[i];
+						if (x && x->formID == removeForm->formID) {
+							curobj->forms.erase(curobj->forms.begin() + i);
+						}
 					}
 					logger::debug(FMT_STRING("formlist formid: {:08X} removed form {:08X} "), curobj->formID, removeForm->formID);
 				}

@@ -609,7 +609,7 @@ namespace CELL
 			}
 		}
 
-		if (curobj->cellData.interior) {
+		if (curobj->IsInteriorCell() && curobj->cellData.interior) {
 		try {
 		if (!line.removeInheritanceFlags.empty()) {
 			static const std::unordered_map<std::string, RE::INTERIOR_DATA::Inherit> inheritFlagMap = {

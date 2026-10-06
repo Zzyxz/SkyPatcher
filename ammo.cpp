@@ -165,7 +165,7 @@ namespace AMMO
 				}
 				#ifndef SKYRIMVR
 				if (!line.weightLessThan.empty() && line.weightLessThan != "none") {
-					if (curobj->weight < stof(line.weightLessThan)) {
+					if (const auto limit = tryParseFloat(line.weightLessThan); limit && curobj->weight < *limit) {
 						found = true;
 					}
 				}

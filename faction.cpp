@@ -305,7 +305,10 @@ namespace FACTION
 					continue;
 				}
 
-				auto* reaction = new RE::GROUP_REACTION();
+				auto* reaction = static_cast<RE::GROUP_REACTION*>(RE::malloc(sizeof(RE::GROUP_REACTION)));
+				if (!reaction) {
+					continue;
+				}
 				reaction->form = form;
 				reaction->reaction = modifier;
 				reaction->fightReaction = fightReaction;
@@ -378,26 +381,34 @@ namespace FACTION
 					continue;
 				}
 
-				bool                                  found = false;
-				RE::BSSimpleList<RE::GROUP_REACTION*> kept;
-
-				while (!curobj->reactions.empty()) {
-					auto* reaction = curobj->reactions.front();
-					curobj->reactions.pop_front();
-
+				bool                             found = false;
+				std::size_t                      total = 0;
+				std::vector<RE::GROUP_REACTION*> kept;
+				for (auto* reaction : curobj->reactions) {
+					++total;
 					if (reaction && reaction->form == form) {
 						found = true;
-						delete reaction;
-						continue;
+					} else if (reaction) {
+						kept.push_back(reaction);
 					}
-
-					kept.push_front(reaction);
 				}
 
-				while (!kept.empty()) {
-					auto* reaction = kept.front();
-					kept.pop_front();
-					curobj->reactions.push_front(reaction);
+				if (found) {
+					const std::size_t surplus = total - kept.size();
+					std::size_t       index = 0;
+					for (auto& item : curobj->reactions) {
+						if (index >= surplus) {
+							item = kept[index - surplus];
+						}
+						++index;
+					}
+					const std::size_t pops = kept.empty() ? total - 1 : surplus;
+					for (std::size_t i = 0; i < pops; ++i) {
+						curobj->reactions.pop_front();
+					}
+					if (kept.empty()) {
+						curobj->reactions.front() = nullptr;
+					}
 				}
 
 				if (found) {

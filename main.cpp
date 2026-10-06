@@ -151,72 +151,53 @@ public:
 		return nullptr;
 	}
 
+	static void resetActor3D(RE::FormID actorID)
+	{
+		if (auto* actor = lookupActor(actorID)) {
+			actor->DoReset3D(true);
+			actor->UpdateSkinColor();
+		}
+	}
+
+	static void waitFor3DThenReset(RE::FormID actorID, int attempt)
+	{
+		SKSE::GetTaskInterface()->AddTask([actorID, attempt] {
+			auto* actor = lookupActor(actorID);
+			if (!actor) {
+				return;
+			}
+			const bool highProcess = actor->currentProcess && actor->currentProcess->InHighProcess();
+			if (highProcess && !actor->Get3D(false) && attempt < 10) {
+				logger::debug("3DUpdate: Actor: {:08X} wait for 3D... times waited {}", actorID, attempt);
+				std::jthread([actorID, attempt] {
+					std::this_thread::sleep_for(std::chrono::milliseconds(50));
+					waitFor3DThenReset(actorID, attempt + 1);
+				}).detach();
+				return;
+			}
+			resetActor3D(actorID);
+			logger::debug("3DUpdate: Actor: {:08X} 3D has been reset{}.", actorID, highProcess ? "" : " without wait (not a high process)");
+		});
+	}
+
 	void updateNPCVisuals(RE::FormID actorID)
 	{
-		auto* a_this = lookupActor(actorID);
-		if (!a_this) {
-			return;
-		}
-		if (a_this && a_this->currentProcess && a_this->currentProcess->InHighProcess()) {
-			int count = 0;
-			while (!a_this->Get3D(false) && count < 10) {
-				std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-				a_this = lookupActor(actorID);
-				if (!a_this) {
-					return;
-				}
-
-				if (a_this->data.objectReference) {
-					logger::debug("3DUpdate: Actor: {:08X} NPC: {:08X} wait for 3D... times waited {}", a_this->formID, a_this->data.objectReference->formID, count);
-				}
-				else {
-					logger::debug("3DUpdate: Actor: {:08X} wait for 3D... times waited {}", a_this->formID, count);
-
-				}
-				count++;
-			}
-
-			SKSE::GetTaskInterface()->AddTask([actorID] {
-				if (auto* actor = lookupActor(actorID)) {
-					actor->DoReset3D(true);
-					actor->UpdateSkinColor();
-				}
-				});
-
-			if (a_this->data.objectReference) {
-				logger::debug("3DUpdate: Actor: {:08X} NPC: {:08X} 3D has been reset.", a_this->formID, a_this->data.objectReference->formID);
-			}
-			else {
-				logger::debug("3DUpdate: Actor: {:08X} 3D has been reset.", a_this->formID);
-
-			}
-
-		}
-		else {
-			if (a_this && a_this->data.objectReference) {
-				const auto actorID = a_this->formID;
-				SKSE::GetTaskInterface()->AddTask([actorID] {
-					if (auto* actor = lookupActor(actorID)) {
-						actor->DoReset3D(true);
-						actor->UpdateSkinColor();
-					}
-					});
-				logger::debug("3DUpdate: Actor: {:08X} NPC: {:08X} is currently not a high process, 3D has been reset without wait.", a_this->formID, a_this->data.objectReference->formID);
-			}
-
-		}
+		waitFor3DThenReset(actorID, 0);
 	}
 
 	void updateNPCVisualsByEnable(RE::FormID actorID)
 	{
-		if (auto* actor = lookupActor(actorID)) {
-			actor->Disable();
-			std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-			if (auto* currentActor = lookupActor(actorID)) {
-				Enable(currentActor, true);
+		SKSE::GetTaskInterface()->AddTask([actorID] {
+			if (auto* actor = lookupActor(actorID)) {
+				actor->Disable();
 			}
-		}
+		});
+		std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+		SKSE::GetTaskInterface()->AddTask([actorID] {
+			if (auto* actor = lookupActor(actorID)) {
+				Enable(actor, true);
+			}
+		});
 	}
 
 	void updateNPCVisualsController(RE::FormID actorID)
@@ -460,7 +441,9 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData
 				npcToChange->skin = npcToCopyFrom->skin;
 				npcToChange->height = npcToCopyFrom->height;
 				npcToChange->weight = npcToCopyFrom->weight;
-				npcToChange->faceNPC = npcToCopyFrom;
+				if (!createsFaceNPCLoop(npcToChange, npcToCopyFrom)) {
+					npcToChange->faceNPC = npcToCopyFrom;
+				}
 				npcToChange->bodyTintColor = npcToCopyFrom->bodyTintColor;
 				if (npcData.changeVoice) {
 					npcToChange->voiceType = npcToCopyFrom->voiceType;
@@ -1005,7 +988,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 							if (data->originalBase) {
 								auto itBase = actData.npcData.find(data->originalBase->formID);
-								if (itBase != actData.npcData.end() && itBase->second.npcCombatStyleList) {
+								if (itBase != actData.npcData.end() && itBase->second.npcVisualStyleList) {
 									originalBaseHasStyleList = true;
 								}
 							}
@@ -1113,8 +1096,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 									RE::TESNPC* npcToChange = actor->data.objectReference->As<RE::TESNPC>();
 									npcToChange->height = npcToCopyFrom->height;
 									npcToChange->weight = npcToCopyFrom->weight;
-									npcToChange->faceNPC = npcToCopyFrom;
-									npcToChange->tintLayers = npcToCopyFrom->tintLayers;
+									if (!createsFaceNPCLoop(npcToChange, npcToCopyFrom)) {
+										npcToChange->faceNPC = npcToCopyFrom;
+									}
 									npcToChange->bodyTintColor = npcToCopyFrom->bodyTintColor;
 									if (npcToChange && npcToCopyFrom) {
 										for (int i = 0; i < npcToCopyFrom->numHeadParts; i++) {
@@ -1742,7 +1726,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	if (RefPatchingEnabled)
 		InstallRefHook();
 
-	if (statRefreshEnabled && statRefreshExcludeEnabled) {
+	if (statRefreshExcludeEnabled) {
 		std::ifstream configFile(".\\Data\\SKSE\\Plugins\\SkyPatcher.ini");
 
 		std::string line;

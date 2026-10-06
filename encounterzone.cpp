@@ -315,7 +315,7 @@ namespace ENCOUNTERZONE
 			if (currentform && currentform->formType == RE::FormType::Location) {
 				curobj->data.location = (RE::BGSLocation*)currentform;
 				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} set location {:08X} {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.location->formID, curobj->formID, clib_util::editorID::get_editorID(curobj->data.location));
-			} else if (line.location != "null") {
+			} else if (toLowerCase(line.location) == "null") {
 				curobj->data.location = nullptr;
 				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} removed location"), curobj->formID, clib_util::editorID::get_editorID(curobj) );
 			}

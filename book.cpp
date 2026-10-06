@@ -460,10 +460,13 @@ namespace BOOK
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Spell) {
 						curobj->data.teaches.spell = (RE::SpellItem*)currentform;
+						curobj->data.flags.set(RE::OBJ_BOOK::Flag::kTeachesSpell);
+						curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kAdvancesActorValue);
 						logger::debug(FMT_STRING("book formid: {:08X} {} changed spell teached {:08X}"), curobj->formID, curobj->fullName, curobj->data.teaches.spell->formID);
 					}
 				} else if (toLowerCase(string_form) == "null") {
 					curobj->data.teaches.spell = nullptr;
+					curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kTeachesSpell);
 					logger::debug(FMT_STRING("book formid: {:08X} {} changed spell teached to null"), curobj->formID, curobj->fullName);
 				}
 			} catch (const std::exception& e) {
@@ -471,63 +474,28 @@ namespace BOOK
 		}
 
 		if (line.teachSkill != "none") {
-			if (toLowerCase(line.teachSkill) == "alchemy") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kAlchemy;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to alchemy"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "alteration") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kAlteration;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to alteration"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "archery") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kArchery;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to archery"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "block") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kBlock;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to block"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "conjuration") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kConjuration;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to conjuration"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "destruction") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kDestruction;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to destruction"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "enchanting") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kEnchanting;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to enchanting"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "heavyarmor") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kHeavyArmor;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to heavy armor"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "illusion") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kIllusion;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to illusion"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "lightarmor") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kLightArmor;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to light armor"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "lockpicking") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kLockpicking;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to lockpicking"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "null") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kNone;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to none"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "onehanded") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kOneHanded;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to one-handed"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "pickpocket") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kPickpocket;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to pickpocket"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "restoration") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kRestoration;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to restoration"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "smithing") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kSmithing;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to smithing"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "sneak") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kSneak;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to sneak"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "speech") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kSpeech;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to speech"), curobj->formID, curobj->fullName);
-			} else if (toLowerCase(line.teachSkill) == "twohanded") {
-				curobj->data.teaches.actorValueToAdvance = RE::ActorValue::kTwoHanded;
-				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to two-handed"), curobj->formID, curobj->fullName);
+			static const std::unordered_map<std::string, RE::ActorValue> skills = {
+				{ "alchemy", RE::ActorValue::kAlchemy }, { "alteration", RE::ActorValue::kAlteration },
+				{ "archery", RE::ActorValue::kArchery }, { "block", RE::ActorValue::kBlock },
+				{ "conjuration", RE::ActorValue::kConjuration }, { "destruction", RE::ActorValue::kDestruction },
+				{ "enchanting", RE::ActorValue::kEnchanting }, { "heavyarmor", RE::ActorValue::kHeavyArmor },
+				{ "illusion", RE::ActorValue::kIllusion }, { "lightarmor", RE::ActorValue::kLightArmor },
+				{ "lockpicking", RE::ActorValue::kLockpicking }, { "null", RE::ActorValue::kNone },
+				{ "onehanded", RE::ActorValue::kOneHanded }, { "pickpocket", RE::ActorValue::kPickpocket },
+				{ "restoration", RE::ActorValue::kRestoration }, { "smithing", RE::ActorValue::kSmithing },
+				{ "sneak", RE::ActorValue::kSneak }, { "speech", RE::ActorValue::kSpeech },
+				{ "twohanded", RE::ActorValue::kTwoHanded }
+			};
+			if (const auto it = skills.find(toLowerCase(line.teachSkill)); it != skills.end()) {
+				curobj->data.teaches.spell = nullptr;
+				curobj->data.teaches.actorValueToAdvance = it->second;
+				curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kTeachesSpell);
+				if (it->second == RE::ActorValue::kNone) {
+					curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kAdvancesActorValue);
+				} else {
+					curobj->data.flags.set(RE::OBJ_BOOK::Flag::kAdvancesActorValue);
+				}
+				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to {}"), curobj->formID, curobj->fullName, it->first);
 			}
 		}
 
@@ -569,7 +537,13 @@ namespace BOOK
 				}
 				std::string texture = objectToAdd[0];
 				std::string name = objectToAdd[1];
-				int32_t     index = std::stoi(objectToAdd[2]);
+				int32_t index = 0;
+				try {
+					index = std::stoi(objectToAdd[2]);
+				} catch (const std::exception&) {
+					logger::warn(FMT_STRING("alternateTexturesToAdd: invalid index '{}', skipped"), objectToAdd[2]);
+					continue;
+				}
 				RE::TESForm* currentform = GetFormFromIdentifier(texture);
 				if (currentform && currentform->formType == RE::FormType::TextureSet) {
 					RE::TESModelTextureSwap::AlternateTexture newTex;

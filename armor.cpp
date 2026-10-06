@@ -884,8 +884,7 @@ namespace ARMOR
 					curobj->equipSlot = templateArmor->equipSlot;
 					curobj->blockBashImpactDataSet = templateArmor->blockBashImpactDataSet;
 					curobj->altBlockMaterialType = templateArmor->altBlockMaterialType;
-					curobj->keywords = templateArmor->keywords;
-					curobj->numKeywords = templateArmor->numKeywords;
+					copyKeywordArray(curobj, templateArmor);
 					curobj->armorRating = templateArmor->armorRating;
 					curobj->weight = templateArmor->weight;
 					curobj->descriptionText = templateArmor->descriptionText;

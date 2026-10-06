@@ -19,7 +19,7 @@ namespace RACE
 	{
 	public:
 		static void InstallHook();
-		static bool Hook_InitItemImpl(RE::TESRace* a_race);
+		static void Hook_InitItemImpl(RE::TESRace* a_race);
 
 	private:
 		static inline REL::Relocation<decltype(&Hook_InitItemImpl)> func;

@@ -328,6 +328,10 @@ namespace RACE
 
 	void hookpatch(const RACE::patch_instruction& line, RE::TESRace* curobj)
 	{
+		if (!curobj->attackDataMap) {
+			logger::debug(FMT_STRING("race formid: {:08X} has no attack data, attack data rules skipped"), curobj->formID);
+			return;
+		}
 		if (!line.addedObjects.empty()) {
 			RE::BGSAttackData* newAttackData = RE::BGSAttackData::Create();
 			newAttackData->IncRefCount();
@@ -346,6 +350,9 @@ namespace RACE
 
 			for (auto objectArr : line.addedObjects) {
 				for (auto object : objectArr) {
+					if (object.empty() || (object.size() < 2 && toLowerCase(object[0]) != "resetflags" && toLowerCase(object[0]) != "removeflags")) {
+						continue;
+					}
 					if (toLowerCase(object[0]) == "key") {
 						newAttackData->event = object[1];
 						logger::debug("added event: {}", object[1]);
@@ -463,7 +470,7 @@ namespace RACE
 		if (!line.removeAttackData.empty()) {
 			for (auto attackData : line.removeAttackData) {
 				for (auto it = curobj->attackDataMap->attackDataMap.begin(); it != curobj->attackDataMap->attackDataMap.end();) {
-					if (toLowerCase(it->second.get()->event.c_str()) == toLowerCase(attackData)) {
+					if (it->second && toLowerCase(it->second.get()->event.c_str()) == toLowerCase(attackData)) {
 						logger::debug("race formid: {:08X} removing attackData with event {} ", curobj->formID, it->second.get()->event.c_str());
 						it = curobj->attackDataMap->attackDataMap.erase(it);
 					} else {
@@ -612,7 +619,7 @@ namespace RACE
 
 			for (auto attackData : line.removeAttackData) {
 				for (auto it = curobj->attackDataMap->attackDataMap.begin(); it != curobj->attackDataMap->attackDataMap.end();) {
-					if (toLowerCase(it->second.get()->event.c_str()) == toLowerCase(attackData)) {
+					if (it->second && toLowerCase(it->second.get()->event.c_str()) == toLowerCase(attackData)) {
 						logger::debug("race formid: {:08X} removing attackData with event {} ", curobj->formID, it->second.get()->event.c_str());
 						it = curobj->attackDataMap->attackDataMap.erase(it);
 					} else {
@@ -745,12 +752,12 @@ namespace RACE
 		}
 
 		if (!line.levSpellsToRemove.empty()) {
-			for (size_t i = 0; i < line.spellsToRemove.size(); i++) {
+			for (size_t i = 0; i < line.levSpellsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.spellsToRemove[i];
+				std::string  string_form = line.levSpellsToRemove[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::LeveledSpell) {
-					if (!curobj->actorEffects) {
+					if (curobj->actorEffects) {
 						curobj->actorEffects->RemoveLevSpell((RE::TESLevSpell*)currentform);
 					}
 					logger::debug(FMT_STRING("race formid: {:08X} removed levSpell {:08X} "), curobj->formID, ((RE::TESLevSpell*)currentform)->formID);
@@ -759,9 +766,9 @@ namespace RACE
 		}
 
 		if (!line.shoutsToAdd.empty()) {
-			for (size_t i = 0; i < line.spellsToAdd.size(); i++) {
+			for (size_t i = 0; i < line.shoutsToAdd.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.spellsToAdd[i];
+				std::string  string_form = line.shoutsToAdd[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Shout) {
 					if (!curobj->actorEffects) {
@@ -774,12 +781,12 @@ namespace RACE
 		}
 
 		if (!line.shoutsToRemove.empty()) {
-			for (size_t i = 0; i < line.spellsToRemove.size(); i++) {
+			for (size_t i = 0; i < line.shoutsToRemove.size(); i++) {
 				RE::TESForm* currentform = nullptr;
-				std::string  string_form = line.spellsToRemove[i];
+				std::string  string_form = line.shoutsToRemove[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Shout) {
-					if (!curobj->actorEffects) {
+					if (curobj->actorEffects) {
 						curobj->actorEffects->RemoveShout((RE::TESShout*)currentform);
 					}
 					logger::debug(FMT_STRING("race formid: {:08X} removed shout {:08X} "), curobj->formID, ((RE::TESShout*)currentform)->formID);
@@ -1196,11 +1203,11 @@ namespace RACE
 		logger::debug("{} Done!", __FUNCTION__);
 	}
 
-	bool LoadRaceDataHook::Hook_InitItemImpl(RE::TESRace* curobj)
+	void LoadRaceDataHook::Hook_InitItemImpl(RE::TESRace* curobj)
 	{
-
-		auto result = func(curobj);
-		if (result) {
+		const bool wasInitialized = curobj->IsInitialized();
+		func(curobj);
+		if (!wasInitialized) {
 
 			for (const auto& line : hooktokens) {
 				bool found = false;
@@ -1208,7 +1215,7 @@ namespace RACE
 				bool keywordOr = false;
 
 				if (curobj->IsDeleted()) {
-					return result;
+					return;
 				}
 
 				const formfilter::CommonFilterView view{
@@ -1269,12 +1276,14 @@ namespace RACE
 				}
 
 				if (found) {
-					hookpatch(line, curobj);
+					try {
+						hookpatch(line, curobj);
+					} catch (const std::exception& e) {
+						logger::warn(FMT_STRING("race formid: {:08X} raceHook rule skipped: {}"), curobj->formID, e.what());
+					}
 				}
 			}
 
-			return result;
 		}
-		return result;
 	}
 }

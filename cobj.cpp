@@ -1,4 +1,5 @@
 #include "cobj.h"
+#include "enginelists.h"
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
@@ -367,7 +368,7 @@ namespace COBJ
 
 		if (!line.clearIngredients.empty() && line.clearIngredients != "none") {
 			try {
-				curobj->requiredItems.RemoveAllObjectFromContainer();
+				EngineLists::ClearContainer(curobj->requiredItems);
 				logger::debug(FMT_STRING("cobj formid: {:08X} cleared all ingredients"), curobj->formID);
 			} catch (const std::exception& e) {
 			}
@@ -392,7 +393,7 @@ namespace COBJ
 				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
-					curobj->requiredItems.RemoveObjectFromContainer(addForm, count);
+					EngineLists::RemoveContainerObjectWithCount(curobj->requiredItems, addForm, static_cast<std::int32_t>(count));
 					logger::debug(FMT_STRING("cobj formid: {:08X} removed Form {:08X}"), curobj->formID, addForm->formID);
 				} else {
 					logger::critical(FMT_STRING("cobj formid: {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
@@ -407,7 +408,7 @@ namespace COBJ
 				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
-					auto removedObjectsCount = curobj->requiredItems.RemoveObjectInstancesFromContainer(addForm);
+					auto removedObjectsCount = EngineLists::RemoveContainerObjectInstances(curobj->requiredItems, addForm);
 					logger::debug(FMT_STRING("cobj formid: {:08X} removed Form {:08X} count {}"), curobj->formID, addForm->formID, removedObjectsCount);
 				} else {
 					logger::critical(FMT_STRING("cobj formid: {:08X} Form not found: {}"), curobj->formID, objectToAdd);
@@ -432,7 +433,7 @@ namespace COBJ
 				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
-					curobj->requiredItems.AddObjectToContainer(addForm, count, nullptr);
+					EngineLists::AddContainerObject(curobj->requiredItems, addForm, static_cast<std::int32_t>(count));
 					logger::debug(FMT_STRING("cobj formid: {:08X} added Form {:08X}"), curobj->formID, addForm->formID);
 				} else {
 					logger::critical(FMT_STRING("cobj formid: {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
@@ -468,7 +469,7 @@ namespace COBJ
 				if (addForm) {
 					double proportion = static_cast<double>(createdItemCount) / maxAmount;
 					int    finalAmount = std::ceil(count * proportion);
-					curobj->requiredItems.AddObjectToContainer(addForm, finalAmount, nullptr);
+					EngineLists::AddContainerObject(curobj->requiredItems, addForm, finalAmount);
 					logger::debug(FMT_STRING("cobj formid: {:08X} added Form {:08X} with amount {} of {}"), curobj->formID, addForm->formID, finalAmount, maxAmount);
 				} else {
 					logger::critical(FMT_STRING("cobj formid: {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);

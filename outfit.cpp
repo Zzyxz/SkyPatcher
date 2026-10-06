@@ -114,7 +114,7 @@ namespace OUTFIT
 						if (currentform ) {
 							
 							for (const auto& outfit : curobj->outfitItems) {
-								if (outfit->formID == currentform->formID) {
+								if (outfit && outfit->formID == currentform->formID) {
 									foundInList = true;
 									break;
 								}
@@ -139,7 +139,7 @@ namespace OUTFIT
 						currentform = GetFormFromIdentifier(string_form);
 						if (currentform ) {
 							for (const auto& outfit : curobj->outfitItems) {
-								if (outfit->formID == currentform->formID) {
+								if (outfit && outfit->formID == currentform->formID) {
 									mgefOr = true;
 									break;
 								}
@@ -167,9 +167,9 @@ namespace OUTFIT
 						RE::TESForm*       currentform = nullptr;
 						std::string string_form = mgefstring;
 						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
+						if (currentform) {
 							for (const auto& outfit : curobj->outfitItems) {
-								if (outfit->formID == currentform->formID) {
+								if (outfit && outfit->formID == currentform->formID) {
 									found = false;
 									logger::debug(FMT_STRING("outfit exlucded {:08X} by form {:08X}"), curobj->formID, currentform->formID);
 									break;
@@ -272,7 +272,7 @@ namespace OUTFIT
 			for (const auto& objectToRemove : line.objectsRemove) {
 				std::string        removeFormStr = objectToRemove;
 				auto* resolvedRemoveForm = GetFormFromIdentifier(removeFormStr);
-				auto* removeForm = resolvedRemoveForm ? resolvedRemoveForm->As<RE::EffectSetting>() : nullptr;
+				auto* removeForm = resolvedRemoveForm;
 				if (removeForm) {
 					auto it = curobj->outfitItems.begin();
 					while (it != curobj->outfitItems.end()) {
@@ -293,6 +293,10 @@ namespace OUTFIT
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.addedObjects[i];
 				currentform = GetFormFromIdentifier(string_form);
+				if (currentform && currentform->formType != RE::FormType::Armor && currentform->formType != RE::FormType::LeveledItem) {
+					logger::warn(FMT_STRING("outfit formid: {:08X} cannot add {:08X}: only armor and leveled items are allowed"), curobj->formID, currentform->formID);
+					currentform = nullptr;
+				}
 				if (currentform) {
 					curobj->outfitItems.push_back(currentform);
 					logger::debug(FMT_STRING("outfit formid: {:08X} added form {:08X} "), curobj->formID,  currentform->formID);
@@ -308,6 +312,10 @@ namespace OUTFIT
 				std::string  string_form2 = line.formsToReplaceWith[i];
 				currentform = GetFormFromIdentifier(string_form);
 				currentform2 = GetFormFromIdentifier(string_form2);
+				if (currentform2 && currentform2->formType != RE::FormType::Armor && currentform2->formType != RE::FormType::LeveledItem) {
+					logger::warn(FMT_STRING("outfit formid: {:08X} cannot replace with {:08X}: only armor and leveled items are allowed"), curobj->formID, currentform2->formID);
+					currentform2 = nullptr;
+				}
 				if (currentform && currentform2) {
 					for (auto& form : curobj->outfitItems) {
 						if (form && form->formID == currentform->formID) {

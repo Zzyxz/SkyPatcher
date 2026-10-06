@@ -1,4 +1,5 @@
 #include "weapon.h"
+#include "enginelists.h"
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
@@ -866,7 +867,7 @@ namespace WEAPON
 					curobj->addons = templateWeapon->addons;
 					curobj->numAddons = templateWeapon->numAddons;
 					curobj->altBlockMaterialType = templateWeapon->altBlockMaterialType;
-					curobj->alternateTextures = templateWeapon->alternateTextures;
+					EngineLists::CopyAlternateTextures(curobj, templateWeapon);
 					curobj->attackDamage = templateWeapon->attackDamage;
 					curobj->attackFailSound = templateWeapon->attackFailSound;
 					curobj->attackLoopSound = templateWeapon->attackLoopSound;
@@ -879,8 +880,7 @@ namespace WEAPON
 					curobj->pickupSound = templateWeapon->pickupSound;
 					curobj->putdownSound = templateWeapon->putdownSound;
 					curobj->idleSound = templateWeapon->idleSound;
-					curobj->keywords = templateWeapon->keywords;
-					curobj->numKeywords = templateWeapon->numKeywords;
+					copyKeywordArray(curobj, templateWeapon);
 					curobj->descriptionText = templateWeapon->descriptionText;
 					curobj->unequipSound = templateWeapon->unequipSound;
 					curobj->impactDataSet = templateWeapon->impactDataSet;

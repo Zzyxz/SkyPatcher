@@ -382,7 +382,13 @@ namespace MISC
 				}
 				std::string  texture = objectToAdd[0];
 				std::string  name = objectToAdd[1];
-				int32_t      index = std::stoi(objectToAdd[2]);
+				int32_t index = 0;
+				try {
+					index = std::stoi(objectToAdd[2]);
+				} catch (const std::exception&) {
+					logger::warn(FMT_STRING("alternateTexturesToAdd: invalid index '{}', skipped"), objectToAdd[2]);
+					continue;
+				}
 				RE::TESForm* currentform = GetFormFromIdentifier(texture);
 				if (currentform && currentform->formType == RE::FormType::TextureSet) {
 					RE::TESModelTextureSwap::AlternateTexture newTex;

@@ -1,4 +1,5 @@
 #include "npc.h"
+#include "enginelists.h"
 #include "formfilter.h"
 #include "parsetable.h"
 #include <algorithm>
@@ -1193,7 +1194,7 @@ namespace NPC
 		}
 
 		if (!line.clearInventory.empty() && line.clearInventory != "none") {
-			curobj->RemoveAllObjectFromContainer();
+			EngineLists::ClearContainer(*curobj);
 			logger::debug(FMT_STRING("npc formid: {:08X} removed all objects "), curobj->formID);
 		}
 
@@ -1202,7 +1203,7 @@ namespace NPC
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.objectsToRemove[i]);
 				if (auto* bo = currentform ? currentform->As<RE::TESBoundObject>() : nullptr) {
-						curobj->RemoveObjectInstancesFromContainer(bo);
+						EngineLists::RemoveContainerObjectInstances(*curobj, bo);
 						logger::debug(FMT_STRING("npc formid: {:08X} {} removed all object instances {:08X} "), curobj->formID, curobj->fullName, bo->formID);
 				} else if (currentform) {
 					logger::warn(FMT_STRING("npc formid: {:08X} cannot remove non-bound form {}"), curobj->formID, line.objectsToRemove[i]);
@@ -1215,7 +1216,7 @@ namespace NPC
 				RE::TESForm* currentform = nullptr;
 				currentform = GetFormFromIdentifier(line.objectsToRemoveNew[i]);
 				if (auto* bo = currentform ? currentform->As<RE::TESBoundObject>() : nullptr) {
-						curobj->RemoveObjectInstancesFromContainer(bo);
+						EngineLists::RemoveContainerObjectInstances(*curobj, bo);
 						logger::debug(FMT_STRING("npc formid: {:08X} {} removed all object instances {:08X} "), curobj->formID, curobj->fullName, bo->formID);
 				} else if (currentform) {
 					logger::warn(FMT_STRING("npc formid: {:08X} cannot remove non-bound form {}"), curobj->formID, line.objectsToRemoveNew[i]);
@@ -1243,7 +1244,7 @@ namespace NPC
 				auto* addForm = form ? form->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
-					curobj->RemoveObjectFromContainer(addForm, count);
+					EngineLists::RemoveContainerObjectWithCount(*curobj, addForm, static_cast<std::int32_t>(count));
 					logger::debug(FMT_STRING("npc formid: {:08X} removed by count Form {:08X}"), curobj->formID, addForm->formID);
 				}
 				else {
@@ -1257,7 +1258,7 @@ namespace NPC
 				auto* form = GetFormFromIdentifier(objectToAdd);
 				auto* addForm = form ? form->As<RE::BGSKeyword>() : nullptr;
 				if (addForm) {
-					curobj->RemoveObjectFromContainerByKeyword(addForm);
+					EngineLists::RemoveContainerObjectsByKeyword(*curobj, addForm);
 					logger::debug(FMT_STRING("npc formid: {:08X} removed by keyword Form {:08X}"), curobj->formID, addForm->formID);
 				}
 				else {
@@ -1277,7 +1278,7 @@ namespace NPC
 				if (auto* bo = currentform ? currentform->As<RE::TESBoundObject>() : nullptr) {
 					try {
 						const auto count = std::stoi(line.objectsToAddValue[i]);
-						curobj->AddObjectToContainer(bo, count, nullptr);
+						EngineLists::AddContainerObject(*curobj, bo, count);
 						logger::debug(FMT_STRING("npc formid: {:08X} added object {:08X} {} "), curobj->formID, bo->formID, count);
 					} catch (const std::exception& e) {
 						logger::warn(FMT_STRING("npc formid: {:08X} invalid add count '{}': {}"), curobj->formID, line.objectsToAddValue[i], e.what());
@@ -1312,7 +1313,7 @@ namespace NPC
 				if (addForm) {
 					bool formExists = curobj->CountObjectsInContainer(addForm) != 0;
 					if (!formExists) {
-						curobj->AddObjectToContainer(addForm, count, nullptr);
+						EngineLists::AddContainerObject(*curobj, addForm, static_cast<std::int32_t>(count));
 						logger::debug(FMT_STRING("npc {:08X} added once Form  {:08X}"), curobj->formID, addForm->formID);
 					}
 					else {
@@ -1464,15 +1465,18 @@ namespace NPC
 		if (!line.copyVisualStyle.empty() && line.copyVisualStyle != "none") {
 			RE::TESForm* currentform = nullptr;
 			currentform = GetFormFromIdentifier(line.copyVisualStyle);
-			if (auto* bo = currentform ? currentform->As<RE::TESNPC>() : nullptr) {
+			auto* bo = currentform ? currentform->As<RE::TESNPC>() : nullptr;
+			if (bo && createsFaceNPCLoop(curobj, bo)) {
+				logger::warn(FMT_STRING("npc formid: {:08X} copyVisualStyle {:08X} skipped: the NPC would use its own face"), curobj->formID, bo->formID);
+				bo = nullptr;
+			}
+			if (bo) {
 					aData.npcData[curobj->formID].npcVisual = bo;
 					logger::debug(FMT_STRING("npc formid: {:08X} {} changed visual to {:08X} Start"), curobj->formID, curobj->fullName, bo->formID);
 					curobj->height = bo->height;
 					curobj->weight = bo->weight;
 					curobj->faceNPC = bo;
-					curobj->tintLayers = bo->tintLayers;
 					curobj->bodyTintColor = bo->bodyTintColor;
-					curobj->headRelatedData = bo->headRelatedData;
 					for (int i = 0; i < bo->numHeadParts; i++) {
 						if (bo->headParts && bo->headParts[i]) {
 							logger::debug("-> npc formid: {:08X} {} Change Head Part {:08X} {}", curobj->formID, curobj->fullName, bo->headParts[i]->formID, bo->headParts[i]->fullName);
@@ -1494,7 +1498,7 @@ namespace NPC
 			}
 		}
 
-		if (!line.addedAttackData.empty()) {
+		if (!line.addedAttackData.empty() && curobj->attackDataMap) {
 			RE::BGSAttackData* newAttackData = RE::BGSAttackData::Create();
 			newAttackData->IncRefCount();
 			newAttackData->data.damageMult = 1;
@@ -1512,6 +1516,9 @@ namespace NPC
 
 			for (const auto& objectArr : line.addedAttackData) {
 				for (const auto& object : objectArr) {
+					if (object.empty() || (object.size() < 2 && toLowerCase(object[0]) != "resetflags" && toLowerCase(object[0]) != "removeflags")) {
+						continue;
+					}
 					const std::string lowerKey = toLowerCase(object[0]);
 					if (lowerKey == "key") {
 						newAttackData->event = object[1];
@@ -1607,11 +1614,11 @@ namespace NPC
 			}
 		}
 
-		if (!line.removeAttackData.empty()) {
+		if (!line.removeAttackData.empty() && curobj->attackDataMap) {
 			for (const auto& attackData : line.removeAttackData) {
 				const std::string lowerAttackData = toLowerCase(attackData);
 				for (auto it = curobj->attackDataMap->attackDataMap.begin(); it != curobj->attackDataMap->attackDataMap.end();) {
-					if (toLowerCase(it->second.get()->event.c_str()) == lowerAttackData) {
+					if (it->second && toLowerCase(it->second.get()->event.c_str()) == lowerAttackData) {
 						logger::debug("npc formid: {:08X} removing attackData with event {} ", curobj->formID, it->second.get()->event.c_str());
 						it = curobj->attackDataMap->attackDataMap.erase(it);
 					}
@@ -1622,7 +1629,7 @@ namespace NPC
 			}
 		}
 
-		if (!line.attackDataToChange.empty()) {
+		if (!line.attackDataToChange.empty() && curobj->attackDataMap) {
 			for (auto& attackData : curobj->attackDataMap->attackDataMap) {
 
 				if (!attackData.second)
@@ -1634,7 +1641,7 @@ namespace NPC
 				for (auto& objectArr : line.attackDataToChange) {
 					bool key = true;
 					for (auto& object : objectArr) {
-						if (object[1].empty()) {
+						if (object.size() < 2 || object[1].empty()) {
 							continue;
 						}
 
@@ -1740,18 +1747,6 @@ namespace NPC
 				}
 
 
-				for (const auto& attackData : line.removeAttackData) {
-					const std::string lowerAttackData = toLowerCase(attackData);
-					for (auto it = curobj->attackDataMap->attackDataMap.begin(); it != curobj->attackDataMap->attackDataMap.end();) {
-						if (toLowerCase(it->second.get()->event.c_str()) == lowerAttackData) {
-							logger::debug("npc formid: {:08X} removing attackData with event {} ", curobj->formID, it->second.get()->event.c_str());
-							it = curobj->attackDataMap->attackDataMap.erase(it);
-						}
-						else {
-							++it;
-						}
-					}
-				}
 
 
 

@@ -1,4 +1,5 @@
 #include "container.h"
+#include "enginelists.h"
 #include "formfilter.h"
 #include "parsetable.h"
 
@@ -237,7 +238,7 @@ namespace CONTAINER
 
 		if (!line.clear.empty() && line.clear != "none") {
 			try {
-				curobj->RemoveAllObjectFromContainer();
+				EngineLists::ClearContainer(*curobj);
 				logger::debug(FMT_STRING("container formid: {:08X} cleared all objects"), curobj->formID);
 			}
 			catch (const std::exception& e) {
@@ -250,7 +251,7 @@ namespace CONTAINER
 				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
 				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 				if (addForm) {
-					curobj->RemoveObjectInstancesFromContainer(addForm);
+					EngineLists::RemoveContainerObjectInstances(*curobj, addForm);
 					logger::debug(FMT_STRING("container {:08X} removed Form {:08X}"), curobj->formID, addForm->formID);
 				}
 				else {
@@ -278,7 +279,7 @@ namespace CONTAINER
 				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
-					curobj->RemoveObjectFromContainer(addForm, count);
+					EngineLists::RemoveContainerObjectWithCount(*curobj, addForm, static_cast<std::int32_t>(count));
 					logger::debug(FMT_STRING("container formid: {:08X} removed by count Form {:08X}"), curobj->formID, addForm->formID);
 				}
 				else {
@@ -293,7 +294,7 @@ namespace CONTAINER
 				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
 				auto* addForm = resolvedForm ? resolvedForm->As<RE::BGSKeyword>() : nullptr;
 				if (addForm) {
-					curobj->RemoveObjectFromContainerByKeyword(addForm);
+					EngineLists::RemoveContainerObjectsByKeyword(*curobj, addForm);
 					logger::debug(FMT_STRING("container formid: {:08X} removed by keyword Form {:08X}"), curobj->formID, addForm->formID);
 				}
 				else {
@@ -322,7 +323,7 @@ namespace CONTAINER
 						logger::debug(FMT_STRING("container {:08X} add container objects skipped Leveled Item {:08X}"), curobj->formID, addForm->formID);
 						continue;
 					}
-					curobj->AddObjectToContainer(addForm, count, nullptr);
+					EngineLists::AddContainerObject(*curobj, addForm, static_cast<std::int32_t>(count));
 					logger::debug(FMT_STRING("container {:08X} added Form {:08X}"), curobj->formID, addForm->formID);
 				}
 				else {
@@ -353,7 +354,7 @@ namespace CONTAINER
 					}
 					bool formExists = curobj->CountObjectsInContainer(addForm) != 0;
 					if (!formExists) {
-						curobj->AddObjectToContainer(addForm, count, nullptr);
+						EngineLists::AddContainerObject(*curobj, addForm, static_cast<std::int32_t>(count));
 						logger::debug(FMT_STRING("container {:08X} added once Form  {:08X}"), curobj->formID, addForm->formID);
 					}
 					else {
