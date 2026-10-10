@@ -99,6 +99,17 @@ namespace ngcompat
 		return ctor(attackData);
 	}
 
+	[[nodiscard]] inline bool HasOwnAttackData(const RE::TESNPC* a_npc) noexcept
+	{
+		if (!a_npc || !a_npc->attackDataMap) {
+			return false;
+		}
+		if (a_npc->baseTemplateForm && a_npc->actorData.templateUseFlags.any(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAttackData)) {
+			return false;
+		}
+		return !a_npc->race || a_npc->attackDataMap != a_npc->race->attackDataMap;
+	}
+
 	inline bool AddOrReplaceAttackData(RE::BGSAttackDataMap* a_map, RE::NiPointer<RE::BGSAttackData> a_data)
 	{
 		if (!a_map || !a_data || a_data->event.empty()) {

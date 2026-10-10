@@ -1498,7 +1498,11 @@ namespace NPC
 			}
 		}
 
-		if (!line.addedAttackData.empty() && curobj->attackDataMap) {
+		if ((!line.addedAttackData.empty() || !line.removeAttackData.empty() || !line.attackDataToChange.empty()) &&
+			!ngcompat::HasOwnAttackData(curobj)) {
+			logger::debug("npc formid: {:08X} has no active attack data of its own; attack data rules skipped", curobj->formID);
+		}
+		if (!line.addedAttackData.empty() && ngcompat::HasOwnAttackData(curobj)) {
 			for (const auto& objectArr : line.addedAttackData) {
 				RE::NiPointer<RE::BGSAttackData> attackDataPtr{ ngcompat::CreateAttackData() };
 				if (!attackDataPtr) {
@@ -1619,7 +1623,7 @@ namespace NPC
 			}
 		}
 
-		if (!line.removeAttackData.empty() && curobj->attackDataMap) {
+		if (!line.removeAttackData.empty() && ngcompat::HasOwnAttackData(curobj)) {
 			for (const auto& attackData : line.removeAttackData) {
 				const std::string lowerAttackData = toLowerCase(attackData);
 				for (auto it = curobj->attackDataMap->attackDataMap.begin(); it != curobj->attackDataMap->attackDataMap.end();) {
@@ -1634,7 +1638,7 @@ namespace NPC
 			}
 		}
 
-		if (!line.attackDataToChange.empty() && curobj->attackDataMap) {
+		if (!line.attackDataToChange.empty() && ngcompat::HasOwnAttackData(curobj)) {
 			for (auto& attackData : curobj->attackDataMap->attackDataMap) {
 
 				if (!attackData.second)
