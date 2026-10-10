@@ -191,14 +191,13 @@ RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
 		if (mod.file && mod.file->IsLight())
 			formID = rawFormID & 0xFFF;
 
-#ifdef SKYRIMVR
-		return dataHandler->LookupForm(formID, modName);
-#else
+		if (REL::Module::IsVR()) {
+			return dataHandler->LookupForm(formID, modName);
+		}
 		if (!mod.usable)
 			return nullptr;
 		const RE::FormID fullFormID = mod.prefix + formID;
 		return fullFormID ? RE::TESForm::LookupByID(fullFormID) : nullptr;
-#endif
 	} else {
 		return RE::TESForm::LookupByEditorID(identifier);
 	}

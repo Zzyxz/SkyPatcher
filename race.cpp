@@ -333,7 +333,7 @@ namespace RACE
 			return;
 		}
 		if (!line.addedObjects.empty()) {
-			RE::BGSAttackData* newAttackData = RE::BGSAttackData::Create();
+			RE::BGSAttackData* newAttackData = ngcompat::CreateAttackData();
 			newAttackData->IncRefCount();
 			newAttackData->data.damageMult = 1;
 			newAttackData->data.attackChance = 1;

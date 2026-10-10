@@ -127,11 +127,7 @@ void Enable(RE::TESObjectREFR* obref, bool abFadeIn)
 {
 	using func_t = void(RE::BSScript::Internal::VirtualMachine*, RE::VMStackID, RE::TESObjectREFR*, bool);
 	RE::VMStackID           frame = 0;
-#ifdef SKYRIMVR
-	REL::Relocation<func_t> func{ REL::Offset(0x9CE700) };
-#else
-	REL::Relocation<func_t> func{ RELOCATION_ID(55629, 56158) };
-#endif
+	REL::Relocation<func_t> func{ REL::VariantID(55629, 56158, 0x9CE700) };
 	auto                    vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
 	return func(vm, frame, obref, abFadeIn);
 }
@@ -170,7 +166,7 @@ public:
 			if (!actor) {
 				return;
 			}
-			const bool highProcess = actor->currentProcess && actor->currentProcess->InHighProcess();
+			const bool highProcess = actor->GetActorRuntimeData().currentProcess && actor->GetActorRuntimeData().currentProcess->InHighProcess();
 			if (highProcess && !actor->Get3D(false) && attempt < 10) {
 				logger::debug("3DUpdate: Actor: {:08X} wait for 3D... times waited {}", actorID, attempt);
 				std::jthread([actorID, attempt] {
@@ -752,13 +748,13 @@ struct Load3D
 			}
 
 			if (refreshHealth && npc->race) {
-				a_this->SetBaseActorValue(RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
+				ngcompat::SetBaseActorValue(a_this, RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
 			}
 			if (refreshStamina && npc->race) {
-				a_this->SetBaseActorValue(RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
+				ngcompat::SetBaseActorValue(a_this, RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
 			}
 			if (refreshMagicka && npc->race) {
-				a_this->SetBaseActorValue(RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
+				ngcompat::SetBaseActorValue(a_this, RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
 			}
 
 
@@ -906,8 +902,12 @@ struct QueueReference3D
 
 	static bool Install()
 	{
-		const REL::ID id(OFFSET(12910, 13057));
-		const auto target = id.address();
+		const auto offset = REL::IDDatabase::get().try_id2offset(REL::RelocationID(12910, 13057).id());
+		if (!offset) {
+			logger::warn("Visual styles: this game version is not supported for early styling; using Load3D only");
+			return false;
+		}
+		const auto target = REL::Module::get().base() + *offset;
 		const auto bytes = reinterpret_cast<const std::uint8_t*>(target);
 		static constexpr std::uint8_t ae[] = { 0x48, 0x8B, 0xC4, 0x44, 0x88, 0x48, 0x20 };
 		static constexpr std::uint8_t se[] = { 0x48, 0x8B, 0xC4, 0x55, 0x41, 0x54 };
@@ -1281,9 +1281,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 				}
 				else {
 				}
-			player->As<RE::Actor>()->SetBaseActorValue(RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
-			player->As<RE::Actor>()->SetBaseActorValue(RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
-			player->As<RE::Actor>()->SetBaseActorValue(RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
+			ngcompat::SetBaseActorValue(player->As<RE::Actor>(), RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
+			ngcompat::SetBaseActorValue(player->As<RE::Actor>(), RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
+			ngcompat::SetBaseActorValue(player->As<RE::Actor>(), RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
 			}
 		}
 		break;
@@ -1521,9 +1521,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 		if (auto* player = RE::PlayerCharacter::GetSingleton(); player && player->data.objectReference) {
 			if (auto* npc = player->data.objectReference->As<RE::TESNPC>(); npc && npc->race) {
-				player->SetBaseActorValue(RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
-				player->SetBaseActorValue(RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
-				player->SetBaseActorValue(RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
+				ngcompat::SetBaseActorValue(player, RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
+				ngcompat::SetBaseActorValue(player, RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
+				ngcompat::SetBaseActorValue(player, RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
 			}
 		}
 
@@ -1554,9 +1554,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 						}
 						auto npc = actor->data.objectReference->As<RE::TESNPC>();
 						if (npc && npc->race) {
-							actor->SetBaseActorValue(RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
-							actor->SetBaseActorValue(RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
-							actor->SetBaseActorValue(RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
+							ngcompat::SetBaseActorValue(actor, RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
+							ngcompat::SetBaseActorValue(actor, RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
+							ngcompat::SetBaseActorValue(actor, RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
 							actor->InitValues();
 							actor->ApplyPerksFromBase();
 						}
@@ -1619,19 +1619,17 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 }
 
-#ifdef SKYRIM_AE
-extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []() {
-	SKSE::PluginVersionData v;
-	v.PluginVersion(Version::MAJOR);
+extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []() noexcept {
+	SKSE::PluginVersionData v{};
+	v.PluginVersion(REL::Version{ static_cast<std::uint16_t>(Version::MAJOR), static_cast<std::uint16_t>(Version::MINOR), static_cast<std::uint16_t>(Version::PATCH), 0 });
 	v.PluginName("Skypatcher");
 	v.AuthorName("Zzyxzz");
 	v.UsesAddressLibrary();
-	v.UsesUpdatedStructs();
-	v.CompatibleVersions({ SKSE::RUNTIME_LATEST });
-
+	v.UsesAddressLibraryV5();
+	v.UsesNoStructs();
 	return v;
-	}();
-#else
+}();
+
 extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a_skse, SKSE::PluginInfo* a_info)
 {
 	a_info->infoVersion = SKSE::PluginInfo::kVersion;
@@ -1639,25 +1637,12 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 	a_info->version = Version::MAJOR;
 
 	if (a_skse->IsEditor()) {
-		logger::critical("Loaded in editor, marking as incompatible"sv);
 		return false;
 	}
 
-	const auto ver = a_skse->RuntimeVersion();
-	if (ver
-#	ifndef SKYRIMVR
-		< SKSE::RUNTIME_1_5_39
-#	else
-					> SKSE::RUNTIME_VR_1_4_15_1
-#	endif
-		) {
-		logger::critical(FMT_STRING("Unsupported runtime version {}"), ver.string());
-		return false;
-	}
-
-	return true;
+	const auto family = REL::Module::RuntimeFor(a_skse->RuntimeVersion());
+	return family == REL::Module::Runtime::SE || family == REL::Module::Runtime::VR;
 }
-#endif
 
 void InitializeLog()
 {
@@ -1690,7 +1675,23 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 {
 	InitializeLog();
 
-	logger::info("Game version : {}", a_skse->RuntimeVersion().string());
+	const auto runtime = a_skse->RuntimeVersion();
+	logger::info("Game version : {}", runtime.string());
+
+	const auto family = REL::Module::RuntimeFor(runtime);
+	const bool isSE = family == REL::Module::Runtime::SE;
+	const bool isAE = family == REL::Module::Runtime::AE && runtime >= SKSE::RUNTIME_SSE_1_6_629;
+	const bool isVR = family == REL::Module::Runtime::VR;
+	if (!isSE && !isAE && !isVR) {
+		logger::warn("This game version is not supported (Anniversary Edition needs 1.6.629 or later); nothing was changed.");
+		return true;
+	}
+	if (REL::Module::FindAddressLibrary().empty()) {
+		logger::warn("Address Library for SKSE Plugins is missing for this game version ({}); nothing was changed.",
+			REL::Module::AddressLibraryFileName(REL::Module::get().version()));
+		return true;
+	}
+
 	SKSE::Init(a_skse);
 	RegisterSerialization();
 	const auto messaging = SKSE::GetMessagingInterface();

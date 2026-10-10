@@ -514,7 +514,7 @@ namespace formfilter
 				return a_t.npc->voiceType && a_t.npc->voiceType->formID == static_cast<RE::FormID>(ops[a_i]);
 
 			case Op::Faction:
-				return const_cast<RE::TESNPC*>(a_t.npc)->HasFaction(
+				return ngcompat::HasFaction(a_t.npc, 
 					reinterpret_cast<RE::TESFaction*>(static_cast<std::uintptr_t>(ops[a_i])));
 
 			case Op::ObjectId:

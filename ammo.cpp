@@ -150,12 +150,12 @@ namespace AMMO
 
 
 				if (!line.keywords.empty()) {
-					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj, nullptr);
+					keywordAnd = formfilter::matchesKeywordsAnd(view, curobj->AsKeywordForm(), nullptr);
 				} else {
 					keywordAnd = true;
 				}
 				if (!line.keywordsOr.empty()) {
-					keywordOr = formfilter::matchesKeywordsOr(view, curobj, nullptr);
+					keywordOr = formfilter::matchesKeywordsOr(view, curobj->AsKeywordForm(), nullptr);
 				} else {
 					keywordOr = true;
 				}
@@ -163,20 +163,18 @@ namespace AMMO
 				if ((!line.keywords.empty() || !line.keywordsOr.empty()) && keywordAnd && keywordOr) {
 					found = true;
 				}
-				#ifndef SKYRIMVR
-				if (!line.weightLessThan.empty() && line.weightLessThan != "none") {
-					if (const auto limit = tryParseFloat(line.weightLessThan); limit && curobj->weight < *limit) {
+				if (auto* weightForm = ngcompat::AmmoWeight(curobj); weightForm && !line.weightLessThan.empty() && line.weightLessThan != "none") {
+					if (const auto limit = tryParseFloat(line.weightLessThan); limit && weightForm->weight < *limit) {
 						found = true;
 					}
 				}
-				#endif
 				if (line.ammo.empty() && line.weightLessThan == "none" && line.keywords.empty() && line.keywordsOr.empty() && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
 					
 					found = true;
 				}
 
 				if (!line.keywordsExcluded.empty() && found) {
-					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
+					if (formfilter::hasExcludedKeyword(view, curobj->AsKeywordForm(), nullptr)) {
 						found = false;
 					}
 				}
@@ -313,7 +311,7 @@ namespace AMMO
 				std::string string_form = line.keywordsToAdd[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Keyword) {
-					if(curobj->AddKeyword((RE::BGSKeyword*)currentform))
+					if(curobj->AsKeywordForm()->AddKeyword((RE::BGSKeyword*)currentform))
 						logger::debug(FMT_STRING("ammo formid: {:08X} {} added keyword {:08X} {} "), curobj->formID, curobj->fullName, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
 				}
 			}
@@ -342,15 +340,14 @@ namespace AMMO
 			} catch (const std::exception& e) {
 			}
 		}
-		#ifndef SKYRIMVR
-		if (!line.weight.empty() && line.weight != "none") {
+		auto* weightForm = ngcompat::AmmoWeight(curobj);
+		if (weightForm && !line.weight.empty() && line.weight != "none") {
 			try {
-				curobj->weight = std::stof(line.weight);
-				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed weight {}"), curobj->formID, curobj->fullName, curobj->weight);
+				weightForm->weight = std::stof(line.weight);
+				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed weight {}"), curobj->formID, curobj->fullName, weightForm->weight);
 			} catch (const std::exception& e) {
 			}
 		}
-		#endif
 		if (!line.value.empty() && line.value != "none") {
 			try {
 				curobj->value = std::stoi(line.value);
@@ -358,15 +355,13 @@ namespace AMMO
 			} catch (const std::exception& e) {
 			}
 		}
-		#ifndef SKYRIMVR
-		if (!line.weightMult.empty() && line.weightMult != "none") {
+		if (weightForm && !line.weightMult.empty() && line.weightMult != "none") {
 			try {
-				curobj->weight = curobj->weight * std::stof(line.weightMult);
-				logger::debug(FMT_STRING("ammo formid: {:08X} {} multiplied weight {}"), curobj->formID, curobj->fullName, curobj->weight);
+				weightForm->weight = weightForm->weight * std::stof(line.weightMult);
+				logger::debug(FMT_STRING("ammo formid: {:08X} {} multiplied weight {}"), curobj->formID, curobj->fullName, weightForm->weight);
 			} catch (const std::exception& e) {
 			}
 		}
-		#endif
 		if (!line.valueMult.empty() && line.valueMult != "none") {
 			try {
 				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));

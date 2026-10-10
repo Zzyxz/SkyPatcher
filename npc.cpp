@@ -1499,7 +1499,7 @@ namespace NPC
 		}
 
 		if (!line.addedAttackData.empty() && curobj->attackDataMap) {
-			RE::BGSAttackData* newAttackData = RE::BGSAttackData::Create();
+			RE::BGSAttackData* newAttackData = ngcompat::CreateAttackData();
 			newAttackData->IncRefCount();
 			newAttackData->data.damageMult = 1;
 			newAttackData->data.attackChance = 1;

@@ -289,16 +289,16 @@ template <class CharT>
 
 }
 
-#ifdef SKYRIM_AE
-#	define OFFSET(se, ae) ae
-#	define OFFSET_3(se, ae, vr) ae
-#elif SKYRIMVR
-#	define OFFSET(se, ae) se
-#	define OFFSET_3(se, ae, vr) vr
-#else
-#	define OFFSET(se, ae) se
-#	define OFFSET_3(se, ae, vr) se
-#endif
+template <class CharT>
+struct fmt::formatter<RE::BSFixedString, CharT> : fmt::formatter<std::basic_string_view<CharT>, CharT>
+{
+	template <class FormatContext>
+	auto format(const RE::BSFixedString& a_string, FormatContext& a_ctx) const
+	{
+		return fmt::formatter<std::basic_string_view<CharT>, CharT>::format(std::basic_string_view<CharT>(a_string.c_str()), a_ctx);
+	}
+};
 
 #include "Version.h"
 #include "Defs.h"
+#include "NGCompat.h"

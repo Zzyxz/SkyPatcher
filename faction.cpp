@@ -183,49 +183,49 @@ namespace FACTION
 			for (const auto& removeFlag : line.removeFlags) {
 				auto lowerRemoveFlag = toLowerCase(std::string(removeFlag));
 				if (lowerRemoveFlag == "hiddenfromnpc") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kHiddenFromNPC);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kHiddenFromNPC);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled HiddenFromNPC"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "specialcombat") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kSpecialCombat);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kSpecialCombat);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled SpecialCombat"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "playerisexpelled") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kPlayerIsExpelled);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kPlayerIsExpelled);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled PlayerIsExpelled"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "playerisenemy") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kPlayerIsEnemy);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kPlayerIsEnemy);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled PlayerIsEnemy"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "trackcrime") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kTrackCrime);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kTrackCrime);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled TrackCrime"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "ignorescrimes_murder") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kIgnoresCrimes_Murder);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Murder);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled IgnoresCrimes_Murder"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "ignorescrimes_assult") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kIgnoresCrimes_Assult);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Assult);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled IgnoresCrimes_Assult"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "ignorescrimes_stealing") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kIgnoresCrimes_Stealing);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Stealing);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled IgnoresCrimes_Stealing"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "ingorescrimes_trespass") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kIngoresCrimes_Trespass);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIngoresCrimes_Trespass);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled IngoresCrimes_Trespass"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "donotreportcrimesagainstmembers") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kDoNotReportCrimesAgainstMembers);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kDoNotReportCrimesAgainstMembers);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled DoNotReportCrimesAgainstMembers"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "crimegold_usedefaults") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kCrimeGold_UseDefaults);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kCrimeGold_UseDefaults);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled CrimeGold_UseDefaults"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "ignorescrimes_pickpocket") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kIgnoresCrimes_Pickpocket);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Pickpocket);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled IgnoresCrimes_Pickpocket"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "vendor") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kVendor);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kVendor);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled Vendor"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "canbeowner") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kCanBeOwner);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kCanBeOwner);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled CanBeOwner"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "ignorescrimes_werewolf") {
-					curobj->data.flags.reset(RE::FACTION_DATA::Flag::kIgnoresCrimes_Werewolf);
+					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Werewolf);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled IgnoresCrimes_Werewolf"), curobj->formID, curobj->fullName);
 				} else {
 				}
@@ -236,52 +236,52 @@ namespace FACTION
 			for (const auto& setFlag : line.setFlags) {
 				auto lowerSetFlag = toLowerCase(std::string(setFlag));
 				if (lowerSetFlag == "hiddenfromnpc") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kHiddenFromNPC);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kHiddenFromNPC);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled HiddenFromNPC"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "specialcombat") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kSpecialCombat);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kSpecialCombat);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled SpecialCombat"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "playerisexpelled") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kPlayerIsExpelled);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kPlayerIsExpelled);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled PlayerIsExpelled"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "playerisenemy") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kPlayerIsEnemy);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kPlayerIsEnemy);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled PlayerIsEnemy"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "trackcrime") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kTrackCrime);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kTrackCrime);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled TrackCrime"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "ignorescrimes_murder") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kIgnoresCrimes_Murder);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Murder);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled IgnoresCrimes_Murder"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "ignorescrimes_assult") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kIgnoresCrimes_Assult);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Assult);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled IgnoresCrimes_Assult"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "ignorescrimes_stealing") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kIgnoresCrimes_Stealing);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Stealing);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled IgnoresCrimes_Stealing"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "ingorescrimes_trespass") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kIngoresCrimes_Trespass);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIngoresCrimes_Trespass);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled IgnoresCrimes_Trespass"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "ignorescrimes_trespass") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kIngoresCrimes_Trespass);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIngoresCrimes_Trespass);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled IgnoresCrimes_Trespass"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "donotreportcrimesagainstmembers") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kDoNotReportCrimesAgainstMembers);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kDoNotReportCrimesAgainstMembers);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled DoNotReportCrimesAgainstMembers"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "crimegold_usedefaults") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kCrimeGold_UseDefaults);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kCrimeGold_UseDefaults);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled CrimeGold_UseDefaults"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "ignorescrimes_pickpocket") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kIgnoresCrimes_Pickpocket);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Pickpocket);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled IgnoresCrimes_Pickpocket"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "vendor") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kVendor);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kVendor);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled Vendor"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "canbeowner") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kCanBeOwner);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kCanBeOwner);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled CanBeOwner"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "ignorescrimes_werewolf") {
-					curobj->data.flags.set(RE::FACTION_DATA::Flag::kIgnoresCrimes_Werewolf);
+					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Werewolf);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled IgnoresCrimes_Werewolf"), curobj->formID, curobj->fullName);
 				} else {
 				}
