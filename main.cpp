@@ -57,6 +57,40 @@ int									  iUpdateNPCVisualsOnLoad = 1;
 RE::BGSKeyword* SkyPatcher_VisualStyleApply = nullptr;
 bool								  loadStylesAfterLoad = false;
 std::unordered_map<RE::FormID, int> npcStyles;
+std::mutex                          npcStylesLock;
+
+std::optional<int> FindNpcStyle(RE::FormID a_formID)
+{
+	const std::scoped_lock lock(npcStylesLock);
+	if (const auto it = npcStyles.find(a_formID); it != npcStyles.end()) {
+		return it->second;
+	}
+	return std::nullopt;
+}
+
+void SetNpcStyle(RE::FormID a_formID, int a_style)
+{
+	const std::scoped_lock lock(npcStylesLock);
+	npcStyles[a_formID] = a_style;
+}
+
+void EraseNpcStyle(RE::FormID a_formID)
+{
+	const std::scoped_lock lock(npcStylesLock);
+	npcStyles.erase(a_formID);
+}
+
+void ClearNpcStyles()
+{
+	const std::scoped_lock lock(npcStylesLock);
+	npcStyles.clear();
+}
+
+std::unordered_map<RE::FormID, int> SnapshotNpcStyles()
+{
+	const std::scoped_lock lock(npcStylesLock);
+	return npcStyles;
+}
 inline constexpr std::array headSlots = { RE::BIPED_OBJECT::kHair, RE::BIPED_OBJECT::kLongHair, RE::BIPED_OBJECT::kCirclet };
 inline constexpr auto HAIR_TINT = "ZZYXZZ_HAIRTINT"sv;
 
@@ -250,7 +284,7 @@ public:
 
 		RE::FormID deletedFormID = a_event->formID;
 
-		npcStyles.erase(deletedFormID);
+		EraseNpcStyle(deletedFormID);
 
 
 		return RE::BSEventNotifyControl::kContinue;
@@ -277,32 +311,31 @@ void SaveCallback(SKSE::SerializationInterface* serde) {
 	constexpr std::uint32_t SAVE_VERSION = 1;
 	const auto start_time{ std::chrono::system_clock::now() };
 
-
-	std::size_t mapSize = 0;
+	const auto styles = SnapshotNpcStyles();
+	std::vector<std::pair<RE::FormID, int>> validStyles;
 	std::vector<RE::FormID> invalidFormIDs;
-	for (const auto& pair : npcStyles) {
+	validStyles.reserve(styles.size());
+	for (const auto& pair : styles) {
 		if (RE::TESForm::LookupByID(pair.first)) {
-			mapSize++;
-		}
-	}
-	serde->WriteRecord('STYL', SAVE_VERSION, mapSize);
-	for (const auto& pair : npcStyles) {
-		if (auto npc = RE::TESForm::LookupByID(pair.first)) {
-			serde->WriteRecordData(&pair.first, sizeof(pair.first));
-			serde->WriteRecordData(&pair.second, sizeof(pair.second));
-			logger::debug("SaveCallback FormID {:08X} saved.", pair.first);
-		}
-		else {
+			validStyles.emplace_back(pair);
+		} else {
 			invalidFormIDs.push_back(pair.first);
 			logger::debug("SaveCallback FormID {:08X} failed to look up and is not saved.", pair.first);
 		}
 	}
+	const std::size_t mapSize = validStyles.size();
+	serde->WriteRecord('STYL', SAVE_VERSION, mapSize);
+	for (const auto& [formID, style] : validStyles) {
+		serde->WriteRecordData(&formID, sizeof(formID));
+		serde->WriteRecordData(&style, sizeof(style));
+		logger::debug("SaveCallback FormID {:08X} saved.", formID);
+	}
 	for (const auto formID : invalidFormIDs) {
-		npcStyles.erase(formID);
+		EraseNpcStyle(formID);
 	}
 	const auto elapsed{ std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start_time) };
 	double     seconds = static_cast<double>(elapsed.count()) / 1000000.0;
-	logger::debug(">>>>>>>>>>>>>>>>>>>>>>>>>>> saved {} npc styles in {} seconds", npcStyles.size(), seconds);
+	logger::debug(">>>>>>>>>>>>>>>>>>>>>>>>>>> saved {} npc styles in {} seconds", mapSize, seconds);
 }
 
 
@@ -320,7 +353,8 @@ void LoadCallback(SKSE::SerializationInterface* serde) {
 	std::uint32_t type, version, length;
 	const auto start_time{ std::chrono::system_clock::now() };
 
-	std::unordered_map<RE::FormID, int> tempNpcStyles = npcStyles;
+	std::unordered_map<RE::FormID, int> loadedStyles;
+	bool                                haveStyles = false;
 
 	while (serde->GetNextRecordInfo(type, version, length)) {
 		if (type == 'STYL' && version == 1) {
@@ -334,7 +368,8 @@ void LoadCallback(SKSE::SerializationInterface* serde) {
 				logger::warn("LoadCallback encountered a truncated STYL record.");
 				continue;
 			}
-			npcStyles.clear();
+			loadedStyles.clear();
+			haveStyles = true;
 
 			for (std::size_t i = 0; i < npcCount; ++i) {
 				RE::FormID formID;
@@ -352,7 +387,7 @@ void LoadCallback(SKSE::SerializationInterface* serde) {
 				}
 
 				if (auto npc = RE::TESForm::LookupByID(resolvedID)) {
-					npcStyles[resolvedID] = style;
+					loadedStyles[resolvedID] = style;
 				}
 				else {
 					logger::debug("NPC with FormID {:X} is no longer valid and was not loaded into npcStyles.", resolvedID);
@@ -361,15 +396,21 @@ void LoadCallback(SKSE::SerializationInterface* serde) {
 		}
 	}
 
-	for (const auto& [formID, style] : tempNpcStyles) {
-		if (!npcStyles.contains(formID)) {
-			npcStyles[formID] = style;
+	std::size_t styleCount = 0;
+	{
+		const std::scoped_lock lock(npcStylesLock);
+		if (haveStyles) {
+			for (const auto& [formID, style] : npcStyles) {
+				loadedStyles.try_emplace(formID, style);
+			}
+			npcStyles.swap(loadedStyles);
 		}
+		styleCount = npcStyles.size();
 	}
 
 	const auto elapsed{ std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start_time) };
 	double seconds = static_cast<double>(elapsed.count()) / 1000000.0;
-	logger::debug(">>>>>>>>>>>>>>>>>>>>>>>>>>> loaded {} npc styles in {} seconds", npcStyles.size(), seconds);
+	logger::debug(">>>>>>>>>>>>>>>>>>>>>>>>>>> loaded {} npc styles in {} seconds", styleCount, seconds);
 }
 
 
@@ -515,30 +556,30 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 
 			auto& forms = aNPCData->npcVisualStyleList->forms;
 
-			auto styleIt = npcStyles.find(a_this->formID);
+			auto storedStyle = FindNpcStyle(a_this->formID);
 			int styleIndex = -1;
 
-			if (styleIt != npcStyles.end()) {
-				styleIndex = styleIt->second;
+			if (storedStyle) {
+				styleIndex = *storedStyle;
 
 				if (styleIndex == -1) {
 					logger::debug("Load3D: NPC with FormID {:X} previously failed style roll and will not receive a style.", a_this->formID);
 				}
 				else if (styleIndex >= forms.size()) {
 					logger::debug("Load3D: NPC with FormID {:X} had an invalid style index {} (out of range). Reassigning a new style.", a_this->formID, styleIndex);
-					styleIt = npcStyles.end();
+					storedStyle.reset();
 				}
 				else {
 					logger::debug("Load3D: NPC with FormID {:X} using stored style index {}.", a_this->formID, styleIndex);
 				}
 			}
 
-			if (styleIt == npcStyles.end()) {
+			if (!storedStyle) {
 				auto& generator = RandomEngine();
 				std::uniform_int_distribution<int> chanceDist(1, 100);
 				int rolledChance = chanceDist(generator);
 				if (rolledChance > aNPCData->styleChance) {
-					npcStyles[a_this->formID] = -1;
+					SetNpcStyle(a_this->formID, -1);
 					logger::debug("Load3D: NPC with FormID {:X} failed style chance {} rolled {} and will not receive a style.", a_this->formID, aNPCData->styleChance, rolledChance);
 					styleIndex = -1;
 				}
@@ -548,7 +589,7 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 					logger::debug("Load3D: Rolled new random style index {} to Actor with FormID {:X} from {} available styles ", styleIndex, a_this->formID, forms.size());
 				}
 				else {
-					npcStyles[a_this->formID] = -1;
+					SetNpcStyle(a_this->formID, -1);
 					logger::debug("Load3D: No styles available in the list! NPC with FormID {:X} will not receive a style.", a_this->formID);
 					styleIndex = -1;
 				}
@@ -576,12 +617,12 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 
 			if (npcToCopyFrom && npc->faceNPC == npcToCopyFrom && oldRace == npcToCopyFrom->race &&
 				oldSkin == npcToCopyFrom->skin && wasFemale == npcToCopyFrom->IsFemale()) {
-				npcStyles[a_this->formID] = styleIndex;
+				SetNpcStyle(a_this->formID, styleIndex);
 				return VisualStyleResult::kApplied;
 			}
 
 			if (npcToCopyFrom && CopyVisual(npcToCopyFrom, a_this, *aNPCData, false)) {
-				npcStyles[a_this->formID] = styleIndex;
+				SetNpcStyle(a_this->formID, styleIndex);
 				logger::debug("--> Load3D: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.", styleIndex, a_this->formID, aNPCData->npcVisualStyleList->formID, npcToCopyFrom->formID);
 				const bool bodyChanged = npc->IsFemale() != wasFemale || npc->race != oldRace || npc->skin != oldSkin;
 				return bodyChanged ? VisualStyleResult::kNeedsReset : VisualStyleResult::kApplied;
@@ -956,7 +997,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 	switch (a_message->type) {
 	case SKSE::MessagingInterface::kPreLoadGame:
 	{
-		npcStyles.clear();
+		ClearNpcStyles();
 		logger::debug(">>> Cleared Random NPC Styles Map.");
 		break;
 	}
@@ -1129,12 +1170,12 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 									auto& forms = aNPCData->npcVisualStyleList->forms;
 
-									auto styleIt = npcStyles.find(actor->formID);
+									auto storedStyle = FindNpcStyle(actor->formID);
 
 									int styleIndex = -1;
 
-									if (styleIt != npcStyles.end()) {
-										styleIndex = styleIt->second;
+									if (storedStyle) {
+										styleIndex = *storedStyle;
 
 										if (styleIndex == -1) {
 											logger::debug("PostLoadGame: NPC with FormID {:X} previously failed style roll and will not receive a style.", actor->formID);
@@ -1142,20 +1183,20 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 										else if (styleIndex >= forms.size()) {
 											logger::debug("PostLoadGame: NPC with FormID {:X} had an invalid style index {} (out of range). Reassigning a new style.",
 												actor->formID, styleIndex);
-											styleIt = npcStyles.end();
+											storedStyle.reset();
 										}
 										else {
 											logger::debug("PostLoadGame: NPC with FormID {:X} using stored style index {}.", actor->formID, styleIndex);
 										}
 									}
 
-									if (styleIt == npcStyles.end()) {
+									if (!storedStyle) {
 										auto& generator = RandomEngine();
 										std::uniform_int_distribution<int> chanceDist(1, 100);
 
 										int rolledChance = chanceDist(generator);
 										if (rolledChance > aNPCData->styleChance) {
-											npcStyles[actor->formID] = -1;
+											SetNpcStyle(actor->formID, -1);
 											logger::debug("PostLoadGame: NPC with FormID {:X} failed style chance {} rolled {} and will not receive a style.",
 												actor->formID, aNPCData->styleChance, rolledChance);
 											styleIndex = -1;
@@ -1163,11 +1204,11 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 										else if (!forms.empty()) {
 											std::uniform_int_distribution<size_t> distribution(0, forms.size() - 1);
 											styleIndex = distribution(generator);
-											npcStyles[actor->formID] = styleIndex;
+											SetNpcStyle(actor->formID, styleIndex);
 											logger::debug("PostLoadGame: Assigned new random style index {} to Actor with FormID {:X}", styleIndex, actor->formID);
 										}
 										else {
-											npcStyles[actor->formID] = -1;
+											SetNpcStyle(actor->formID, -1);
 											logger::debug("PostLoadGame: No styles available in the list! NPC with FormID {:X} will not receive a style.", actor->formID);
 											styleIndex = -1;
 										}
@@ -1190,7 +1231,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 									}
 
 									if (npcToCopyFrom && CopyVisual(npcToCopyFrom, actor, *aNPCData, true)) {
-										npcStyles[actor->formID] = styleIndex;
+										SetNpcStyle(actor->formID, styleIndex);
 										logger::debug("--> PostLoadGame: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.",
 											styleIndex, actor->formID, aNPCData->npcVisualStyleList->formID, npcToCopyFrom->formID);
 									}
