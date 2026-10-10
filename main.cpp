@@ -904,7 +904,7 @@ struct QueueReference3D
 	{
 		const auto offset = REL::IDDatabase::get().try_id2offset(REL::RelocationID(12910, 13057).id());
 		if (!offset) {
-			logger::warn("Visual styles: this game version is not supported for early styling; using Load3D only");
+			logger::warn("Visual styles: early styling not active - not supported on this game version; styles are applied when the NPC appears");
 			return false;
 		}
 		const auto target = REL::Module::get().base() + *offset;
@@ -917,7 +917,7 @@ struct QueueReference3D
 		} else if (std::memcmp(bytes, se, sizeof(se)) == 0) {
 			stolen = sizeof(se);
 		} else {
-			logger::warn("Visual styles: 3D queue function changed or hooked by another plugin; using Load3D only");
+			logger::warn("Visual styles: early styling not active - another mod probably changes the same place; styles are applied when the NPC appears");
 			return false;
 		}
 
@@ -942,7 +942,7 @@ void InstallActorHook()
 {
 	stl::write_vfunc<RE::Character, Load3D>();
 	if (QueueReference3D::Install()) {
-		logger::info("Visual styles are applied before the 3D load is queued");
+		logger::info("Visual styles: early styling active");
 	}
 }
 
