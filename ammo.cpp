@@ -179,7 +179,7 @@ namespace AMMO
 					}
 				}
 
-				if (!line.restrictToBolts.empty() && line.restrictToBolts != "none" && toLowerCase(line.restrictToBolts) == "true" && !curobj->IsBolt()) {
+				if (!line.restrictToBolts.empty() && line.restrictToBolts != "none" && toLowerCase(line.restrictToBolts) == "true" && !ngcompat::AmmoIsBolt(curobj)) {
 					try {
 						found = false;
 					} catch (const std::exception& e) {
@@ -278,18 +278,18 @@ namespace AMMO
 		try {
 		
 		if (!line.damage.empty() && line.damage != "none") {
-				curobj->data.damage = stof(line.damage);
-				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed damage {}"), curobj->formID, curobj->fullName, curobj->data.damage);
+				ngcompat::AmmoData(curobj).damage = stof(line.damage);
+				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed damage {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).damage);
 		}
 
 		if (!line.damageToAdd.empty() && line.damageToAdd != "none") {
-				curobj->data.damage = curobj->data.damage + stof(line.damageToAdd);
+				ngcompat::AmmoData(curobj).damage = ngcompat::AmmoData(curobj).damage + stof(line.damageToAdd);
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed damage {}"), curobj->formID, curobj->fullName, line.damageToAdd);
 		}
 
 		if (!line.damageMult.empty() && line.damageMult != "none") {
-				curobj->data.damage = curobj->data.damage * stof(line.damageMult);
-				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed(mult) damage {}"), curobj->formID, curobj->fullName, curobj->data.damage);
+				ngcompat::AmmoData(curobj).damage = ngcompat::AmmoData(curobj).damage * stof(line.damageMult);
+				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed(mult) damage {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).damage);
 		}
 
 		if (!line.projectile.empty() && line.projectile != "none") {
@@ -299,7 +299,7 @@ namespace AMMO
 			projectileform = GetFormFromIdentifier(string_form);
 			if (projectileform && projectileform->formType == RE::FormType::Projectile) {
 				currentprojectile = (RE::BGSProjectile*)projectileform;
-				curobj->data.projectile = currentprojectile;
+				ngcompat::AmmoData(curobj).projectile = currentprojectile;
 				logger::debug(FMT_STRING("projectile set to {:08X} {}"), currentprojectile->formID, currentprojectile->fullName);
 			} else {
 			}
@@ -424,50 +424,50 @@ namespace AMMO
 
 
 
-		if (!line.speed.empty() && line.speed != "none" && curobj->data.projectile) {
+		if (!line.speed.empty() && line.speed != "none" && ngcompat::AmmoData(curobj).projectile) {
 			try {
-				curobj->data.projectile->data.speed = std::stof(line.speed);
-				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed speed {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.speed);
+				ngcompat::AmmoData(curobj).projectile->data.speed = std::stof(line.speed);
+				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed speed {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->data.speed);
 			} catch (const std::exception& e) {
 			}
 		}
 
-		if (!line.speedMult.empty() && line.speedMult != "none" && curobj->data.projectile) {
+		if (!line.speedMult.empty() && line.speedMult != "none" && ngcompat::AmmoData(curobj).projectile) {
 			try {
-				curobj->data.projectile->data.speed = curobj->data.projectile->data.speed * std::stof(line.speedMult);
-				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied speed {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.speed);
+				ngcompat::AmmoData(curobj).projectile->data.speed = ngcompat::AmmoData(curobj).projectile->data.speed * std::stof(line.speedMult);
+				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied speed {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->data.speed);
 			} catch (const std::exception& e) {
 			}
 		}
 
-		if (!line.range.empty() && line.range != "none" && curobj->data.projectile) {
+		if (!line.range.empty() && line.range != "none" && ngcompat::AmmoData(curobj).projectile) {
 			try {
-				curobj->data.projectile->data.range = std::stof(line.range);
-				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed range {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.range);
+				ngcompat::AmmoData(curobj).projectile->data.range = std::stof(line.range);
+				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed range {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->data.range);
 			} catch (const std::exception& e) {
 			}
 		}
 
-		if (!line.rangeMult.empty() && line.rangeMult != "none" && curobj->data.projectile) {
+		if (!line.rangeMult.empty() && line.rangeMult != "none" && ngcompat::AmmoData(curobj).projectile) {
 			try {
-				curobj->data.projectile->data.range = curobj->data.projectile->data.range * std::stof(line.rangeMult);
-				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied range {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.range);
+				ngcompat::AmmoData(curobj).projectile->data.range = ngcompat::AmmoData(curobj).projectile->data.range * std::stof(line.rangeMult);
+				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied range {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->data.range);
 			} catch (const std::exception& e) {
 			}
 		}
 
-		if (!line.gravity.empty() && line.gravity != "none" && curobj->data.projectile) {
+		if (!line.gravity.empty() && line.gravity != "none" && ngcompat::AmmoData(curobj).projectile) {
 			try {
-				curobj->data.projectile->data.gravity = std::stof(line.gravity);
-				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed gravity {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.gravity);
+				ngcompat::AmmoData(curobj).projectile->data.gravity = std::stof(line.gravity);
+				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed gravity {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->data.gravity);
 			} catch (const std::exception& e) {
 			}
 		}
 
-		if (!line.gravityMult.empty() && line.gravityMult != "none" && curobj->data.projectile) {
+		if (!line.gravityMult.empty() && line.gravityMult != "none" && ngcompat::AmmoData(curobj).projectile) {
 			try {
-				curobj->data.projectile->data.gravity = curobj->data.projectile->data.gravity * std::stof(line.gravityMult);
-				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied gravity {}"), curobj->formID, curobj->fullName, curobj->data.projectile->data.gravity);
+				ngcompat::AmmoData(curobj).projectile->data.gravity = ngcompat::AmmoData(curobj).projectile->data.gravity * std::stof(line.gravityMult);
+				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied gravity {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->data.gravity);
 			} catch (const std::exception& e) {
 			}
 		}
@@ -475,13 +475,13 @@ namespace AMMO
 		if (!line.setFlags.empty()) {
 			for (const auto& setFlag : line.setFlags) {
 				if (toLowerCase(setFlag) == "ignoresnormalweaponresistance") {
-					curobj->data.flags.set(RE::AMMO_DATA::Flag::kIgnoresNormalWeaponResistance);
+					ngcompat::AmmoData(curobj).flags.set(RE::AMMO_DATA::Flag::kIgnoresNormalWeaponResistance);
 					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag enabled ignoresnormalweaponresistance"), curobj->formID, curobj->fullName);
 				} else if (toLowerCase(setFlag) == "nonplayable") {
-					curobj->data.flags.set(RE::AMMO_DATA::Flag::kNonPlayable);
+					ngcompat::AmmoData(curobj).flags.set(RE::AMMO_DATA::Flag::kNonPlayable);
 					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag enabled nonplayable"), curobj->formID, curobj->fullName);
 				} else if (toLowerCase(setFlag) == "nonbolt") {
-					curobj->data.flags.set(RE::AMMO_DATA::Flag::kNonBolt);
+					ngcompat::AmmoData(curobj).flags.set(RE::AMMO_DATA::Flag::kNonBolt);
 					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag enabled nonbolt"), curobj->formID, curobj->fullName);
 				} else {
 				}
@@ -491,13 +491,13 @@ namespace AMMO
 		if (!line.removeFlags.empty()) {
 			for (const auto& removeFlag : line.removeFlags) {
 				if (toLowerCase(removeFlag) == "ignoresnormalweaponresistance") {
-					curobj->data.flags.reset(RE::AMMO_DATA::Flag::kIgnoresNormalWeaponResistance);
+					ngcompat::AmmoData(curobj).flags.reset(RE::AMMO_DATA::Flag::kIgnoresNormalWeaponResistance);
 					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag disabled ignoresnormalweaponresistance"), curobj->formID, curobj->fullName);
 				} else if (toLowerCase(removeFlag) == "nonplayable") {
-					curobj->data.flags.reset(RE::AMMO_DATA::Flag::kNonPlayable);
+					ngcompat::AmmoData(curobj).flags.reset(RE::AMMO_DATA::Flag::kNonPlayable);
 					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag disabled nonplayable"), curobj->formID, curobj->fullName);
 				} else if (toLowerCase(removeFlag) == "nonbolt") {
-					curobj->data.flags.reset(RE::AMMO_DATA::Flag::kNonBolt);
+					ngcompat::AmmoData(curobj).flags.reset(RE::AMMO_DATA::Flag::kNonBolt);
 					logger::debug(FMT_STRING("ammo formid: {:08X} {} flag disabled nonbolt"), curobj->formID, curobj->fullName);
 				} else {
 				}

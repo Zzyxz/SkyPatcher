@@ -152,16 +152,7 @@ AttributePoints calculateAttributePoints(int level, const StatWeights& weights, 
 
 bool IsPluginInstalled(const char* name)
 {
-	auto  dataHandler = RE::TESDataHandler::GetSingleton();
-	auto* modInfo = dataHandler->LookupLoadedModByName(name);
-	if (modInfo)
-		return true;
-
-	modInfo = dataHandler->LookupLoadedLightModByName(name);
-	if (modInfo)
-		return true;
-
-	return false;
+	return ngcompat::IsPluginLoaded(RE::TESDataHandler::GetSingleton(), name);
 }
 
 RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
@@ -192,7 +183,7 @@ RE::TESForm* GetFormFromIdentifier(const std::string& identifier)
 			formID = rawFormID & 0xFFF;
 
 		if (REL::Module::IsVR()) {
-			return dataHandler->LookupForm(formID, modName);
+			return ngcompat::LookupFormVR(dataHandler, formID, modName);
 		}
 		if (!mod.usable)
 			return nullptr;

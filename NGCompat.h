@@ -17,6 +17,60 @@ namespace ngcompat
 		return &REL::RelocateMember<RE::TESWeightForm>(a_ammo, 0xB0);
 	}
 
+	[[nodiscard]] inline RE::AMMO_DATA& AmmoData(RE::TESAmmo* a_ammo) noexcept
+	{
+		return a_ammo->GetRuntimeData().data;
+	}
+
+	[[nodiscard]] inline bool AmmoIsBolt(RE::TESAmmo* a_ammo) noexcept
+	{
+		return AmmoData(a_ammo).flags.none(RE::AMMO_DATA::Flag::kNonBolt);
+	}
+
+	[[nodiscard]] inline const RE::TESFileCollection* VRESLFileCollection() noexcept
+	{
+		static std::atomic<const RE::TESFileCollection*> collection{ nullptr };
+		if (const auto* known = collection.load(std::memory_order_acquire); known || !REL::Module::IsVR()) {
+			return known;
+		}
+		if (const auto module = GetModuleHandleW(L"skyrimvresl")) {
+			using func_t = const RE::TESFileCollection* (*)();
+			if (const auto get = reinterpret_cast<func_t>(GetProcAddress(module, "GetCompiledFileCollectionExtern"))) {
+				const auto* found = get();
+				collection.store(found, std::memory_order_release);
+				return found;
+			}
+		}
+		return nullptr;
+	}
+
+	[[nodiscard]] inline RE::TESForm* LookupFormVR(RE::TESDataHandler* a_dataHandler, RE::FormID a_rawFormID, std::string_view a_modName)
+	{
+		const auto* file = a_dataHandler->LookupModByName(a_modName);
+		if (!file || file->compileIndex == 0xFF) {
+			return nullptr;
+		}
+		RE::FormID formID = 0;
+		if (VRESLFileCollection()) {
+			formID = (static_cast<RE::FormID>(file->compileIndex) << 24) + (static_cast<RE::FormID>(file->smallFileCompileIndex) << 12) + a_rawFormID;
+		} else {
+			formID = (a_rawFormID & 0xFFFFFF) | (static_cast<RE::FormID>(file->compileIndex) << 24);
+		}
+		return RE::TESForm::LookupByID(formID);
+	}
+
+	[[nodiscard]] inline bool IsPluginLoaded(RE::TESDataHandler* a_dataHandler, std::string_view a_name)
+	{
+		if (const auto* collection = VRESLFileCollection()) {
+			const auto matches = [&](const RE::TESFile* a_file) {
+				return a_file && a_name.size() == std::strlen(a_file->fileName) &&
+				       _strnicmp(a_file->fileName, a_name.data(), a_name.size()) == 0;
+			};
+			return std::ranges::any_of(collection->files, matches) || std::ranges::any_of(collection->smallFiles, matches);
+		}
+		return a_dataHandler->LookupLoadedModByName(a_name) || a_dataHandler->LookupLoadedLightModByName(a_name);
+	}
+
 	[[nodiscard]] inline RE::BGSAttackData* CreateAttackData()
 	{
 		auto* attackData = RE::malloc<RE::BGSAttackData>();
