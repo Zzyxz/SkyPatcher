@@ -465,16 +465,16 @@ namespace CONTAINER
 		logger::debug("{} Done!", __FUNCTION__);
 	}
 
-	bool LoadRaceDataHook::Hook_InitItemImpl(RE::TESObjectCONT* curobj)
+	void LoadRaceDataHook::Hook_InitItemImpl(RE::TESObjectCONT* curobj)
 	{
-		auto result = func(curobj);
-		if (result) {
+		func(curobj);
+		{
 			logger::debug("CONT {:08X} {} {}", curobj->formID, curobj->fullName, curobj->GetFormEditorID());
 
 			for (const auto& line : hooktokens) {
 				bool found = false;
 				if (curobj->IsDeleted()) {
-					return result;
+					return;
 				}
 
 				const formfilter::CommonFilterView view{
@@ -507,7 +507,6 @@ namespace CONTAINER
 			}
 
 		}
-		return result;
 	}
 
 

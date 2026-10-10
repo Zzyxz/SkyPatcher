@@ -23,7 +23,7 @@ namespace CONTAINER
 	{
 	public:
 		static void InstallHook();
-		static bool Hook_InitItemImpl(RE::TESObjectCONT* a_race);
+		static void Hook_InitItemImpl(RE::TESObjectCONT* a_race);
 
 	private:
 		static inline REL::Relocation<decltype(&Hook_InitItemImpl)> func;
