@@ -1284,7 +1284,7 @@ namespace RACE
 					try {
 						hookpatch(line, curobj);
 					} catch (const std::exception& e) {
-						logger::warn(FMT_STRING("race formid: {:08X} raceHook rule skipped: {}"), curobj->formID, e.what());
+						logger::warn(FMT_STRING("race {:08X}: an attack data rule was skipped: {}"), curobj->formID, e.what());
 					}
 				}
 			}

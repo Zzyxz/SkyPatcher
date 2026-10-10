@@ -215,7 +215,7 @@ RE::FormID BuildFormIDFromIdentifier(const std::string& identifier)
 		return 0x0;
 	}
 	std::uint32_t fullFormID = 0;
-	if (mod->IsLight()) {
+	if (mod->IsLight() && (!REL::Module::IsVR() || ngcompat::VRESLFileCollection())) {
 		fullFormID = 0xFE000000 | (static_cast<std::uint32_t>(mod->GetSmallFileCompileIndex()) << 12) | (rawFormID & 0xFFF);
 	} else {
 		fullFormID = (static_cast<std::uint32_t>(mod->GetCompileIndex()) << 24) | (rawFormID & 0xFFFFFF);

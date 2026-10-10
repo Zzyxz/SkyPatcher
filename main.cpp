@@ -80,6 +80,14 @@ void EraseNpcStyle(RE::FormID a_formID)
 	npcStyles.erase(a_formID);
 }
 
+void EraseNpcStyleIf(RE::FormID a_formID, int a_style)
+{
+	const std::scoped_lock lock(npcStylesLock);
+	if (const auto it = npcStyles.find(a_formID); it != npcStyles.end() && it->second == a_style) {
+		npcStyles.erase(it);
+	}
+}
+
 void ClearNpcStyles()
 {
 	const std::scoped_lock lock(npcStylesLock);
@@ -313,13 +321,13 @@ void SaveCallback(SKSE::SerializationInterface* serde) {
 
 	const auto styles = SnapshotNpcStyles();
 	std::vector<std::pair<RE::FormID, int>> validStyles;
-	std::vector<RE::FormID> invalidFormIDs;
+	std::vector<std::pair<RE::FormID, int>> invalidStyles;
 	validStyles.reserve(styles.size());
 	for (const auto& pair : styles) {
 		if (RE::TESForm::LookupByID(pair.first)) {
 			validStyles.emplace_back(pair);
 		} else {
-			invalidFormIDs.push_back(pair.first);
+			invalidStyles.emplace_back(pair);
 			logger::debug("SaveCallback FormID {:08X} failed to look up and is not saved.", pair.first);
 		}
 	}
@@ -330,8 +338,8 @@ void SaveCallback(SKSE::SerializationInterface* serde) {
 		serde->WriteRecordData(&style, sizeof(style));
 		logger::debug("SaveCallback FormID {:08X} saved.", formID);
 	}
-	for (const auto formID : invalidFormIDs) {
-		EraseNpcStyle(formID);
+	for (const auto& [formID, style] : invalidStyles) {
+		EraseNpcStyleIf(formID, style);
 	}
 	const auto elapsed{ std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start_time) };
 	double     seconds = static_cast<double>(elapsed.count()) / 1000000.0;

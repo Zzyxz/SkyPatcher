@@ -467,8 +467,9 @@ namespace CONTAINER
 
 	void LoadRaceDataHook::Hook_InitItemImpl(RE::TESObjectCONT* curobj)
 	{
+		const bool wasInitialized = curobj->IsInitialized();
 		func(curobj);
-		{
+		if (!wasInitialized) {
 			logger::debug("CONT {:08X} {} {}", curobj->formID, curobj->fullName, curobj->GetFormEditorID());
 
 			for (const auto& line : hooktokens) {
