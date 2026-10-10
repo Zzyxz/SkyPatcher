@@ -99,6 +99,19 @@ namespace ngcompat
 		return ctor(attackData);
 	}
 
+	inline bool AddOrReplaceAttackData(RE::BGSAttackDataMap* a_map, RE::NiPointer<RE::BGSAttackData> a_data)
+	{
+		if (!a_map || !a_data || a_data->event.empty()) {
+			return false;
+		}
+		const RE::BSFixedString key = a_data->event;
+		auto [it, inserted] = a_map->attackDataMap.insert({ key, a_data });
+		if (!inserted) {
+			it->second = std::move(a_data);
+		}
+		return true;
+	}
+
 	template <class E>
 	void SetFlag(E& a_flags, E a_flag) noexcept
 	{

@@ -1499,22 +1499,23 @@ namespace NPC
 		}
 
 		if (!line.addedAttackData.empty() && curobj->attackDataMap) {
-			RE::BGSAttackData* newAttackData = ngcompat::CreateAttackData();
-			newAttackData->IncRefCount();
-			newAttackData->data.damageMult = 1;
-			newAttackData->data.attackChance = 1;
-			newAttackData->data.attackSpell = nullptr;
-			newAttackData->data.attackAngle = 0;
-			newAttackData->data.strikeAngle = 50;
-			newAttackData->data.staggerOffset = 0;
-			newAttackData->data.attackType = nullptr;
-			newAttackData->data.knockDown = 0;
-			newAttackData->data.recoveryTime = 0;
-			newAttackData->data.staminaMult = 1;
-			newAttackData->data.flags = RE::AttackData::AttackFlag::kNone;
-			curobj->attackDataMap->attackDataMap.insert({ newAttackData->event, RE::NiPointer(newAttackData) });
-
 			for (const auto& objectArr : line.addedAttackData) {
+				RE::NiPointer<RE::BGSAttackData> attackDataPtr{ ngcompat::CreateAttackData() };
+				if (!attackDataPtr) {
+					continue;
+				}
+				RE::BGSAttackData* newAttackData = attackDataPtr.get();
+				newAttackData->data.damageMult = 1;
+				newAttackData->data.attackChance = 1;
+				newAttackData->data.attackSpell = nullptr;
+				newAttackData->data.attackAngle = 0;
+				newAttackData->data.strikeAngle = 50;
+				newAttackData->data.staggerOffset = 0;
+				newAttackData->data.attackType = nullptr;
+				newAttackData->data.knockDown = 0;
+				newAttackData->data.recoveryTime = 0;
+				newAttackData->data.staminaMult = 1;
+				newAttackData->data.flags = RE::AttackData::AttackFlag::kNone;
 				for (const auto& object : objectArr) {
 					if (object.empty() || (object.size() < 2 && toLowerCase(object[0]) != "resetflags" && toLowerCase(object[0]) != "removeflags")) {
 						continue;
@@ -1610,6 +1611,10 @@ namespace NPC
 					else {
 						logger::debug("Unrecognized keyword: {}", object[0]);
 					}
+				}
+
+				if (!ngcompat::AddOrReplaceAttackData(curobj->attackDataMap.get(), std::move(attackDataPtr))) {
+					logger::warn("npc {:08X}: an attack in attackDataToAdd has no key and was skipped", curobj->formID);
 				}
 			}
 		}
