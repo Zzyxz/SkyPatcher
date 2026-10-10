@@ -22,6 +22,22 @@ namespace ngcompat
 		return a_ammo->GetRuntimeData().data;
 	}
 
+	[[nodiscard]] inline RE::BGSKeywordForm* KeywordForm(RE::TESForm* a_form) noexcept
+	{
+		if (!a_form) {
+			return nullptr;
+		}
+		if (a_form->GetFormType() == RE::FormType::Ammo) {
+			return static_cast<RE::TESAmmo*>(a_form)->AsKeywordForm();
+		}
+		return a_form->As<RE::BGSKeywordForm>();
+	}
+
+	[[nodiscard]] inline const RE::BGSKeywordForm* KeywordForm(const RE::TESForm* a_form) noexcept
+	{
+		return KeywordForm(const_cast<RE::TESForm*>(a_form));
+	}
+
 	[[nodiscard]] inline bool AmmoIsBolt(RE::TESAmmo* a_ammo) noexcept
 	{
 		return AmmoData(a_ammo).flags.none(RE::AMMO_DATA::Flag::kNonBolt);

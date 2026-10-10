@@ -111,7 +111,7 @@ namespace COBJ
 					continue;
 				}
 
-				RE::BGSKeywordForm* createdItemKw = curobj->createdItem ? curobj->createdItem->As<RE::BGSKeywordForm>() : nullptr;
+				RE::BGSKeywordForm* createdItemKw = curobj->createdItem ? ngcompat::KeywordForm(curobj->createdItem) : nullptr;
 
 				if (!line.keywordsNew.empty() && createdItemKw) {
 					keywordNewAnd = formfilter::matchesKeywordsAnd(view, createdItemKw, nullptr);
@@ -221,7 +221,7 @@ namespace COBJ
 						currentform = GetFormFromIdentifier(string_form);
 						if (curobj->createdItem && currentform && currentform->formType == RE::FormType::Keyword) {
 							keyword = (RE::BGSKeyword*)currentform;
-							if (auto boundObject = curobj->createdItem->As<RE::BGSKeywordForm>(); boundObject && boundObject->HasKeyword(keyword)) {
+							if (auto boundObject = ngcompat::KeywordForm(curobj->createdItem); boundObject && boundObject->HasKeyword(keyword)) {
 								hasRestrictedKeyword = true;
 							}
 						}
@@ -626,8 +626,8 @@ namespace COBJ
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.keywordsToAdd[i];
 				currentform = GetFormFromIdentifier(string_form);
-				if (curobj->createdItem && currentform && currentform->formType == RE::FormType::Keyword && curobj->createdItem->As<RE::BGSKeywordForm>()) {
-					curobj->createdItem->As<RE::BGSKeywordForm>()->AddKeyword((RE::BGSKeyword*)currentform);
+				if (curobj->createdItem && currentform && currentform->formType == RE::FormType::Keyword && ngcompat::KeywordForm(curobj->createdItem)) {
+					ngcompat::KeywordForm(curobj->createdItem)->AddKeyword((RE::BGSKeyword*)currentform);
 					logger::debug(FMT_STRING("cobj formid: {:08X} {} object {} added keyword {:08X} {} "), curobj->formID, clib_util::editorID::get_editorID(curobj), clib_util::editorID::get_editorID(curobj->createdItem), ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
 				}
 			}
@@ -638,8 +638,8 @@ namespace COBJ
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.keywordsToRemove[i];
 				currentform = GetFormFromIdentifier(string_form);
-				if (curobj->createdItem && currentform && currentform->formType == RE::FormType::Keyword && curobj->createdItem->As<RE::BGSKeywordForm>()) {
-					curobj->createdItem->As<RE::BGSKeywordForm>()->RemoveKeyword((RE::BGSKeyword*)currentform);
+				if (curobj->createdItem && currentform && currentform->formType == RE::FormType::Keyword && ngcompat::KeywordForm(curobj->createdItem)) {
+					ngcompat::KeywordForm(curobj->createdItem)->RemoveKeyword((RE::BGSKeyword*)currentform);
 					logger::debug(FMT_STRING("cobj formid: {:08X} {} object {} removed keyword {:08X} {} "), curobj->formID, clib_util::editorID::get_editorID(curobj), clib_util::editorID::get_editorID(curobj->createdItem), ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
 				}
 			}

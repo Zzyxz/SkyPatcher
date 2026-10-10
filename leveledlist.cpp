@@ -419,7 +419,7 @@ namespace LEVELEDLIST
 					continue;
 				}
 				const auto removed = EngineLists::RemoveLeveledObjects(curobj, list, [&](const RE::LEVELED_OBJECT& x) {
-					const auto* keyForm = x.form ? x.form->As<RE::BGSKeywordForm>() : nullptr;
+					const auto* keyForm = ngcompat::KeywordForm(x.form);
 					return keyForm && keyForm->HasKeyword(keyword);
 				});
 				logger::debug(FMT_STRING("leveled Lists {:08X} removed {} items with keyword {:08X} {}"), curobj->formID, removed, keyword->formID, keyword->formEditorID);

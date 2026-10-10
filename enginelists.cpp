@@ -318,7 +318,7 @@ namespace EngineLists
 	std::size_t RemoveContainerObjectsByKeyword(RE::TESContainer& container, RE::BGSKeyword* keyword)
 	{
 		return RemoveContainerObjects(container, [keyword](const RE::ContainerObject& entry) {
-			const auto* keywordForm = entry.obj ? entry.obj->As<RE::BGSKeywordForm>() : nullptr;
+			const auto* keywordForm = ngcompat::KeywordForm(entry.obj);
 			return keywordForm && keywordForm->HasKeyword(keyword);
 		});
 	}
