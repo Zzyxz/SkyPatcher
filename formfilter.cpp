@@ -524,6 +524,13 @@ namespace formfilter
 				return a_t.npc->actorData.actorBaseFlags.any(
 					static_cast<RE::ACTOR_BASE_DATA::Flag>(static_cast<std::uint32_t>(ops[a_i])));
 
+			case Op::NpcTemplate:
+				return a_t.npc->baseTemplateForm && a_t.npc->baseTemplateForm->formID == static_cast<RE::FormID>(ops[a_i]);
+
+			case Op::NpcInheritsTemplateFlag:
+				return a_t.npc->baseTemplateForm && a_t.npc->actorData.templateUseFlags.any(
+					static_cast<RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG>(static_cast<std::uint32_t>(ops[a_i])));
+
 			case Op::NpcTemplateFlag:
 				return a_t.npc->actorData.templateUseFlags.any(
 					static_cast<RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG>(static_cast<std::uint32_t>(ops[a_i])));

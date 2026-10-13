@@ -89,6 +89,8 @@ namespace NPC
 		std::vector<std::string> removeAttackData;
 		std::vector<std::string> restrictToFlags;
 		std::vector<std::string> restrictToTemplateFlags;
+		std::vector<std::string> filterTemplate;
+		std::vector<std::string> filterTemplateFlagExclude;
 		
 		std::vector<std::string> object;
 		std::vector<std::string> objectExcluded;

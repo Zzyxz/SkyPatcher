@@ -111,6 +111,8 @@ namespace NPC
 			{ "attackDataToRemove", sp::FieldKind::ListAssign, NPC_F(removeAttackData) },
 			{ "restrictToFlags", sp::FieldKind::ListAssign, NPC_F(restrictToFlags) },
 			{ "restrictToTemplateFlags", sp::FieldKind::ListAssign, NPC_F(restrictToTemplateFlags) },
+			{ "filterByTemplate", sp::FieldKind::List, NPC_F(filterTemplate) },
+			{ "filterByTemplateFlagExclude", sp::FieldKind::ListAssign, NPC_F(filterTemplateFlagExclude) },
 			{ "haircolor", sp::FieldKind::Value, NPC_F(haircolor) },
 			{ "objectsToReplace", sp::FieldKind::Arr2D, NPC_F(objectsToReplace) },
 			{ "attackDataToAdd", sp::FieldKind::AttackData3D, NPC_F(addedAttackData) },
@@ -210,7 +212,7 @@ namespace NPC
 				}
 			}
 
-			if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterClass.empty() && line.filterCombatStyle.empty() && line.filterFactions.empty() && line.filterFactionsOr.empty() && line.filterByOutfit.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
+			if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterClass.empty() && line.filterCombatStyle.empty() && line.filterTemplate.empty() && line.filterFactions.empty() && line.filterFactionsOr.empty() && line.filterByOutfit.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
 				continue;
 			}
 
@@ -2047,6 +2049,14 @@ namespace NPC
 			formfilter::addPred(p, Op::CombatStyle, Mode::Or, formfilter::idOperands(line.filterCombatStyle, RE::FormType::CombatStyle), false);
 			formfilter::pushDisjunct(p, p.positive, first);
 		}
+		if (!line.filterTemplate.empty()) {
+			auto templates = formfilter::idOperands(line.filterTemplate, RE::FormType::NPC);
+			const auto leveled = formfilter::idOperands(line.filterTemplate, RE::FormType::LeveledNPC);
+			templates.insert(templates.end(), leveled.begin(), leveled.end());
+			first = p.preds.size();
+			formfilter::addPred(p, Op::NpcTemplate, Mode::Or, templates, false);
+			formfilter::pushDisjunct(p, p.positive, first);
+		}
 		formfilter::sortCheapestFirst(p.positive);
 
 		struct
@@ -2091,6 +2101,7 @@ namespace NPC
 
 		p.catchAll = line.object.empty() && line.races.empty() && line.keywords.empty() &&
 			line.keywordsOr.empty() && line.filterClass.empty() && line.filterCombatStyle.empty() &&
+			line.filterTemplate.empty() &&
 			line.filterFactions.empty() && line.filterFactionsOr.empty() && line.filterByOutfit.empty() &&
 			line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty();
 
@@ -2165,6 +2176,20 @@ namespace NPC
 			}
 			if (!bits.empty()) {
 				p.negative.push_back(formfilter::makePredicate(p, Op::NpcTemplateFlag, Mode::And, bits, false));
+			}
+		}
+		if (!line.filterTemplateFlagExclude.empty()) {
+			std::vector<std::uint64_t> bits;
+			for (const auto& s : line.filterTemplateFlagExclude) {
+				const auto it = templateFlagMap().find(toLowerCase(s));
+				if (it != templateFlagMap().end()) {
+					bits.push_back(static_cast<std::uint64_t>(it->second));
+				} else {
+					logger::warn(FMT_STRING("Unknown template flag '{}' in filterByTemplateFlagExclude"), s);
+				}
+			}
+			if (!bits.empty()) {
+				p.negative.push_back(formfilter::makePredicate(p, Op::NpcInheritsTemplateFlag, Mode::Exclude, bits, false));
 			}
 		}
 		if (!line.restrictToFlags.empty()) {

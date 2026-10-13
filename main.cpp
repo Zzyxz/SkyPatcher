@@ -432,6 +432,22 @@ void RegisterSerialization() {
 
 }
 
+std::unordered_map<RE::FormID, NPC::NPCData>::iterator FindVisualStyleData(RE::TESActorBase* a_base)
+{
+	RE::TESNPC* a_npc = a_base ? a_base->As<RE::TESNPC>() : nullptr;
+	const auto end = actData.npcData.end();
+	for (int depth = 0; a_npc && depth < 16; ++depth) {
+		if (auto it = actData.npcData.find(a_npc->formID); it != end && it->second.npcVisualStyleList) {
+			return it;
+		}
+		if (!a_npc->actorData.templateUseFlags.any(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kTraits)) {
+			break;
+		}
+		a_npc = a_npc->baseTemplateForm ? a_npc->baseTemplateForm->As<RE::TESNPC>() : nullptr;
+	}
+	return end;
+}
+
 bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData& npcData, bool a_reset3D) {
 	bool shouldCopy = false;
 	auto npc = a_this->GetActorBase();
@@ -454,6 +470,9 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData
 				auto it = actData.npcData.find(data->templateBase->formID);
 				if (it != actData.npcData.end()) {
 					logger::debug("CopyVisual: actor {:08X} matched by template {:08X}", a_this->formID, data->templateBase->formID);
+					shouldCopy = true;
+				} else if (auto chain = FindVisualStyleData(data->templateBase); chain != actData.npcData.end()) {
+					logger::debug("CopyVisual: actor {:08X} matched by appearance source {:08X}", a_this->formID, chain->first);
 					shouldCopy = true;
 				}
 
@@ -545,6 +564,11 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 		}
 		if (data->templateBase) {
 			it = actData.npcData.find(data->templateBase->formID);
+			if (it == actData.npcData.end() || !it->second.npcVisualStyleList) {
+				if (auto chain = FindVisualStyleData(data->templateBase); chain != actData.npcData.end()) {
+					it = chain;
+				}
+			}
 		}
 	}
 

@@ -131,6 +131,8 @@ namespace formfilter
 		ObjectId,
 		NpcFlag,
 		NpcTemplateFlag,
+		NpcTemplate,
+		NpcInheritsTemplateFlag,
 		NpcSkillRange,
 		WeapAnimType,
 		WeapSkill,
