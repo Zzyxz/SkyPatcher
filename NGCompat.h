@@ -123,6 +123,16 @@ namespace ngcompat
 		return true;
 	}
 
+	inline void CopyHeadColors(RE::TESNPC* a_target, const RE::TESNPC* a_source)
+	{
+		if (!a_target || !a_source) {
+			return;
+		}
+		const auto* data = a_source->headRelatedData;
+		a_target->SetHairColor(data ? data->hairColor : nullptr);
+		a_target->SetFaceTexture(data ? data->faceDetails : nullptr);
+	}
+
 	template <class E>
 	void SetFlag(E& a_flags, E a_flag) noexcept
 	{

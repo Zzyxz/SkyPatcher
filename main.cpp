@@ -1,5 +1,6 @@
 #include "dirent.h"
 #include "voicesafety.h"
+#include "haircolor.h"
 #include <alch.h>
 #include <ammo.h>
 #include <armor.h>
@@ -515,6 +516,7 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData
 					npcToChange->faceNPC = npcToCopyFrom;
 				}
 				npcToChange->bodyTintColor = npcToCopyFrom->bodyTintColor;
+				ngcompat::CopyHeadColors(npcToChange, npcToCopyFrom);
 				if (npcData.changeVoice && npcToChange->voiceType != npcToCopyFrom->voiceType) {
 					if (!protectDialogueVoices || VoiceSafety::CanSwap(a_this, npcToChange->voiceType, npcToCopyFrom->voiceType)) {
 						npcToChange->voiceType = npcToCopyFrom->voiceType;
@@ -1001,7 +1003,6 @@ struct QueueReference3D
 		}
 
 		auto& trampoline = SKSE::GetTrampoline();
-		SKSE::AllocTrampoline(stolen + 14 + 14);
 		auto* gateway = static_cast<std::uint8_t*>(trampoline.allocate(stolen + 14));
 		std::memcpy(gateway, bytes, stolen);
 		gateway[stolen + 0] = 0xFF;
@@ -1183,6 +1184,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 										npcToChange->faceNPC = npcToCopyFrom;
 									}
 									npcToChange->bodyTintColor = npcToCopyFrom->bodyTintColor;
+									ngcompat::CopyHeadColors(npcToChange, npcToCopyFrom);
 									if (npcToChange && npcToCopyFrom) {
 										for (int i = 0; i < npcToCopyFrom->numHeadParts; i++) {
 											if (npcToCopyFrom->headParts && npcToCopyFrom->headParts[i]) {
@@ -1424,6 +1426,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 			}
 
 			actData = NPC::readConfig(".\\Data\\SKSE\\Plugins\\SkyPatcher\\npc");
+			if (std::ranges::any_of(actData.npcData, [](const auto& a_entry) { return a_entry.second.haircolor != nullptr; })) {
+				HairColor::Install();
+			}
 			const auto elapsed{ std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start_time) };
 			double     seconds = static_cast<double>(elapsed.count()) / 1000000.0;
 			logger::info(">>>>>>>>>>>>>>>>>>>>>>>>>>> NPC Patcher finished in {} seconds", seconds);
@@ -1775,6 +1780,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	}
 
 	SKSE::Init(a_skse);
+	SKSE::AllocTrampoline(256);
 	RegisterSerialization();
 	const auto messaging = SKSE::GetMessagingInterface();
 	messaging->RegisterListener(MessageHandler);
