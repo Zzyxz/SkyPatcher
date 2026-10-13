@@ -1479,7 +1479,8 @@ namespace NPC
 					curobj->weight = bo->weight;
 					curobj->faceNPC = bo;
 					curobj->bodyTintColor = bo->bodyTintColor;
-					ngcompat::CopyHeadColors(curobj, bo);
+					const auto ruleColor = aData.npcData.find(curobj->formID);
+					ngcompat::CopyHeadColors(curobj, bo, ruleColor != aData.npcData.end() && ruleColor->second.haircolor);
 					for (int i = 0; i < bo->numHeadParts; i++) {
 						if (bo->headParts && bo->headParts[i]) {
 							logger::debug("-> npc formid: {:08X} {} Change Head Part {:08X} {}", curobj->formID, curobj->fullName, bo->headParts[i]->formID, bo->headParts[i]->fullName);

@@ -451,6 +451,19 @@ std::unordered_map<RE::FormID, NPC::NPCData>::iterator FindVisualStyleData(RE::T
 	return end;
 }
 
+static bool HasHairColorRule(RE::Actor* a_actor)
+{
+	const auto has = [](const RE::TESForm* a_form) {
+		const auto it = a_form ? actData.npcData.find(a_form->GetFormID()) : actData.npcData.end();
+		return it != actData.npcData.end() && it->second.haircolor;
+	};
+	if (!a_actor || has(a_actor->data.objectReference)) {
+		return a_actor != nullptr;
+	}
+	const auto* leveled = a_actor->extraList.GetByType<RE::ExtraLeveledCreature>();
+	return leveled && (has(leveled->originalBase) || has(leveled->templateBase));
+}
+
 bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData& npcData, bool a_reset3D) {
 	bool shouldCopy = false;
 	auto npc = a_this->GetActorBase();
@@ -516,7 +529,7 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData
 					npcToChange->faceNPC = npcToCopyFrom;
 				}
 				npcToChange->bodyTintColor = npcToCopyFrom->bodyTintColor;
-				ngcompat::CopyHeadColors(npcToChange, npcToCopyFrom);
+				ngcompat::CopyHeadColors(npcToChange, npcToCopyFrom, HasHairColorRule(a_this));
 				if (npcData.changeVoice && npcToChange->voiceType != npcToCopyFrom->voiceType) {
 					if (!protectDialogueVoices || VoiceSafety::CanSwap(a_this, npcToChange->voiceType, npcToCopyFrom->voiceType)) {
 						npcToChange->voiceType = npcToCopyFrom->voiceType;
@@ -1082,7 +1095,14 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 							}
 						}
 
-						if (it != actData.npcData.end()) {
+						auto styleIt = it;
+						if ((styleIt == actData.npcData.end() || !styleIt->second.npcVisualStyleList) && data && data->templateBase) {
+							if (auto chain = FindVisualStyleData(data->templateBase); chain != actData.npcData.end()) {
+								styleIt = chain;
+							}
+						}
+						if (it != actData.npcData.end() || styleIt != actData.npcData.end()) {
+							if (it != actData.npcData.end()) {
 							if (it->second.npcClass) {
 								actorBase->npcClass = it->second.npcClass;
 							}
@@ -1184,7 +1204,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 										npcToChange->faceNPC = npcToCopyFrom;
 									}
 									npcToChange->bodyTintColor = npcToCopyFrom->bodyTintColor;
-									ngcompat::CopyHeadColors(npcToChange, npcToCopyFrom);
+									ngcompat::CopyHeadColors(npcToChange, npcToCopyFrom, HasHairColorRule(actor));
 									if (npcToChange && npcToCopyFrom) {
 										for (int i = 0; i < npcToCopyFrom->numHeadParts; i++) {
 											if (npcToCopyFrom->headParts && npcToCopyFrom->headParts[i]) {
@@ -1195,10 +1215,10 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 									logger::debug("PostLoadGame: applied Visual Style to Actor {:08X} {}.", actor->formID, actor->GetDisplayFullName());
 								}
 							}
+							}
+							if ((styleIt != actData.npcData.end() && styleIt->second.npcVisualStyleList) || originalBaseHasStyleList) {
 
-							if (it != actData.npcData.end() && it->second.npcVisualStyleList || originalBaseHasStyleList) {
-
-								NPC::NPCData* aNPCData = &it->second;
+								NPC::NPCData* aNPCData = styleIt != actData.npcData.end() ? &styleIt->second : nullptr;
 								auto actorData = (RE::ExtraLeveledCreature*)actor->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
 								if (actorData && actorData->originalBase) {
 									if (auto itr = actData.npcData.find(actorData->originalBase->formID); itr != actData.npcData.end() && itr->second.npcVisualStyleList) {
@@ -1206,7 +1226,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 									}
 								}
 
-								if (aNPCData->npcVisualStyleList && !aNPCData->npcVisualStyleList->forms.empty()) {
+								if (aNPCData && aNPCData->npcVisualStyleList && !aNPCData->npcVisualStyleList->forms.empty()) {
 
 									auto& forms = aNPCData->npcVisualStyleList->forms;
 
@@ -1284,6 +1304,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 
 							}
 
+							if (it != actData.npcData.end()) {
 							if ((it->second.npcVisual || it->second.skinWasSet) || it->second.haircolor) {
 								if (iUpdateNPCVisualsOnLoad == 1) {
 
@@ -1330,6 +1351,8 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 									logger::debug("PostLoadGame: {:08X} {} updated voiceType to {:08X}", npc->formID, npc->fullName.c_str(), it->second.voiceType->formID);
 								}
 							}
+
+							}
 						}
 					}
 				}
@@ -1375,9 +1398,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 		const auto start_time_gameLoaded{ std::chrono::system_clock::now() };
 		SkyPatcher_VisualStyleApply = createKeyword();
 		FormDeleteEventSink::Init();
-		if (protectDialogueVoices) {
-			VoiceSafety::Build();
-		}
 
 		if (GetPrivateProfileInt(settingsSection, "iEnableMagicEffectPatching", 0, configFile)) {
 			const auto start_time{ std::chrono::system_clock::now() };
@@ -1426,6 +1446,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 			}
 
 			actData = NPC::readConfig(".\\Data\\SKSE\\Plugins\\SkyPatcher\\npc");
+			if (protectDialogueVoices && std::ranges::any_of(actData.npcData, [](const auto& a_entry) { return a_entry.second.changeVoice; })) {
+				VoiceSafety::Build();
+			}
 			if (std::ranges::any_of(actData.npcData, [](const auto& a_entry) { return a_entry.second.haircolor != nullptr; })) {
 				HairColor::Install();
 			}

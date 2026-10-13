@@ -91,7 +91,7 @@ namespace HairColor
 							return RE::BSVisit::BSVisitControl::kContinue;
 						}
 					}
-					if (material->unk30 == 0) {
+					if ((material->unk30 & 0x7FFFFFFF) == 0) {
 						lighting->SetMaterial(material, true);
 						material = lighting->material;
 					}
@@ -112,9 +112,9 @@ namespace HairColor
 		{
 			static void thunk(RE::TESNPC* a_npc, RE::Actor* a_actor)
 			{
-				inFullBuild = true;
+				const bool outer = std::exchange(inFullBuild, true);
 				func(a_npc, a_actor);
-				inFullBuild = false;
+				inFullBuild = outer;
 				Retint(a_actor);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
@@ -151,7 +151,6 @@ namespace HairColor
 		{
 			const auto site = REL::try_resolve_callsite(a_owner, a_call);
 			if (!site) {
-				logger::debug("Hair color: {} not found ({})", a_what, REL::callsite_status_text(site.status));
 				return false;
 			}
 			Hook::func = SKSE::GetTrampoline().write_call<5>(*site.address, Hook::thunk);

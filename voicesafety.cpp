@@ -13,6 +13,7 @@ namespace VoiceSafety
 		struct QuestRole
 		{
 			std::vector<const RE::BGSListForm*> voiceLists;
+			std::vector<std::unordered_set<RE::FormID>> voiceSets;
 			std::unordered_set<RE::FormID>      factions;
 			std::unordered_set<RE::FormID>      npcs;
 			std::unordered_set<RE::FormID>      classes;
@@ -129,24 +130,20 @@ namespace VoiceSafety
 			return found;
 		}
 
-		bool ListContains(const RE::BGSListForm* a_list, const RE::BGSVoiceType* a_voice)
+		std::unordered_set<RE::FormID> ListMembers(const RE::BGSListForm* a_list)
 		{
-			if (!a_list || !a_voice) {
-				return false;
-			}
+			std::unordered_set<RE::FormID> members;
 			for (const auto* form : a_list->forms) {
-				if (form == a_voice) {
-					return true;
+				if (form) {
+					members.insert(form->GetFormID());
 				}
 			}
 			if (a_list->scriptAddedTempForms) {
 				for (const auto id : *a_list->scriptAddedTempForms) {
-					if (id == a_voice->GetFormID()) {
-						return true;
-					}
+					members.insert(id);
 				}
 			}
-			return false;
+			return members;
 		}
 
 		void IdentityRecords(RE::Actor* a_actor, std::vector<const RE::TESNPC*>& a_out)
@@ -222,6 +219,9 @@ namespace VoiceSafety
 
 		for (auto& [quest, role] : perQuest) {
 			if (!role.voiceLists.empty()) {
+				for (const auto* list : role.voiceLists) {
+					role.voiceSets.push_back(ListMembers(list));
+				}
 				roles.push_back(std::move(role));
 			}
 		}
@@ -237,7 +237,10 @@ namespace VoiceSafety
 		if (!built || !a_actor || a_old == a_new) {
 			return true;
 		}
-		if (!a_old || !a_new) {
+		if (!a_old) {
+			return true;
+		}
+		if (!a_new) {
 			return false;
 		}
 
@@ -270,8 +273,8 @@ namespace VoiceSafety
 			if (!selected) {
 				continue;
 			}
-			for (const auto* list : role.voiceLists) {
-				if (ListContains(list, a_old) != ListContains(list, a_new)) {
+			for (const auto& members : role.voiceSets) {
+				if (members.contains(a_old->GetFormID()) != members.contains(a_new->GetFormID())) {
 					return false;
 				}
 			}
