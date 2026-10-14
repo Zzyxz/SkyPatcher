@@ -451,6 +451,37 @@ std::unordered_map<RE::FormID, NPC::NPCData>::iterator FindVisualStyleData(RE::T
 	return end;
 }
 
+static bool StyleFits(RE::Actor* a_actor, const NPC::NPCData& a_data, const RE::TESForm* a_style)
+{
+	const auto* source = a_style ? a_style->As<RE::TESNPC>() : nullptr;
+	if (!source) {
+		return false;
+	}
+	if (!protectDialogueVoices) {
+		return true;
+	}
+	const auto* base = a_actor->GetActorBase();
+	if (!base || base->IsFemale() == source->IsFemale()) {
+		return true;
+	}
+	return base->voiceType == source->voiceType || VoiceSafety::CanSwap(a_actor, base->voiceType, source->voiceType);
+}
+
+static int RollFittingStyle(RE::Actor* a_actor, const NPC::NPCData& a_data, const RE::BSTArray<RE::TESForm*>& a_forms)
+{
+	std::vector<int> fitting;
+	for (std::uint32_t i = 0; i < a_forms.size(); ++i) {
+		if (StyleFits(a_actor, a_data, a_forms[i])) {
+			fitting.push_back(static_cast<int>(i));
+		}
+	}
+	if (fitting.empty()) {
+		return -1;
+	}
+	std::uniform_int_distribution<std::size_t> distribution(0, fitting.size() - 1);
+	return fitting[distribution(RandomEngine())];
+}
+
 static bool HasHairColorRule(RE::Actor* a_actor)
 {
 	const auto has = [](const RE::TESForm* a_form) {
@@ -502,6 +533,21 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData
 				}
 			}
 
+			bool takeVoice = npcData.changeVoice;
+			if (shouldCopy && npc && protectDialogueVoices && npc->voiceType != npcToCopyFrom->voiceType) {
+				const bool fits = VoiceSafety::CanSwap(a_this, npc->voiceType, npcToCopyFrom->voiceType);
+				if (npc->IsFemale() != npcToCopyFrom->IsFemale()) {
+					if (!fits) {
+						logger::debug("CopyVisual: actor {:08X} keeps its look; the style's voice lacks some of its dialogue", a_this->formID);
+						return false;
+					}
+					takeVoice = true;
+				} else if (takeVoice && !fits) {
+					takeVoice = false;
+					logger::debug("CopyVisual: actor {:08X} takes the look but keeps its own voice", a_this->formID);
+				}
+			}
+
 			if (shouldCopy && npc) {
 				RE::TESNPC* npcToChange = npc;
 
@@ -530,12 +576,8 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData
 				}
 				npcToChange->bodyTintColor = npcToCopyFrom->bodyTintColor;
 				ngcompat::CopyHeadColors(npcToChange, npcToCopyFrom, HasHairColorRule(a_this));
-				if (npcData.changeVoice && npcToChange->voiceType != npcToCopyFrom->voiceType) {
-					if (!protectDialogueVoices || VoiceSafety::CanSwap(a_this, npcToChange->voiceType, npcToCopyFrom->voiceType)) {
-						npcToChange->voiceType = npcToCopyFrom->voiceType;
-					} else {
-						logger::debug("CopyVisual: actor {:08X} keeps its voice; the style's voice lacks some of its dialogue", a_this->formID);
-					}
+				if (takeVoice) {
+					npcToChange->voiceType = npcToCopyFrom->voiceType;
 				}
 				if (npcToCopyFrom->headParts) {
 					for (int i = 0; i < npcToCopyFrom->numHeadParts; i++) {
@@ -622,6 +664,10 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 					logger::debug("Load3D: NPC with FormID {:X} had an invalid style index {} (out of range). Reassigning a new style.", a_this->formID, styleIndex);
 					storedStyle.reset();
 				}
+				else if (!StyleFits(a_this, *aNPCData, forms[styleIndex])) {
+					logger::debug("Load3D: NPC with FormID {:X} stored style index {} does not fit its voice. Reassigning a new style.", a_this->formID, styleIndex);
+					storedStyle.reset();
+				}
 				else {
 					logger::debug("Load3D: NPC with FormID {:X} using stored style index {}.", a_this->formID, styleIndex);
 				}
@@ -637,9 +683,13 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 					styleIndex = -1;
 				}
 				else if (!forms.empty()) {
-					std::uniform_int_distribution<size_t> distribution(0, forms.size() - 1);
-					styleIndex = distribution(generator);
-					logger::debug("Load3D: Rolled new random style index {} to Actor with FormID {:X} from {} available styles ", styleIndex, a_this->formID, forms.size());
+					styleIndex = RollFittingStyle(a_this, *aNPCData, forms);
+					if (styleIndex < 0) {
+						SetNpcStyle(a_this->formID, -1);
+						logger::debug("Load3D: NPC with FormID {:X} has no style with a fitting voice and keeps its look.", a_this->formID);
+					} else {
+						logger::debug("Load3D: Rolled new random style index {} to Actor with FormID {:X} from {} available styles ", styleIndex, a_this->formID, forms.size());
+					}
 				}
 				else {
 					SetNpcStyle(a_this->formID, -1);
@@ -1245,6 +1295,10 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 												actor->formID, styleIndex);
 											storedStyle.reset();
 										}
+										else if (!StyleFits(actor, *aNPCData, forms[styleIndex])) {
+											logger::debug("PostLoadGame: NPC with FormID {:X} stored style index {} does not fit its voice. Reassigning a new style.", actor->formID, styleIndex);
+											storedStyle.reset();
+										}
 										else {
 											logger::debug("PostLoadGame: NPC with FormID {:X} using stored style index {}.", actor->formID, styleIndex);
 										}
@@ -1262,10 +1316,13 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 											styleIndex = -1;
 										}
 										else if (!forms.empty()) {
-											std::uniform_int_distribution<size_t> distribution(0, forms.size() - 1);
-											styleIndex = distribution(generator);
+											styleIndex = RollFittingStyle(actor, *aNPCData, forms);
 											SetNpcStyle(actor->formID, styleIndex);
-											logger::debug("PostLoadGame: Assigned new random style index {} to Actor with FormID {:X}", styleIndex, actor->formID);
+											if (styleIndex < 0) {
+												logger::debug("PostLoadGame: NPC with FormID {:X} has no style with a fitting voice and keeps its look.", actor->formID);
+											} else {
+												logger::debug("PostLoadGame: Assigned new random style index {} to Actor with FormID {:X}", styleIndex, actor->formID);
+											}
 										}
 										else {
 											SetNpcStyle(actor->formID, -1);
