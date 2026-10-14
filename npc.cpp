@@ -636,8 +636,11 @@ namespace NPC
 				else {
 					logger::debug(FMT_STRING("NPC {:08X} {} will get random visual style from {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
 				}
-				if (line.setRandomVisualStyle[0].size() > 2) {
+				if (line.setRandomVisualStyle[0].size() > 2 && toLowerCase(line.setRandomVisualStyle[0][2]) != "false") {
 					aData.npcData[curobj->formID].changeVoice = true;
+				}
+				if (line.setRandomVisualStyle[0].size() > 3 && toLowerCase(line.setRandomVisualStyle[0][3]) == "protected") {
+					aData.npcData[curobj->formID].protectVoice = true;
 				}
 				if (!line.rvsRestrictToTraits.empty() && line.rvsRestrictToTraits != "none") {
 					aData.npcData[curobj->formID].restrictToTraits = true;
@@ -680,8 +683,11 @@ namespace NPC
 				else {
 					logger::debug(FMT_STRING("NPC {:08X} {} will get random visual style from {:08X}   (added random visual styles {})"), curobj->formID, curobj->fullName, currentform->formID, added);
 				}
-				if (line.addRandomVisualStyle[0].size() > 2) {
+				if (line.addRandomVisualStyle[0].size() > 2 && toLowerCase(line.addRandomVisualStyle[0][2]) != "false") {
 					aData.npcData[curobj->formID].changeVoice = true;
+				}
+				if (line.addRandomVisualStyle[0].size() > 3 && toLowerCase(line.addRandomVisualStyle[0][3]) == "protected") {
+					aData.npcData[curobj->formID].protectVoice = true;
 				}
 				if (!line.rvsRestrictToTraits.empty() && line.rvsRestrictToTraits != "none") {
 					aData.npcData[curobj->formID].restrictToTraits = true;

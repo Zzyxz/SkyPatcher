@@ -57,6 +57,7 @@ namespace NPC
 		int							maxLevel = -99;
 		bool						maxLevelWasSet = false;
 		bool						changeVoice = false;
+		bool						protectVoice = false;
 		bool						updateFlags = false;
 		bool						updateTemplateFlags = false;
 		RE::TESCombatStyle*         npcCombatStyle = nullptr;

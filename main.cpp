@@ -56,7 +56,6 @@ std::vector<std::vector<std::string>> excludedNPCsArr;
 std::unordered_set<RE::FormID>        excludedNPCsFormIDs = {};
 bool                                  loadOnlyOnce = true;
 int									  iUpdateNPCVisualsOnLoad = 1;
-bool                                  protectDialogueVoices = true;
 RE::BGSKeyword* SkyPatcher_VisualStyleApply = nullptr;
 bool								  loadStylesAfterLoad = false;
 std::unordered_map<RE::FormID, int> npcStyles;
@@ -457,7 +456,7 @@ static bool StyleFits(RE::Actor* a_actor, const NPC::NPCData& a_data, const RE::
 	if (!source) {
 		return false;
 	}
-	if (!protectDialogueVoices) {
+	if (!a_data.protectVoice) {
 		return true;
 	}
 	const auto* base = a_actor->GetActorBase();
@@ -534,7 +533,7 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData
 			}
 
 			bool takeVoice = npcData.changeVoice;
-			if (shouldCopy && npc && protectDialogueVoices && npc->voiceType != npcToCopyFrom->voiceType) {
+			if (shouldCopy && npc && npcData.protectVoice && npc->voiceType != npcToCopyFrom->voiceType) {
 				const bool fits = VoiceSafety::CanSwap(a_this, npc->voiceType, npcToCopyFrom->voiceType);
 				if (npc->IsFemale() != npcToCopyFrom->IsFemale()) {
 					if (!fits) {
@@ -1503,7 +1502,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 			}
 
 			actData = NPC::readConfig(".\\Data\\SKSE\\Plugins\\SkyPatcher\\npc");
-			if (protectDialogueVoices && std::ranges::any_of(actData.npcData, [](const auto& a_entry) { return a_entry.second.changeVoice; })) {
+			if (std::ranges::any_of(actData.npcData, [](const auto& a_entry) { return a_entry.second.protectVoice; })) {
 				VoiceSafety::Build();
 			}
 			if (std::ranges::any_of(actData.npcData, [](const auto& a_entry) { return a_entry.second.haircolor != nullptr; })) {
@@ -1879,7 +1878,6 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	statRefreshExcludeEnabled = GetPrivateProfileInt(settingsSectionFeatures, "iUpdateNPCExclude", 0, configFile);
 
 	iUpdateNPCVisualsOnLoad = GetPrivateProfileInt(settingsSectionFeatures, "iUpdateNPCVisualsOnLoad", 1, configFile);
-	protectDialogueVoices = GetPrivateProfileInt(settingsSectionFeatures, "iProtectDialogueVoices", 1, configFile) != 0;
 	
 	logger::info("iUpdateRefs {}", RefPatchingEnabled);
 	logger::info("iUpdateNPC {}", npcPatchingEnabled);
