@@ -426,25 +426,38 @@ namespace CELL
 
 		if (hasValue(line.waterHeight)) {
 			const auto waterValue = toLowerCase(trim(line.waterHeight));
+			const bool lineRemovesWater = std::ranges::any_of(line.removeCellFlags,
+				[](const std::string& a_flag) { return toLowerCase(trim(a_flag)) == "haswater"; });
+			const bool exterior = !curobj->IsInteriorCell();
 			if (waterValue == "null") {
 				curobj->GetRuntimeData().waterHeight = -2147483648.0f;
-				curobj->cellFlags.reset(RE::TESObjectCELL::Flag::kHasWater);
+				if (exterior) {
+					curobj->cellFlags.reset(RE::TESObjectCELL::Flag::kHasWater);
+				}
 				logger::debug(FMT_STRING("cell formid {:08X} has no water now"), curobj->formID);
 			} else if (waterValue == "default") {
 				curobj->GetRuntimeData().waterHeight = std::numeric_limits<float>::max();
-				if (!curobj->IsInteriorCell()) {
+				if (exterior && !lineRemovesWater) {
 					curobj->cellFlags.set(RE::TESObjectCELL::Flag::kHasWater);
 				}
 				logger::debug(FMT_STRING("cell formid {:08X} reset waterHeight to the worldspace default"), curobj->formID);
 			} else {
+				const std::string text = trim(line.waterHeight);
+				std::size_t       used = 0;
+				float             value = 0.0f;
+				bool              valid = false;
 				try {
-					float value = std::stof(line.waterHeight);
+					value = std::stof(text, &used);
+					valid = used == text.size() && std::isfinite(value);
+				} catch (...) {
+				}
+				if (valid) {
 					curobj->GetRuntimeData().waterHeight = value;
-					if (!curobj->IsInteriorCell()) {
+					if (exterior && !lineRemovesWater) {
 						curobj->cellFlags.set(RE::TESObjectCELL::Flag::kHasWater);
 					}
 					logger::debug(FMT_STRING("cell formid {:08X} set waterHeight to {:.6f}"), curobj->formID, value);
-				} catch (...) {
+				} else {
 					logger::warn(FMT_STRING("Invalid waterHeight '{}' for cell {:08X}"), line.waterHeight, curobj->formID);
 				}
 			}

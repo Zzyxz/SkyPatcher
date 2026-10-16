@@ -210,7 +210,7 @@ namespace NPC
 				a_source.pool->push_back(form);
 			}
 			for (auto* form : a_source.added->forms) {
-				if (form && std::find(a_source.current->begin(), a_source.current->end(), form) == a_source.current->end()) {
+				if (form && std::find(a_source.pool->begin(), a_source.pool->end(), form) == a_source.pool->end()) {
 					a_source.pool->push_back(form);
 					if (a_addedCount) {
 						++*a_addedCount;

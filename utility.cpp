@@ -261,7 +261,7 @@ namespace
 bool IsSwitchOn(const std::string& value)
 {
 	const auto v = toLowerCase(trimAllSpace(value));
-	return !v.empty() && v != "none" && v != "false" && v != "no" && v != "0";
+	return !v.empty() && v != "none" && v != "false" && v != "no" && v != "0" && v != "off";
 }
 
 bool IsNullValue(const std::string& value)
@@ -271,22 +271,22 @@ bool IsNullValue(const std::string& value)
 
 namespace
 {
-	double roundingTolerance(double product)
+	double snapToWhole(double product)
 	{
-		return std::max(1e-4, std::abs(product) * 1e-6);
+		const double whole = std::round(product);
+		const double tolerance = std::max(1e-4, std::abs(product) * 1e-7);
+		return std::abs(product - whole) <= tolerance ? whole : product;
 	}
 }
 
 double MultRoundUp(double value, double mult)
 {
-	const double product = value * mult;
-	return std::ceil(product - roundingTolerance(product));
+	return std::ceil(snapToWhole(value * mult));
 }
 
 double MultRoundDown(double value, double mult)
 {
-	const double product = value * mult;
-	return std::floor(product + roundingTolerance(product));
+	return std::floor(snapToWhole(value * mult));
 }
 
 std::string normalizePath(const std::string& path)

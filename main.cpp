@@ -506,7 +506,7 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData
 			if (data->originalBase) {
 				auto it = actData.npcData.find(data->originalBase->formID);
 				if (it != actData.npcData.end()) {
-					logger::debug("CopyVisual: actor {:08X} matched by original: {:08X}", a_this->formID, data->originalBase->formID);
+					logger::debug("NPC update: actor {:08X} matched by original: {:08X}", a_this->formID, data->originalBase->formID);
 					shouldCopy = true;
 				}
 
@@ -515,10 +515,10 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData
 			if (!shouldCopy && data->templateBase) {
 				auto it = actData.npcData.find(data->templateBase->formID);
 				if (it != actData.npcData.end()) {
-					logger::debug("CopyVisual: actor {:08X} matched by template {:08X}", a_this->formID, data->templateBase->formID);
+					logger::debug("NPC update: actor {:08X} matched by template {:08X}", a_this->formID, data->templateBase->formID);
 					shouldCopy = true;
 				} else if (auto chain = FindVisualStyleData(data->templateBase); chain != actData.npcData.end()) {
-					logger::debug("CopyVisual: actor {:08X} matched by appearance source {:08X}", a_this->formID, chain->first);
+					logger::debug("NPC update: actor {:08X} matched by appearance source {:08X}", a_this->formID, chain->first);
 					shouldCopy = true;
 				}
 
@@ -537,13 +537,13 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData
 				const bool fits = VoiceSafety::CanSwap(a_this, npc->voiceType, npcToCopyFrom->voiceType);
 				if (npc->IsFemale() != npcToCopyFrom->IsFemale()) {
 					if (!fits) {
-						logger::debug("CopyVisual: actor {:08X} keeps its look; the style's voice lacks some of its dialogue", a_this->formID);
+						logger::debug("NPC update: actor {:08X} keeps its look; the style's voice lacks some of its dialogue", a_this->formID);
 						return false;
 					}
 					takeVoice = true;
 				} else if (takeVoice && !fits) {
 					takeVoice = false;
-					logger::debug("CopyVisual: actor {:08X} takes the look but keeps its own voice", a_this->formID);
+					logger::debug("NPC update: actor {:08X} takes the look but keeps its own voice", a_this->formID);
 				}
 			}
 

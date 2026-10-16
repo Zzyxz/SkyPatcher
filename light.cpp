@@ -243,9 +243,13 @@ void patch(const patch_instruction &line, RE::TESObjectLIGH *light) {
   if (!line.flickerPeriod.empty() && line.flickerPeriod != "none") {
     float period{};
     if (!parseFloat(line.flickerPeriod, period) || !std::isfinite(period) ||
-        period <= 0.0F) {
+        period < 0.0F) {
       logger::warn("light formid: {:08X} invalid flickerPeriod '{}'",
                    light->formID, line.flickerPeriod);
+    } else if (period == 0.0F) {
+      light->data.flickerPeriodRecip = 0.0F;
+      logger::debug("light formid: {:08X} changed flickerPeriod to 0",
+                    light->formID);
     } else {
       light->data.flickerPeriodRecip = 1.0F / (std::max)(period, 1.0F);
       logger::debug("light formid: {:08X} changed flickerPeriod to {}",
