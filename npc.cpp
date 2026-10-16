@@ -144,6 +144,12 @@ namespace NPC
 			return !a_value.empty() && a_value != "none";
 		}
 
+		bool switchOn(const std::string& a_value)
+		{
+			const auto v = toLowerCase(a_value);
+			return !v.empty() && v != "none" && v != "false" && v != "no" && v != "0";
+		}
+
 		bool npcRuleInvalidatesIndex(const patch_instruction& line)
 		{
 			return !line.keywordsToAdd.empty() || !line.keywordsToRemove.empty() ||
@@ -419,11 +425,11 @@ namespace NPC
 
 
 		if (!line.calcStats.empty() && line.calcStats != "none" && curobj->formID != 0x000007) {
-			if (line.calcStats == "yes" || line.calcStats == "true") {
+			if (toLowerCase(line.calcStats) == "yes" || toLowerCase(line.calcStats) == "true") {
 				curobj->actorData.actorBaseFlags.set(RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats);
 				logger::debug(FMT_STRING("Enabled kAutoCalcStats for NPC {:08X} {}"), curobj->formID, curobj->fullName);
 			}
-			else if (curobj->IsAutoCalc() && (line.calcStats == "no" || line.calcStats == "false")) {
+			else if (curobj->IsAutoCalc() && (toLowerCase(line.calcStats) == "no" || toLowerCase(line.calcStats) == "false")) {
 				curobj->actorData.actorBaseFlags.reset(RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats);
 				logger::debug(FMT_STRING("Disabled kAutoCalcStats for NPC {:08X} {}"), curobj->formID, curobj->fullName);
 			}
@@ -471,22 +477,22 @@ namespace NPC
 		}
 
 		if (!line.kEssential.empty() && line.kEssential != "none" && curobj->formID != 0x000007) {
-			if (line.kEssential == "yes" || line.kEssential == "true") {
+			if (toLowerCase(line.kEssential) == "yes" || toLowerCase(line.kEssential) == "true") {
 				curobj->actorData.actorBaseFlags.set(RE::ACTOR_BASE_DATA::Flag::kEssential);
 				logger::debug(FMT_STRING("Enabled kEssential for NPC {:08X} {}"), curobj->formID, curobj->fullName);
 			}
-			else if (line.kEssential == "no" || line.kEssential == "false") {
+			else if (toLowerCase(line.kEssential) == "no" || toLowerCase(line.kEssential) == "false") {
 				curobj->actorData.actorBaseFlags.reset(RE::ACTOR_BASE_DATA::Flag::kEssential);
 				logger::debug(FMT_STRING("Disabled kEssential for NPC {:08X} {}"), curobj->formID, curobj->fullName);
 			}
 		}
 
 		if (!line.kProtected.empty() && line.kProtected != "none" && curobj->formID != 0x000007) {
-			if (line.kProtected == "yes" || line.kProtected == "true") {
+			if (toLowerCase(line.kProtected) == "yes" || toLowerCase(line.kProtected) == "true") {
 				curobj->actorData.actorBaseFlags.set(RE::ACTOR_BASE_DATA::Flag::kProtected);
 				logger::debug(FMT_STRING("Enabled kProtected for NPC {:08X} {}"), curobj->formID, curobj->fullName);
 			}
-			else if (line.kProtected == "no" || line.kProtected == "false") {
+			else if (toLowerCase(line.kProtected) == "no" || toLowerCase(line.kProtected) == "false") {
 				curobj->actorData.actorBaseFlags.reset(RE::ACTOR_BASE_DATA::Flag::kProtected);
 				logger::debug(FMT_STRING("Disabled kProtected for NPC {:08X} {}"), curobj->formID, curobj->fullName);
 			}
@@ -642,7 +648,7 @@ namespace NPC
 				if (line.setRandomVisualStyle[0].size() > 3 && toLowerCase(line.setRandomVisualStyle[0][3]) == "protected") {
 					aData.npcData[curobj->formID].protectVoice = true;
 				}
-				if (!line.rvsRestrictToTraits.empty() && line.rvsRestrictToTraits != "none") {
+				if (switchOn(line.rvsRestrictToTraits)) {
 					aData.npcData[curobj->formID].restrictToTraits = true;
 				}
 
@@ -689,7 +695,7 @@ namespace NPC
 				if (line.addRandomVisualStyle[0].size() > 3 && toLowerCase(line.addRandomVisualStyle[0][3]) == "protected") {
 					aData.npcData[curobj->formID].protectVoice = true;
 				}
-				if (!line.rvsRestrictToTraits.empty() && line.rvsRestrictToTraits != "none") {
+				if (switchOn(line.rvsRestrictToTraits)) {
 					aData.npcData[curobj->formID].restrictToTraits = true;
 				}
 
@@ -745,6 +751,12 @@ namespace NPC
 				currentform = GetFormFromIdentifier(line.factionsToAdd[i]);
 				if (currentform && currentform->formType == RE::FormType::Faction) {
 					float finalValue = 0;
+					if (i < line.factionsToAddRank1.size()) {
+						const float lo = line.factionsToAddRank1[i];
+						const float hi = i < line.factionsToAddRank2.size() ? line.factionsToAddRank2[i] : lo;
+						finalValue = hi > lo ? floor((std::rand() / static_cast<float>(RAND_MAX)) * (hi - lo + 1) + lo) : lo;
+						finalValue = std::clamp(finalValue, 0.0f, 127.0f);
+					}
 					bool factionFound = false;
 					for (auto& faction : curobj->factions) {
 						if (faction.faction && faction.faction->formID && faction.faction->formID == currentform->formID) {
@@ -755,7 +767,7 @@ namespace NPC
 					if (!factionFound) {
 						RE::FACTION_RANK newFactionRank;
 						newFactionRank.faction = (RE::TESFaction*)currentform;
-						newFactionRank.rank = finalValue;
+						newFactionRank.rank = static_cast<std::int8_t>(finalValue);
 						curobj->factions.push_back(newFactionRank);
 						logger::debug(FMT_STRING("npc formid: {:08X} {} added faction {:08X} with rank {}"), curobj->formID, curobj->fullName, ((RE::TESFaction*)currentform)->formID, finalValue);
 					}
@@ -1201,7 +1213,7 @@ namespace NPC
 			}
 		}
 
-		if (!line.clearInventory.empty() && line.clearInventory != "none") {
+		if (switchOn(line.clearInventory)) {
 			EngineLists::ClearContainer(*curobj);
 			logger::debug(FMT_STRING("npc formid: {:08X} removed all objects "), curobj->formID);
 		}
@@ -1665,7 +1677,7 @@ namespace NPC
 						}
 
 						if (key) {
-							if (!(newAttackData->event.c_str() == object[1])) {
+							if (toLowerCase(newAttackData->event.c_str()) != toLowerCase(object[1])) {
 								break;
 							}
 							else {
@@ -2067,27 +2079,6 @@ namespace NPC
 		}
 		formfilter::sortCheapestFirst(p.positive);
 
-		struct
-		{
-			const std::string&        raw;
-			RE::ACTOR_BASE_DATA::Flag flag;
-		} const assigns[] = {
-			{ line.filterPCMult, RE::ACTOR_BASE_DATA::Flag::kPCLevelMult },
-			{ line.filterAutoCalc, RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats },
-			{ line.filterEssential, RE::ACTOR_BASE_DATA::Flag::kEssential },
-			{ line.filterProtected, RE::ACTOR_BASE_DATA::Flag::kProtected },
-		};
-		for (const auto& a : assigns) {
-			if (!liveScalarFilter(a.raw)) {
-				continue;
-			}
-			p.unkeyable = true;
-			bool expectSet = false;
-			if (flagPolarity(toLowerCase(a.raw), "true", "false", expectSet)) {
-				addFlagPredicate(p, p.assigns, a.flag, expectSet);
-			}
-		}
-
 		first = p.preds.size();
 		if (!line.filterByEditorIdContains.empty()) {
 			formfilter::addPred(p, Op::EditorId, Mode::And, formfilter::needleOperands(p, line.filterByEditorIdContains), true);
@@ -2114,6 +2105,21 @@ namespace NPC
 			line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty();
 
 		bool expectSet = false;
+		struct
+		{
+			const std::string&        raw;
+			RE::ACTOR_BASE_DATA::Flag flag;
+		} const flagFilters[] = {
+			{ line.filterPCMult, RE::ACTOR_BASE_DATA::Flag::kPCLevelMult },
+			{ line.filterAutoCalc, RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats },
+			{ line.filterEssential, RE::ACTOR_BASE_DATA::Flag::kEssential },
+			{ line.filterProtected, RE::ACTOR_BASE_DATA::Flag::kProtected },
+		};
+		for (const auto& f : flagFilters) {
+			if (liveScalarFilter(f.raw) && flagPolarity(toLowerCase(f.raw), "true", "false", expectSet)) {
+				addFlagPredicate(p, p.negative, f.flag, expectSet);
+			}
+		}
 		if (liveScalarFilter(line.isFemale) &&
 			flagPolarity(toLowerCase(line.isFemale), "female", "male", expectSet)) {
 			addFlagPredicate(p, p.negative, RE::ACTOR_BASE_DATA::Flag::kFemale, expectSet);

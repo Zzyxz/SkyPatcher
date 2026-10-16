@@ -502,7 +502,7 @@ namespace RACE
 						}
 
 						if (key) {
-							if (!(newAttackData->event.c_str() == object[1])) {
+							if (toLowerCase(newAttackData->event.c_str()) != toLowerCase(object[1])) {
 								break;
 							} else {
 								logger::debug("race formid: {:08X} attackData change - entry found {}", curobj->formID, newAttackData->event.c_str());

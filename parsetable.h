@@ -449,6 +449,12 @@ namespace sp
 					}
 					++it;
 				}
+				if (names.empty() && a_spec.key == "setPcLevelMult") {
+					const std::string word = detail::trimWs(valueStr);
+					if (!word.empty() && word != "none" && word.find('=') == std::string::npos) {
+						names.push_back(word);
+					}
+				}
 				return true;
 			}
 
@@ -490,8 +496,8 @@ namespace sp
 				std::sregex_iterator it(valueStr.begin(), valueStr.end(), detail::objectsToAddRegex());
 				const std::sregex_iterator end;
 				for (; it != end; ++it) {
-					objs.push_back((*it)[1].str());
-					vals.push_back((*it)[2].str());
+					objs.push_back(detail::trimWs((*it)[1].str()));
+					vals.push_back(detail::trimWs((*it)[2].str()));
 				}
 				return true;
 			}
