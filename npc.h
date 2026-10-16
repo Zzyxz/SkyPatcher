@@ -64,6 +64,11 @@ namespace NPC
 		RE::BGSListForm*			npcCombatStyleList = nullptr;
 		int                         npcCombatStyleChance = 100;
 		RE::BGSListForm*			npcVisualStyleList = nullptr;
+		RE::BSTArray<RE::TESForm*>* combinedStyleForms = nullptr;
+		[[nodiscard]] const RE::BSTArray<RE::TESForm*>* StyleForms() const
+		{
+			return combinedStyleForms ? combinedStyleForms : (npcVisualStyleList ? &npcVisualStyleList->forms : nullptr);
+		}
 		int                         npcVisualStyleChance = 100;
 		std::vector<RE::SpellItem*> spellItems = {};
 		std::vector<RE::BGSPerk*>   perks = {};
@@ -230,6 +235,7 @@ namespace NPC
 	bool      findObject(const patch_instruction& line, RE::TESNPC* curobj);
 	bool      findObject(const patch_instruction& line, const formfilter::MatchProgram& program, RE::TESNPC* curobj);
 	formfilter::MatchProgram makeFilterView(const patch_instruction& line);
+	void FinalizeStylePools();
 	void*     readConfigHook(const std::string& folder);
 }
 

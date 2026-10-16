@@ -195,6 +195,45 @@ namespace NPC
 
 	namespace
 	{
+		struct StylePoolSource
+		{
+			const RE::BSTArray<RE::TESForm*>* current;
+			RE::BGSListForm*                  added;
+			RE::BSTArray<RE::TESForm*>*       pool;
+		};
+		std::vector<StylePoolSource> stylePools;
+
+		void FillStylePool(const StylePoolSource& a_source, int* a_addedCount = nullptr)
+		{
+			a_source.pool->clear();
+			for (auto* form : *a_source.current) {
+				a_source.pool->push_back(form);
+			}
+			for (auto* form : a_source.added->forms) {
+				if (form && std::find(a_source.current->begin(), a_source.current->end(), form) == a_source.current->end()) {
+					a_source.pool->push_back(form);
+					if (a_addedCount) {
+						++*a_addedCount;
+					}
+				}
+			}
+		}
+
+		RE::BSTArray<RE::TESForm*>* CombinedStylePool(const RE::BSTArray<RE::TESForm*>& a_current, RE::BGSListForm* a_added, int& a_addedCount)
+		{
+			a_addedCount = 0;
+			for (const auto& source : stylePools) {
+				if (source.current == &a_current && source.added == a_added) {
+					FillStylePool(source, &a_addedCount);
+					return source.pool;
+				}
+			}
+			const StylePoolSource source{ &a_current, a_added, new RE::BSTArray<RE::TESForm*>() };
+			FillStylePool(source, &a_addedCount);
+			stylePools.push_back(source);
+			return source.pool;
+		}
+
 		bool liveScalarFilter(const std::string& a_value)
 		{
 			return !a_value.empty() && a_value != "none";
@@ -692,6 +731,7 @@ namespace NPC
 			currentform = GetFormFromIdentifier(line.setRandomVisualStyle[0][0]);
 			if (currentform && currentform->formType == RE::FormType::FormList) {
 				aData.npcData[curobj->formID].npcVisualStyleList = ((RE::BGSListForm*)currentform);
+				aData.npcData[curobj->formID].combinedStyleForms = nullptr;
 
 				if (line.setRandomVisualStyle[0].size() > 1) {
 					logger::debug(FMT_STRING("NPC {:08X} {} will get random visual style from {:08X} with a chance of {}%"), curobj->formID, curobj->fullName, currentform->formID, line.setRandomVisualStyle[0][1]);
@@ -723,21 +763,14 @@ namespace NPC
 			int added = 0;
 			if (currentform && currentform->formType == RE::FormType::FormList) {
 
-				if (aData.npcData[curobj->formID].npcVisualStyleList == nullptr)
+				auto& npcData = aData.npcData[curobj->formID];
+				if (npcData.npcVisualStyleList == nullptr)
 				{
-					aData.npcData[curobj->formID].npcVisualStyleList = ((RE::BGSListForm*)currentform);
+					npcData.npcVisualStyleList = ((RE::BGSListForm*)currentform);
 					added = ((RE::BGSListForm*)currentform)->forms.size();
 				}
 				else {
-					for (auto tForm : ((RE::BGSListForm*)currentform)->forms) {
-						if (tForm) {
-							auto& targetForms = aData.npcData[curobj->formID].npcVisualStyleList->forms;
-							if (std::find(targetForms.begin(), targetForms.end(), tForm) == targetForms.end()) {
-								added++;
-								targetForms.push_back(tForm);
-							}
-						}
-					}
+					npcData.combinedStyleForms = CombinedStylePool(*npcData.StyleForms(), (RE::BGSListForm*)currentform, added);
 				}
 
 				if (line.addRandomVisualStyle[0].size() > 1) {
@@ -2311,6 +2344,13 @@ namespace NPC
 		}
 
 		return p;
+	}
+
+	void FinalizeStylePools()
+	{
+		for (const auto& source : stylePools) {
+			FillStylePool(source);
+		}
 	}
 
 	bool findObject(const patch_instruction& line, RE::TESNPC* curobj)

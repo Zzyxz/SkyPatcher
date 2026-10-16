@@ -646,9 +646,10 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 		if (aNPCData \
 			&& aNPCData->npcVisualStyleList \
 			&& aNPCData->npcVisualStyleList->formID \
-			&& !aNPCData->npcVisualStyleList->forms.empty()) {
+			&& aNPCData->StyleForms() \
+			&& !aNPCData->StyleForms()->empty()) {
 
-			auto& forms = aNPCData->npcVisualStyleList->forms;
+			auto& forms = *aNPCData->StyleForms();
 
 			auto storedStyle = FindNpcStyle(a_this->formID);
 			int styleIndex = -1;
@@ -1282,9 +1283,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 									}
 								}
 
-								if (aNPCData && aNPCData->npcVisualStyleList && !aNPCData->npcVisualStyleList->forms.empty()) {
+								if (aNPCData && aNPCData->npcVisualStyleList && aNPCData->StyleForms() && !aNPCData->StyleForms()->empty()) {
 
-									auto& forms = aNPCData->npcVisualStyleList->forms;
+									auto& forms = *aNPCData->StyleForms();
 
 									auto storedStyle = FindNpcStyle(actor->formID);
 
@@ -1713,6 +1714,8 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 			double     seconds = static_cast<double>(elapsed.count()) / 1000000.0;
 			logger::info(">>>>>>>>>>>>>>>>>>>>>>>>>>> Encounterzone Patcher finished in {} seconds", seconds);
 		}
+
+		NPC::FinalizeStylePools();
 
 		if (auto* player = RE::PlayerCharacter::GetSingleton(); player && player->data.objectReference) {
 			if (auto* npc = player->data.objectReference->As<RE::TESNPC>(); npc && npc->race) {
