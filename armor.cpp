@@ -772,7 +772,7 @@ namespace ARMOR
 
 		if (!line.valueMult.empty() && line.valueMult != "none") {
 			try {
-				curobj->value = static_cast<int32_t>(MultRoundUp(curobj->value, std::stod(line.valueMult)));
+				curobj->value = ClampToInt32(MultRoundUp(curobj->value, std::stod(line.valueMult)));
 				logger::debug(FMT_STRING("armor formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
 			} catch (const std::exception& e) {
 			}

@@ -242,8 +242,9 @@ namespace NPC
 		float randomInRange(float a_lo, float a_hi)
 		{
 			static thread_local std::mt19937 engine{ std::random_device{}() };
-			const int lo = static_cast<int>(std::ceil(std::min(a_lo, a_hi)));
-			const int hi = static_cast<int>(std::floor(std::max(a_lo, a_hi)));
+			constexpr double kLimit = 1000000000.0;
+			const int lo = static_cast<int>(std::clamp(std::ceil(static_cast<double>(std::min(a_lo, a_hi))), -kLimit, kLimit));
+			const int hi = static_cast<int>(std::clamp(std::floor(static_cast<double>(std::max(a_lo, a_hi))), -kLimit, kLimit));
 			if (lo > hi) {
 				return a_lo;
 			}

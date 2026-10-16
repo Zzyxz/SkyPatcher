@@ -71,22 +71,10 @@ namespace SCROLL
 				if (tokEnd == std::string::npos) {
 					tokEnd = n;
 				}
-				for (std::size_t e = tokStart; e < tokEnd; ++e) {
-					if (a_line[e] != '=') {
-						continue;
-					}
-					std::size_t k = e;
-					while (k > tokStart && sp::detail::isRegexSpace(a_line[k - 1])) {
-						--k;
-					}
-					if (k - tokStart < 5 || a_line.compare(k - 5, 5, "clear") != 0) {
-						continue;
-					}
-					const std::size_t start = k - 5;
-					if (start > tokStart && std::isalnum(static_cast<unsigned char>(a_line[start - 1]))) {
-						continue;
-					}
-					if (e + 1 < tokEnd) {
+				const std::size_t e = a_line.find('=', tokStart);
+				if (e != std::string::npos && e < tokEnd) {
+					const auto key = sp::detail::trimWs(std::string_view(a_line).substr(tokStart, e - tokStart));
+					if (key == "clear" && e + 1 < tokEnd) {
 						return sp::detail::trimWs(std::string_view(a_line).substr(e + 1, tokEnd - e - 1));
 					}
 				}
@@ -986,7 +974,7 @@ namespace SCROLL
 
 		if (!line.valueMult.empty() && line.valueMult != "none") {
 			try {
-				curobj->value = static_cast<int32_t>(MultRoundUp(curobj->value, std::stof(line.valueMult)));
+				curobj->value = ClampToInt32(MultRoundUp(curobj->value, std::stof(line.valueMult)));
 				logger::debug(FMT_STRING("scroll formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
 			} catch (const std::exception& e) {
 				logger::warn(FMT_STRING("scroll {:08X}: invalid valueMult skipped: {}"), curobj->formID, e.what());

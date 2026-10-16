@@ -335,7 +335,7 @@ namespace WEAPON
 
 		std::uint16_t toDamage(double a_value)
 		{
-			const double v = std::floor(a_value + 1e-4);
+			const double v = std::floor(a_value);
 			if (!(v > 0.0)) {
 				return 0;
 			}
@@ -843,7 +843,7 @@ namespace WEAPON
 
 		if (!line.valueMult.empty() && line.valueMult != "none") {
 			try {
-				curobj->value = static_cast<int32_t>(MultRoundUp(curobj->value, std::stod(line.valueMult)));
+				curobj->value = ClampToInt32(MultRoundUp(curobj->value, std::stod(line.valueMult)));
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
 			} catch (const std::exception& e) {
 			}

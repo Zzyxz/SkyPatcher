@@ -271,22 +271,45 @@ bool IsNullValue(const std::string& value)
 
 namespace
 {
+	double cleanFactor(double mult)
+	{
+		const float asFloat = static_cast<float>(mult);
+		if (!std::isfinite(mult) || static_cast<double>(asFloat) != mult) {
+			return mult;
+		}
+		try {
+			return std::stod(fmt::format("{:.7g}", asFloat));
+		} catch (...) {
+			return mult;
+		}
+	}
+
 	double snapToWhole(double product)
 	{
 		const double whole = std::round(product);
-		const double tolerance = std::max(1e-4, std::abs(product) * 1e-7);
+		const double tolerance = 1e-9 * std::max(1.0, std::abs(product));
 		return std::abs(product - whole) <= tolerance ? whole : product;
 	}
 }
 
 double MultRoundUp(double value, double mult)
 {
-	return std::ceil(snapToWhole(value * mult));
+	return std::ceil(snapToWhole(value * cleanFactor(mult)));
 }
 
 double MultRoundDown(double value, double mult)
 {
-	return std::floor(snapToWhole(value * mult));
+	return std::floor(snapToWhole(value * cleanFactor(mult)));
+}
+
+std::int32_t ClampToInt32(double value)
+{
+	if (!std::isfinite(value)) {
+		return value > 0 ? std::numeric_limits<std::int32_t>::max() : (value < 0 ? std::numeric_limits<std::int32_t>::min() : 0);
+	}
+	return static_cast<std::int32_t>(std::clamp(value,
+		static_cast<double>(std::numeric_limits<std::int32_t>::min()),
+		static_cast<double>(std::numeric_limits<std::int32_t>::max())));
 }
 
 std::string normalizePath(const std::string& path)

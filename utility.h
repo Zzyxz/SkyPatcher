@@ -62,6 +62,7 @@ bool                              IsSwitchOn(const std::string& value);
 bool                              IsNullValue(const std::string& value);
 double                            MultRoundUp(double value, double mult);
 double                            MultRoundDown(double value, double mult);
+std::int32_t                      ClampToInt32(double value);
 
 
 #endif
