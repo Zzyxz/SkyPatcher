@@ -1242,7 +1242,6 @@ namespace RACE
 	{
 		REL::Relocation<std::uintptr_t> Vtbl{ VTABLE[0] };
 		func = Vtbl.write_vfunc(0x13, &Hook_InitItemImpl);
-		logger::debug("{} Done!", __FUNCTION__);
 	}
 
 	void LoadRaceDataHook::Hook_InitItemImpl(RE::TESRace* curobj)
@@ -1251,24 +1250,29 @@ namespace RACE
 		func(curobj);
 		if (!wasInitialized) {
 
-			static const std::vector<bool> tokenActive = [] {
+			static std::vector<bool> tokenActive;
+			static bool              tokenActiveReady = false;
+			if (!tokenActiveReady) {
 				std::vector<bool> active(hooktokens.size(), true);
-				if (!RE::TESDataHandler::GetSingleton()) {
-					return active;
-				}
-				std::unordered_set<std::string> loggedPaths;
-				for (std::size_t i = 0; i < hookTokenSources.size() && i < active.size(); ++i) {
-					const auto& source = hookTokenSources[i];
-					if (source.plugin.empty() || IsPluginInstalled(source.plugin.c_str())) {
-						continue;
+				const auto* dataHandler = RE::TESDataHandler::GetSingleton();
+				const bool  loadOrderKnown = dataHandler &&
+					(dataHandler->GetLoadedModCount() > 0 || dataHandler->GetLoadedLightModCount() > 0);
+				if (loadOrderKnown) {
+					tokenActiveReady = true;
+					std::unordered_set<std::string> loggedPaths;
+					for (std::size_t i = 0; i < hookTokenSources.size() && i < active.size(); ++i) {
+						const auto& source = hookTokenSources[i];
+						if (source.plugin.empty() || IsPluginInstalled(source.plugin.c_str())) {
+							continue;
+						}
+						active[i] = false;
+						if (loggedPaths.insert(source.path).second) {
+							logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), source.plugin, source.path);
+						}
 					}
-					active[i] = false;
-					if (loggedPaths.insert(source.path).second) {
-						logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), source.plugin, source.path);
-					}
 				}
-				return active;
-			}();
+				tokenActive = std::move(active);
+			}
 
 			std::size_t tokenIndex = 0;
 			for (const auto& line : hooktokens) {

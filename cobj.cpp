@@ -57,15 +57,15 @@ namespace COBJ
 		bool NamesPlugin(const std::string& a_name)
 		{
 			const auto lower = toLowerCase(a_name);
-			return lower.ends_with(".esp") || lower.ends_with(".esm") || lower.ends_with(".esl");
+			return lower.find(".esp") != std::string::npos || lower.find(".esm") != std::string::npos || lower.find(".esl") != std::string::npos;
 		}
 
-		bool ParseIngredientCount(const std::string& a_text, std::string_view a_key, std::int32_t& a_count)
+		bool ParseIngredientCount(const std::string& a_text, std::string_view a_key, std::int32_t& a_count, int a_min = 1)
 		{
 			try {
 				const auto value = std::stoi(a_text);
-				if (value <= 0) {
-					logger::warn(FMT_STRING("Count for {} must be above 0, skipping entry: {}"), a_key, a_text);
+				if (value < a_min) {
+					logger::warn(FMT_STRING("Count for {} must be at least {}, skipping entry: {}"), a_key, a_min, a_text);
 					return false;
 				}
 				a_count = value;
@@ -539,7 +539,7 @@ namespace COBJ
 			}
 
 			int32_t newCount = 1;
-			if (!ParseIngredientCount(multStr, "changeCobjsCount", newCount)) {
+			if (!ParseIngredientCount(multStr, "changeCobjsCount", newCount, 0)) {
 				continue;
 			}
 

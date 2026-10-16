@@ -310,10 +310,7 @@ namespace EngineLists
 		std::size_t changed = 0;
 		container.ForEachContainerObject([&](RE::ContainerObject& entry) {
 			if (!object || entry.obj == object) {
-				auto scaled = static_cast<double>(std::round(static_cast<float>(entry.count) * multiplier));
-				if (entry.count > 0 && scaled < 1.0) {
-					scaled = 1.0;
-				}
+				const auto scaled = static_cast<double>(std::round(static_cast<float>(entry.count) * multiplier));
 				entry.count = static_cast<std::int32_t>(std::clamp(scaled,
 					static_cast<double>(std::numeric_limits<std::int32_t>::min()),
 					static_cast<double>(std::numeric_limits<std::int32_t>::max())));

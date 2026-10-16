@@ -28,7 +28,7 @@ namespace FORMLIST
 		bool NamesPlugin(const std::string& a_name)
 		{
 			const auto lower = toLowerCase(a_name);
-			return lower.ends_with(".esp") || lower.ends_with(".esm") || lower.ends_with(".esl");
+			return lower.find(".esp") != std::string::npos || lower.find(".esm") != std::string::npos || lower.find(".esl") != std::string::npos;
 		}
 
 		void splitReplacePairs(const std::string& a_value, std::vector<std::string>& a_old, std::vector<std::string>& a_new)

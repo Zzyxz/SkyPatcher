@@ -54,6 +54,7 @@ namespace REFERENCE
 			case RE::FormType::AlchemyItem:
 			case RE::FormType::IdleMarker:
 			case RE::FormType::SoulGem:
+			case RE::FormType::TextureSet:
 				return true;
 			default:
 				return false;
@@ -178,7 +179,7 @@ namespace REFERENCE
 		}
 
 
-		if (const auto disable = toLowerCase(trim(line.disable)); disable == "true" || disable == "yes") {
+		if (IsSwitchOn(line.disable)) {
 			rData.refrDataMap[curobj].disable = true;
 			logger::debug(FMT_STRING("refr formid: {:08X} disabled"), curobj);
 		}

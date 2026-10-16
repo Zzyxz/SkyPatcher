@@ -2336,7 +2336,6 @@ namespace NPC
 	{
 		REL::Relocation<std::uintptr_t> Vtbl{ VTABLE[0] };
 		func = Vtbl.write_vfunc(0x6, &Hook_Load);
-		logger::debug("{} Done!", __FUNCTION__);
 	}
 
 	bool LoadRaceDataHook::Hook_Load(RE::TESNPC* curobj, RE::TESFile* a_mod)

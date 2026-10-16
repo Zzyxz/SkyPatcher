@@ -173,6 +173,9 @@ namespace CELL
 			if (!line.object.empty() && line.filterByAcousticSpace.empty() && line.filterByMusicType.empty() && line.filterBySkyRegion.empty() && line.filterByImageSpace.empty() && line.filterByLocation.empty()) {
 				continue;
 			}
+			if (line.object.empty() && line.filterByAcousticSpace.empty() && line.filterByMusicType.empty() && line.filterBySkyRegion.empty() && line.filterByImageSpace.empty() && line.filterByLocation.empty()) {
+				logger::info("Cell rule without filters: it applies to all cells");
+			}
 			for (const auto& curobj : ObjectArray) {
 				if (!curobj || curobj->IsDeleted()) {
 					continue;

@@ -296,7 +296,10 @@ namespace ENCOUNTERZONE
 				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} maxLevelMult invalid"), curobj->formID, clib_util::editorID::get_editorID(curobj));
 			} else {
 				const double product = static_cast<double>(curobj->data.maxLevel) * static_cast<double>(*mult);
-				const double result = std::clamp(std::round(product), static_cast<double>(INT8_MIN), static_cast<double>(INT8_MAX));
+				double       result = std::clamp(std::round(product), static_cast<double>(INT8_MIN), static_cast<double>(INT8_MAX));
+				if (curobj->data.maxLevel > 0 && *mult > 0.0f && result < 1.0) {
+					result = 1.0;
+				}
 				curobj->data.maxLevel = static_cast<int8_t>(result);
 
 				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed(mult) maxLevel {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.maxLevel);
@@ -307,12 +310,7 @@ namespace ENCOUNTERZONE
 		const bool minChanged = isSet(line.minLevel) || isSet(line.minLevelAdd) || isSet(line.minLevelMult);
 		const bool maxChanged = isSet(line.maxLevel) || isSet(line.maxLevelAdd) || isSet(line.maxLevelMult);
 		if ((minChanged || maxChanged) && curobj->data.maxLevel > 0 && curobj->data.minLevel > curobj->data.maxLevel) {
-			if (maxChanged && !minChanged) {
-				curobj->data.minLevel = curobj->data.maxLevel;
-			} else {
-				curobj->data.maxLevel = curobj->data.minLevel;
-			}
-			logger::warn(FMT_STRING("encounterzone formid: {:08X} {} minLevel was above maxLevel, set both to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.minLevel);
+			logger::warn(FMT_STRING("encounterzone formid: {:08X} {} minLevel {} is above maxLevel {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.minLevel, curobj->data.maxLevel);
 		}
 
 		if (!line.location.empty() && line.location != "none") {

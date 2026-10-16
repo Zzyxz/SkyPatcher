@@ -475,7 +475,7 @@ namespace BOOK
 						curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kAdvancesActorValue);
 						logger::debug(FMT_STRING("book formid: {:08X} {} changed spell teached {:08X}"), curobj->formID, curobj->fullName, curobj->data.teaches.spell->formID);
 					}
-				} else if (toLowerCase(string_form) == "null") {
+				} else if (curobj->data.flags.all(RE::OBJ_BOOK::Flag::kTeachesSpell)) {
 					curobj->data.teaches.spell = nullptr;
 					curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kTeachesSpell);
 					logger::debug(FMT_STRING("book formid: {:08X} {} changed spell teached to null"), curobj->formID, curobj->fullName);
@@ -492,6 +492,7 @@ namespace BOOK
 				{ "enchanting", RE::ActorValue::kEnchanting }, { "heavyarmor", RE::ActorValue::kHeavyArmor },
 				{ "illusion", RE::ActorValue::kIllusion }, { "lightarmor", RE::ActorValue::kLightArmor },
 				{ "lockpicking", RE::ActorValue::kLockpicking }, { "null", RE::ActorValue::kNone },
+				{ "marksman", RE::ActorValue::kArchery }, { "speechcraft", RE::ActorValue::kSpeech },
 				{ "onehanded", RE::ActorValue::kOneHanded }, { "pickpocket", RE::ActorValue::kPickpocket },
 				{ "restoration", RE::ActorValue::kRestoration }, { "smithing", RE::ActorValue::kSmithing },
 				{ "sneak", RE::ActorValue::kSneak }, { "speech", RE::ActorValue::kSpeech },
@@ -507,6 +508,8 @@ namespace BOOK
 					curobj->data.flags.set(RE::OBJ_BOOK::Flag::kAdvancesActorValue);
 				}
 				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to {}"), curobj->formID, curobj->fullName, it->first);
+			} else {
+				logger::warn(FMT_STRING("book formid: {:08X}: unknown skill '{}' in teachSkill"), curobj->formID, line.teachSkill);
 			}
 		}
 

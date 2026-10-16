@@ -187,8 +187,6 @@ namespace AMMO
 					const std::string bolts = toLowerCase(trim(line.restrictToBolts));
 					if ((bolts == "true" || bolts == "yes") && !ngcompat::AmmoIsBolt(curobj)) {
 						found = false;
-					} else if ((bolts == "false" || bolts == "no") && ngcompat::AmmoIsBolt(curobj)) {
-						found = false;
 					}
 				}
 

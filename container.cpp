@@ -41,7 +41,7 @@ namespace CONTAINER
 		bool NamesPlugin(const std::string& a_name)
 		{
 			const auto lower = toLowerCase(a_name);
-			return lower.ends_with(".esp") || lower.ends_with(".esm") || lower.ends_with(".esl");
+			return lower.find(".esp") != std::string::npos || lower.find(".esm") != std::string::npos || lower.find(".esl") != std::string::npos;
 		}
 
 		bool ParseAddCount(const std::string& a_text, std::string_view a_key, std::int32_t& a_count)
@@ -398,8 +398,8 @@ namespace CONTAINER
 					logger::warn(FMT_STRING("Invalid multiplier for objectMultCount: {}"), objectToreplace[1]);
 					continue;
 				}
-				if (!(multiplier > 0.0f)) {
-					logger::warn(FMT_STRING("Multiplier for objectMultCount must be above 0, skipping entry: {}"), objectToreplace[1]);
+				if (!(multiplier >= 0.0f)) {
+					logger::warn(FMT_STRING("Multiplier for objectMultCount must be 0 or more, skipping entry: {}"), objectToreplace[1]);
 					continue;
 				}
 				std::size_t  count = 0;
@@ -486,7 +486,6 @@ namespace CONTAINER
 	{
 		REL::Relocation<std::uintptr_t> Vtbl{ VTABLE[0] };
 		func = Vtbl.write_vfunc(0x13, &Hook_InitItemImpl);
-		logger::debug("{} Done!", __FUNCTION__);
 	}
 
 	void LoadRaceDataHook::Hook_InitItemImpl(RE::TESObjectCONT* curobj)

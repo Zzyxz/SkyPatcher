@@ -245,25 +245,48 @@ std::string toLowerCase(std::string pString)
 	return pString;
 }
 
+namespace
+{
+	std::string trimAllSpace(const std::string& value)
+	{
+		const auto first = value.find_first_not_of(" \t\r\n");
+		if (first == std::string::npos) {
+			return {};
+		}
+		const auto last = value.find_last_not_of(" \t\r\n");
+		return value.substr(first, last - first + 1);
+	}
+}
+
 bool IsSwitchOn(const std::string& value)
 {
-	const auto v = toLowerCase(trim(value));
+	const auto v = toLowerCase(trimAllSpace(value));
 	return !v.empty() && v != "none" && v != "false" && v != "no" && v != "0";
 }
 
 bool IsNullValue(const std::string& value)
 {
-	return toLowerCase(trim(value)) == "null";
+	return toLowerCase(trimAllSpace(value)) == "null";
+}
+
+namespace
+{
+	double roundingTolerance(double product)
+	{
+		return std::max(1e-4, std::abs(product) * 1e-6);
+	}
 }
 
 double MultRoundUp(double value, double mult)
 {
-	return std::ceil(value * mult - 1e-4);
+	const double product = value * mult;
+	return std::ceil(product - roundingTolerance(product));
 }
 
 double MultRoundDown(double value, double mult)
 {
-	return std::floor(value * mult + 1e-4);
+	const double product = value * mult;
+	return std::floor(product + roundingTolerance(product));
 }
 
 std::string normalizePath(const std::string& path)

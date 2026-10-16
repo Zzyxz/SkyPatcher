@@ -44,7 +44,7 @@ namespace LEVELEDLIST
 		bool NamesPlugin(const std::string& a_name)
 		{
 			const auto lower = toLowerCase(a_name);
-			return lower.ends_with(".esp") || lower.ends_with(".esm") || lower.ends_with(".esl");
+			return lower.find(".esp") != std::string::npos || lower.find(".esm") != std::string::npos || lower.find(".esl") != std::string::npos;
 		}
 
 		bool IsNoFilterOn(const std::string& a_value)

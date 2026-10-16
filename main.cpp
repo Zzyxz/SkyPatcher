@@ -657,18 +657,18 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 				styleIndex = *storedStyle;
 
 				if (styleIndex == -1) {
-					logger::debug("Load3D: NPC with FormID {:X} previously failed style roll and will not receive a style.", a_this->formID);
+					logger::debug("NPC update: NPC with FormID {:X} previously failed style roll and will not receive a style.", a_this->formID);
 				}
 				else if (styleIndex >= forms.size()) {
-					logger::debug("Load3D: NPC with FormID {:X} had an invalid style index {} (out of range). Reassigning a new style.", a_this->formID, styleIndex);
+					logger::debug("NPC update: NPC with FormID {:X} had an invalid style index {} (out of range). Reassigning a new style.", a_this->formID, styleIndex);
 					storedStyle.reset();
 				}
 				else if (!StyleFits(a_this, *aNPCData, forms[styleIndex])) {
-					logger::debug("Load3D: NPC with FormID {:X} stored style index {} does not fit its voice. Reassigning a new style.", a_this->formID, styleIndex);
+					logger::debug("NPC update: NPC with FormID {:X} stored style index {} does not fit its voice. Reassigning a new style.", a_this->formID, styleIndex);
 					storedStyle.reset();
 				}
 				else {
-					logger::debug("Load3D: NPC with FormID {:X} using stored style index {}.", a_this->formID, styleIndex);
+					logger::debug("NPC update: NPC with FormID {:X} using stored style index {}.", a_this->formID, styleIndex);
 				}
 			}
 
@@ -678,21 +678,21 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 				int rolledChance = chanceDist(generator);
 				if (rolledChance > aNPCData->styleChance) {
 					SetNpcStyle(a_this->formID, -1);
-					logger::debug("Load3D: NPC with FormID {:X} failed style chance {} rolled {} and will not receive a style.", a_this->formID, aNPCData->styleChance, rolledChance);
+					logger::debug("NPC update: NPC with FormID {:X} failed style chance {} rolled {} and will not receive a style.", a_this->formID, aNPCData->styleChance, rolledChance);
 					styleIndex = -1;
 				}
 				else if (!forms.empty()) {
 					styleIndex = RollFittingStyle(a_this, *aNPCData, forms);
 					if (styleIndex < 0) {
 						SetNpcStyle(a_this->formID, -1);
-						logger::debug("Load3D: NPC with FormID {:X} has no style with a fitting voice and keeps its look.", a_this->formID);
+						logger::debug("NPC update: NPC with FormID {:X} has no style with a fitting voice and keeps its look.", a_this->formID);
 					} else {
-						logger::debug("Load3D: Rolled new random style index {} to Actor with FormID {:X} from {} available styles ", styleIndex, a_this->formID, forms.size());
+						logger::debug("NPC update: Rolled new random style index {} to Actor with FormID {:X} from {} available styles ", styleIndex, a_this->formID, forms.size());
 					}
 				}
 				else {
 					SetNpcStyle(a_this->formID, -1);
-					logger::debug("Load3D: No styles available in the list! NPC with FormID {:X} will not receive a style.", a_this->formID);
+					logger::debug("NPC update: No styles available in the list! NPC with FormID {:X} will not receive a style.", a_this->formID);
 					styleIndex = -1;
 				}
 			}
@@ -702,15 +702,15 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 				if (auto form = forms[styleIndex]; form) {
 					npcToCopyFrom = form->As<RE::TESNPC>();
 					if (!npcToCopyFrom) {
-						logger::debug("Load3D: Form {:08X} is not an NPC.", form->formID);
+						logger::debug("NPC update: Form {:08X} is not an NPC.", form->formID);
 					}
 				}
 				else {
-					logger::debug("Load3D: Form at index {} is null!", styleIndex);
+					logger::debug("NPC update: Form at index {} is null!", styleIndex);
 				}
 			}
 			else {
-				logger::debug("Load3D: Invalid styleIndex {} (out of range).", styleIndex);
+				logger::debug("NPC update: Invalid styleIndex {} (out of range).", styleIndex);
 			}
 
 			const bool wasFemale = npc->IsFemale();
@@ -725,7 +725,7 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 
 			if (npcToCopyFrom && CopyVisual(npcToCopyFrom, a_this, *aNPCData, false)) {
 				SetNpcStyle(a_this->formID, styleIndex);
-				logger::debug("--> Load3D: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.", styleIndex, a_this->formID, aNPCData->npcVisualStyleList->formID, npcToCopyFrom->formID);
+				logger::debug("--> NPC update: Applied style index {} to Actor {:X} from list {:08X}, NPC source {:08X}.", styleIndex, a_this->formID, aNPCData->npcVisualStyleList->formID, npcToCopyFrom->formID);
 				const bool bodyChanged = npc->IsFemale() != wasFemale || npc->race != oldRace || npc->skin != oldSkin;
 				return bodyChanged ? VisualStyleResult::kNeedsReset : VisualStyleResult::kApplied;
 			}
@@ -790,10 +790,10 @@ struct Load3D
 							RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(itBase->first);
 							if (npcForm) {
 								npc->actorData.actorBaseFlags = npcForm->actorData.actorBaseFlags;
-								logger::debug("Load3D: {:08X} updated actor flags (original Base)", itBase->first);
+								logger::debug("NPC update: {:08X} updated actor flags (original Base)", itBase->first);
 							}
 							else {
-								logger::debug("Load3D: Failed to lookup NPC with ID {:08X} (original Base)", itBase->first);
+								logger::debug("NPC update: Failed to lookup NPC with ID {:08X} (original Base)", itBase->first);
 							}
 						}
 
@@ -801,10 +801,10 @@ struct Load3D
 							RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(itBase->first);
 							if (npcForm) {
 								npc->actorData.templateUseFlags = npcForm->actorData.templateUseFlags;
-								logger::debug("Load3D: {:08X} updated template flags (original Base)", itBase->first);
+								logger::debug("NPC update: {:08X} updated template flags (original Base)", itBase->first);
 							}
 							else {
-								logger::debug("Load3D: Failed to lookup NPC with ID {:08X} (original Base)", itBase->first);
+								logger::debug("NPC update: Failed to lookup NPC with ID {:08X} (original Base)", itBase->first);
 							}
 						}
 					}
@@ -907,7 +907,7 @@ struct Load3D
 					RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
 					if (npcForm) {
 						npc->actorData.actorBaseFlags = npcForm->actorData.actorBaseFlags;
-						logger::debug("Load3D: {:08X} updated actor flags", it->first);
+						logger::debug("NPC update: {:08X} updated actor flags", it->first);
 					}
 				}
 
@@ -915,7 +915,7 @@ struct Load3D
 					RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
 					if (npcForm) {
 						npc->actorData.templateUseFlags = npcForm->actorData.templateUseFlags;
-						logger::debug("Load3D: {:08X} updated template flags", it->first);
+						logger::debug("NPC update: {:08X} updated template flags", it->first);
 					}
 				}
 
@@ -924,12 +924,12 @@ struct Load3D
 					if (npcForm) {
 						if (it->second.minLevelWasSet) {
 							npcForm->actorData.calcLevelMin = it->second.minLevel;
-							logger::debug("Load3D: {:08X} setminlevel {}", it->first, it->second.minLevel);
+							logger::debug("NPC update: {:08X} setminlevel {}", it->first, it->second.minLevel);
 						}
 
 						if (it->second.maxLevelWasSet) {
 							npcForm->actorData.calcLevelMax = it->second.maxLevel;
-							logger::debug("Load3D: {:08X} setmaxlevel {}", it->first, it->second.maxLevel);
+							logger::debug("NPC update: {:08X} setmaxlevel {}", it->first, it->second.maxLevel);
 						}
 					}
 				}
@@ -961,7 +961,7 @@ struct Load3D
 				RE::TESNPC* npc = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
 				if (npc) {
 					npc->voiceType = it->second.voiceType;
-					logger::debug("Load3D: {:08X} updated voiceType to {:08X}", npc->formID, it->second.voiceType->formID);
+					logger::debug("NPC update: {:08X} updated voiceType to {:08X}", npc->formID, it->second.voiceType->formID);
 				}
 			}
 

@@ -168,7 +168,7 @@ namespace WEAPON
 						name = "speech";
 					}
 					const RE::ActorValue av = StringToActorValue(name);
-					if (av == RE::ActorValue::kNone && name != "null") {
+					if (av == kActorValueUnknown) {
 						logger::warn(FMT_STRING("restrictToSkills: unknown skill '{}' ignored"), s);
 						continue;
 					}
