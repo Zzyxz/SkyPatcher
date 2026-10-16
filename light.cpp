@@ -240,8 +240,18 @@ void patch(const patch_instruction &line, RE::TESObjectLIGH *light) {
   applyFloat(line.fov, "fov", light, light->data.fov);
   applyFloat(line.nearDistance, "nearDistance", light,
              light->data.nearDistance);
-  applyFloat(line.flickerPeriod, "flickerPeriod", light,
-             light->data.flickerPeriodRecip, 100.0F);
+  if (!line.flickerPeriod.empty() && line.flickerPeriod != "none") {
+    float period{};
+    if (!parseFloat(line.flickerPeriod, period) || !std::isfinite(period) ||
+        period <= 0.0F) {
+      logger::warn("light formid: {:08X} invalid flickerPeriod '{}'",
+                   light->formID, line.flickerPeriod);
+    } else {
+      light->data.flickerPeriodRecip = 1.0F / (std::max)(period, 1.0F);
+      logger::debug("light formid: {:08X} changed flickerPeriod to {}",
+                    light->formID, period);
+    }
+  }
   applyFloat(line.flickerIntensityAmplitude, "flickerIntensityAmplitude", light,
              light->data.flickerIntensityAmplitude);
   applyFloat(line.flickerMovementAmplitude, "flickerMovementAmplitude", light,

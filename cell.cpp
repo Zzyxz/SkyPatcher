@@ -425,13 +425,24 @@ namespace CELL
 		}
 
 		if (hasValue(line.waterHeight)) {
-			if (toLowerCase(line.waterHeight) == "null") {
-				curobj->GetRuntimeData().waterHeight = -129.0f;
-				logger::debug(FMT_STRING("cell formid {:08X} reset waterHeight to default"), curobj->formID);
+			const auto waterValue = toLowerCase(trim(line.waterHeight));
+			if (waterValue == "null") {
+				curobj->GetRuntimeData().waterHeight = -2147483648.0f;
+				curobj->cellFlags.reset(RE::TESObjectCELL::Flag::kHasWater);
+				logger::debug(FMT_STRING("cell formid {:08X} has no water now"), curobj->formID);
+			} else if (waterValue == "default") {
+				curobj->GetRuntimeData().waterHeight = std::numeric_limits<float>::max();
+				if (!curobj->IsInteriorCell()) {
+					curobj->cellFlags.set(RE::TESObjectCELL::Flag::kHasWater);
+				}
+				logger::debug(FMT_STRING("cell formid {:08X} reset waterHeight to the worldspace default"), curobj->formID);
 			} else {
 				try {
 					float value = std::stof(line.waterHeight);
 					curobj->GetRuntimeData().waterHeight = value;
+					if (!curobj->IsInteriorCell()) {
+						curobj->cellFlags.set(RE::TESObjectCELL::Flag::kHasWater);
+					}
 					logger::debug(FMT_STRING("cell formid {:08X} set waterHeight to {:.6f}"), curobj->formID, value);
 				} catch (...) {
 					logger::warn(FMT_STRING("Invalid waterHeight '{}' for cell {:08X}"), line.waterHeight, curobj->formID);
