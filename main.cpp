@@ -133,7 +133,7 @@ void LoadIniFilesRecursive(const std::string& folderPath)
 			if (s.st_mode & S_IFDIR) {
 				LoadIniFilesRecursive(fullPath);
 			} else if (s.st_mode & S_IFREG) {
-				if (name.size() > 4 && _stricmp(name.substr(name.size() - 4).c_str(), ".ini") == 0) {
+				if (name.find(".ini") != std::string::npos) {
 					std::string basePath = ".\\Data\\SKSE\\Plugins\\SkyPatcher\\";
 					std::string relativePath = fullPath;
 
@@ -1002,10 +1002,12 @@ struct Load3DREFR
 				RE::TESBoundObject* boundobj = it->second.replaceWith;
 
 				if (boundobj) {
-					SKSE::GetTaskInterface()->AddTask([refrID = a_this->formID, boundobj]() {
+					SKSE::GetTaskInterface()->AddTask([refrID = a_this->formID, boundobj, keepDisabled = it->second.disable]() {
 						if (auto* refr = RE::TESForm::LookupByID<RE::TESObjectREFR>(refrID)) {
 							refr->SetObjectReference(boundobj);
-							refr->Enable(false);
+							if (!keepDisabled) {
+								refr->Enable(false);
+							}
 						}
 					});
 				}
@@ -1125,6 +1127,11 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 						if (!actorBase) {
 							logger::warn(FMT_STRING("PostLoadGame: actor {:08X} has a non-NPC base form; skipped refresh"), actor->formID);
 							continue;
+						}
+						if (statRefreshExcludeEnabled) {
+							if (const auto base = actor->GetActorBase(); base && excludedNPCsFormIDs.contains(base->formID)) {
+								continue;
+							}
 						}
 						auto it = actData.npcData.find(actor->data.objectReference->formID);
 						auto data = (RE::ExtraLeveledCreature*)actor->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
@@ -1676,6 +1683,28 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 			logger::info(">>>>>>>>>>>>>>>>>>>>>>>>>>> Location Patcher finished in {} seconds", seconds);
 		}
 
+		if (GetPrivateProfileInt(settingsSectionFeatures, "iEnableUnlevelNPCs", 0, configFile)) {
+			const auto                          dataHandler = RE::TESDataHandler::GetSingleton();
+			const auto& EncounterZoneArray = dataHandler->GetFormArray<RE::BGSEncounterZone>();
+			const auto& LevCharArray = dataHandler->GetFormArray<RE::TESLevCharacter>();
+
+			std::for_each(std::execution::par, EncounterZoneArray.begin(), EncounterZoneArray.end(), [&](auto& encounterZone) {
+				encounterZone->data.maxLevel = 127;
+				logger::debug(FMT_STRING("Encounterzone {:08X} unleveled."), encounterZone->formID);
+				});
+
+			std::for_each(std::execution::par, LevCharArray.begin(), LevCharArray.end(), [&](auto& levChar) {
+				ngcompat::SetFlag(levChar->llFlags, RE::TESLeveledList::Flag::kCalculateForEachItemInCount);
+				logger::debug(FMT_STRING("Leveled NPC list {:08X} unleveled."), levChar->formID);
+				for (auto& entry : levChar->entries) {
+					if (entry.form) {
+						entry.level = 1;
+						logger::debug(FMT_STRING("-> NPC {:08X} unleveled in leveled NPC list to level 1 "), entry.form->formID);
+					}
+				}
+				});
+		}
+
 		if (GetPrivateProfileInt(settingsSection, "iEnableEncounterZonePatching", 0, configFile)) {
 			const auto start_time{ std::chrono::system_clock::now() };
 
@@ -1729,28 +1758,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 					}
 				}
 			}
-		}
-
-		if (GetPrivateProfileInt(settingsSectionFeatures, "iEnableUnlevelNPCs", 0, configFile)) {
-			const auto                          dataHandler = RE::TESDataHandler::GetSingleton();
-			const auto& EncounterZoneArray = dataHandler->GetFormArray<RE::BGSEncounterZone>();
-			const auto& LevCharArray = dataHandler->GetFormArray<RE::TESLevCharacter>();
-
-			std::for_each(std::execution::par, EncounterZoneArray.begin(), EncounterZoneArray.end(), [&](auto& encounterZone) {
-				encounterZone->data.maxLevel = 127;
-				logger::debug(FMT_STRING("Encounterzone {:08X} unleveled."), encounterZone->formID);
-				});
-
-			std::for_each(std::execution::par, LevCharArray.begin(), LevCharArray.end(), [&](auto& levChar) {
-				levChar->llFlags = RE::TESLeveledList::Flag::kCalculateForEachItemInCount;
-				logger::debug(FMT_STRING("Changed TESLevCharacterList {:08X}"), levChar->formID);
-				for (auto& entry : levChar->entries) {
-					if (entry.form) {
-						entry.level = 1;
-						logger::debug(FMT_STRING("-> NPC {:08X} unleveled in LevCharList to level 1 "), entry.form->formID);
-					}
-				}
-				});
 		}
 
 		if (statRefreshExcludeEnabled) {

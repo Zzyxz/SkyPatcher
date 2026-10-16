@@ -2,6 +2,8 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <algorithm>
+#include <string_view>
 #include <unordered_set>
 
 namespace CELL
@@ -80,6 +82,28 @@ namespace CELL
 			static const sp::KeyTable table(kCellKeys, std::size(kCellKeys));
 			return table;
 		}
+
+		bool hasValue(const std::string& value)
+		{
+			const auto v = toLowerCase(trim(value));
+			return !v.empty() && v != "none";
+		}
+
+		bool lightingTemplateFromMod(RE::TESObjectCELL* cell, const std::vector<std::string>& modNames)
+		{
+			const auto* lightingTemplate = cell->GetRuntimeData().lightingTemplate;
+			const auto* file = lightingTemplate ? lightingTemplate->GetFile(0) : nullptr;
+			if (!file) {
+				return false;
+			}
+			const std::string fileName = toLowerCase(std::string(file->fileName));
+			for (const auto& modName : modNames) {
+				if (toLowerCase(trim(modName)) == fileName) {
+					return true;
+				}
+			}
+			return false;
+		}
 	}
 
 	struct patch_instruction create_patch_instructions(const std::string& line)
@@ -117,14 +141,7 @@ namespace CELL
 						curobj = currentform->As<RE::TESObjectCELL>();
 
 						if (!line.skipLT.empty()) {
-							bool modFound = false;
-							for (const auto& modName : line.skipLT) {
-							if (const auto* file = curobj->GetRuntimeData().lightingTemplate ? curobj->GetRuntimeData().lightingTemplate->GetFile(0) : nullptr;
-								file && modName == file->fileName) {
-									modFound = true;
-								}
-							}
-							if (modFound == true) {
+							if (lightingTemplateFromMod(curobj, line.skipLT)) {
 								continue;
 							}
 						}
@@ -157,16 +174,12 @@ namespace CELL
 				continue;
 			}
 			for (const auto& curobj : ObjectArray) {
-								
+				if (!curobj || curobj->IsDeleted()) {
+					continue;
+				}
+
 				if (!line.skipLT.empty()) {
-					bool modFound = false;
-					for (const auto& modName : line.skipLT) {
-						if (const auto* file = curobj->GetRuntimeData().lightingTemplate ? curobj->GetRuntimeData().lightingTemplate->GetFile(0) : nullptr;
-							file && modName == file->fileName) {
-							modFound = true;
-						}
-					}
-					if (modFound == true) {
+					if (lightingTemplateFromMod(curobj, line.skipLT)) {
 						continue;
 					}
 
@@ -260,6 +273,10 @@ namespace CELL
 					}
 				}
 
+				if (!found && line.object.empty() && line.filterByAcousticSpace.empty() && line.filterByMusicType.empty() && line.filterBySkyRegion.empty() && line.filterByImageSpace.empty() && line.filterByLocation.empty()) {
+					found = true;
+				}
+
 				if (found && !line.objectExcluded.empty()) {
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Cell)) {
 						found = false;
@@ -302,7 +319,8 @@ namespace CELL
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -344,6 +362,7 @@ namespace CELL
 
 	void* patch(const CELL::patch_instruction& line, RE::TESObjectCELL* curobj)
 	{
+		const bool isInterior = curobj->IsInteriorCell() && curobj->GetRuntimeData().cellData.interior;
 
 
 		if (!line.setCellFlags.empty()) {
@@ -363,7 +382,9 @@ namespace CELL
 			for (const auto& setFlag : line.setCellFlags) {
 				std::string lowerFlag = toLowerCase(setFlag);
 				auto        it = cellFlagMap.find(lowerFlag);
-				if (it != cellFlagMap.end()) {
+				if (it != cellFlagMap.end() && it->second == RE::TESObjectCELL::Flag::kIsInteriorCell) {
+					logger::warn(FMT_STRING("cell formid {:08X} cellFlag isinteriorcell can not be changed, ignored"), curobj->formID);
+				} else if (it != cellFlagMap.end()) {
 					curobj->cellFlags.set(it->second);
 					logger::debug(FMT_STRING("cell formid {:08X} enabled cellFlag: {}"), curobj->formID, lowerFlag);
 				} else {
@@ -389,7 +410,9 @@ namespace CELL
 			for (const auto& removeFlag : line.removeCellFlags) {
 				std::string lowerFlag = toLowerCase(removeFlag);
 				auto        it = cellFlagMap.find(lowerFlag);
-				if (it != cellFlagMap.end()) {
+				if (it != cellFlagMap.end() && it->second == RE::TESObjectCELL::Flag::kIsInteriorCell) {
+					logger::warn(FMT_STRING("cell formid {:08X} cellFlag isinteriorcell can not be changed, ignored"), curobj->formID);
+				} else if (it != cellFlagMap.end()) {
 					curobj->cellFlags.reset(it->second);
 					logger::debug(FMT_STRING("cell formid {:08X} disabled cellFlag: {}"), curobj->formID, lowerFlag);
 				} else {
@@ -398,7 +421,7 @@ namespace CELL
 			}
 		}
 
-		if (!line.waterHeight.empty() && line.waterHeight != "none") {
+		if (hasValue(line.waterHeight)) {
 			if (toLowerCase(line.waterHeight) == "null") {
 				curobj->GetRuntimeData().waterHeight = -129.0f;
 				logger::debug(FMT_STRING("cell formid {:08X} reset waterHeight to default"), curobj->formID);
@@ -413,9 +436,7 @@ namespace CELL
 			}
 		}
 
-		if (!line.acousticSpace.empty() &&
-			line.acousticSpace != "none" &&
-			toLowerCase(line.acousticSpace) != "null") {
+		if (hasValue(line.acousticSpace) && !IsNullValue(line.acousticSpace)) {
 			RE::TESForm* form = GetFormFromIdentifier(line.acousticSpace);
 			if (form && form->formType == RE::FormType::AcousticSpace) {
 				auto* asp = static_cast<RE::BGSAcousticSpace*>(form);
@@ -435,16 +456,14 @@ namespace CELL
 					logger::debug(FMT_STRING("cell formid {:08X} added acousticSpace {:08X}"), curobj->formID, asp->formID);
 				}
 			}
-		} else if (toLowerCase(line.acousticSpace) == "null") {
+		} else if (IsNullValue(line.acousticSpace)) {
 			if (curobj->extraList.HasType<RE::ExtraCellAcousticSpace>()) {
 				curobj->extraList.RemoveByType(RE::ExtraDataType::kCellAcousticSpace);
 				logger::debug(FMT_STRING("cell formid {:08X} removed acousticSpace"), curobj->formID);
 			}
 		}
 
-		if (!line.musicType.empty() &&
-			line.musicType != "none" &&
-			toLowerCase(line.musicType) != "null") {
+		if (hasValue(line.musicType) && !IsNullValue(line.musicType)) {
 			RE::TESForm* form = GetFormFromIdentifier(line.musicType);
 			if (form && form->formType == RE::FormType::MusicType) {
 				auto* mus = static_cast<RE::BGSMusicType*>(form);
@@ -464,16 +483,14 @@ namespace CELL
 					logger::debug(FMT_STRING("cell formid {:08X} added musicType {:08X}"), curobj->formID, mus->formID);
 				}
 			}
-		} else if (toLowerCase(line.musicType) == "null") {
+		} else if (IsNullValue(line.musicType)) {
 			if (curobj->extraList.HasType<RE::ExtraCellMusicType>()) {
 				curobj->extraList.RemoveByType(RE::ExtraDataType::kCellMusicType);
 				logger::debug(FMT_STRING("cell formid {:08X} removed musicType"), curobj->formID);
 			}
 		}
 		
-		if (!line.location.empty() &&
-			line.location != "none" &&
-			toLowerCase(line.location) != "null") {
+		if (hasValue(line.location) && !IsNullValue(line.location)) {
 			RE::TESForm* form = GetFormFromIdentifier(line.location);
 			if (form && form->formType == RE::FormType::Location) {
 				auto* loc = static_cast<RE::BGSLocation*>(form);
@@ -493,16 +510,14 @@ namespace CELL
 					logger::debug(FMT_STRING("cell formid {:08X} added location {:08X}"), curobj->formID, loc->formID);
 				}
 			}
-		} else if (toLowerCase(line.location) == "null") {
+		} else if (IsNullValue(line.location)) {
 			if (curobj->extraList.HasType<RE::ExtraLocation>()) {
 				curobj->extraList.RemoveByType(RE::ExtraDataType::kLocation);
 				logger::debug(FMT_STRING("cell formid {:08X} removed location"), curobj->formID);
 			}
 		}
 		
-		if (!line.skyRegion.empty() &&
-			line.skyRegion != "none" &&
-			toLowerCase(line.skyRegion) != "null") {
+		if (hasValue(line.skyRegion) && !IsNullValue(line.skyRegion)) {
 			RE::TESForm* form = GetFormFromIdentifier(line.skyRegion);
 			if (form && form->formType == RE::FormType::Region) {
 				auto* reg = static_cast<RE::TESRegion*>(form);
@@ -522,16 +537,14 @@ namespace CELL
 					logger::debug(FMT_STRING("cell formid {:08X} added skyRegion {:08X}"), curobj->formID, reg->formID);
 				}
 			}
-		} else if (toLowerCase(line.skyRegion) == "null") {
+		} else if (IsNullValue(line.skyRegion)) {
 			if (curobj->extraList.HasType<RE::ExtraCellSkyRegion>()) {
 				curobj->extraList.RemoveByType(RE::ExtraDataType::kCellSkyRegion);
 				logger::debug(FMT_STRING("cell formid {:08X} removed skyRegion"), curobj->formID);
 			}
 		}
 
-		if (!line.imageSpace.empty() &&
-			line.imageSpace != "none" &&
-			toLowerCase(line.imageSpace) != "null") {
+		if (hasValue(line.imageSpace) && !IsNullValue(line.imageSpace)) {
 			RE::TESForm* form = GetFormFromIdentifier(line.imageSpace);
 			if (form && form->formType == RE::FormType::ImageSpace) {
 				auto* imsp = static_cast<RE::TESImageSpace*>(form);
@@ -551,16 +564,14 @@ namespace CELL
 					logger::debug(FMT_STRING("cell formid {:08X} added imageSpace {:08X}"), curobj->formID, imsp->formID);
 				}
 			}
-		} else if (toLowerCase(line.imageSpace) == "null") {
+		} else if (IsNullValue(line.imageSpace)) {
 			if (curobj->extraList.HasType<RE::ExtraCellImageSpace>()) {
 				curobj->extraList.RemoveByType(RE::ExtraDataType::kCellImageSpace);
 				logger::debug(FMT_STRING("cell formid {:08X} removed imageSpace"), curobj->formID);
 			}
 		}
 
-		if (!line.encounterZone.empty() &&
-			line.encounterZone != "none" &&
-			toLowerCase(line.encounterZone) != "null") {
+		if (hasValue(line.encounterZone) && !IsNullValue(line.encounterZone)) {
 			RE::TESForm* form = GetFormFromIdentifier(line.encounterZone);
 			if (form && form->formType == RE::FormType::EncounterZone) {
 				auto* imsp = static_cast<RE::BGSEncounterZone*>(form);
@@ -580,7 +591,7 @@ namespace CELL
 					logger::debug(FMT_STRING("cell formid {:08X} added encounter zone {:08X}"), curobj->formID, imsp->formID);
 				}
 			}
-		} else if (toLowerCase(line.encounterZone) == "null") {
+		} else if (IsNullValue(line.encounterZone)) {
 			if (curobj->extraList.HasType<RE::ExtraEncounterZone>()) {
 				curobj->extraList.RemoveByType(RE::ExtraDataType::kEncounterZone);
 				logger::debug(FMT_STRING("cell formid {:08X} removed encounter zone"), curobj->formID);
@@ -603,13 +614,30 @@ namespace CELL
 		};
 		bool hasInteriorOperation = !line.removeInheritanceFlags.empty() || !line.setInheritanceFlags.empty();
 		for (const auto* value : interiorValues) {
-			if (value && !value->empty() && *value != "none") {
+			if (value && hasValue(*value)) {
 				hasInteriorOperation = true;
 				break;
 			}
 		}
 
-		if (curobj->IsInteriorCell() && curobj->GetRuntimeData().cellData.interior) {
+		if (isInterior) {
+		auto* interior = curobj->GetRuntimeData().cellData.interior;
+		const auto setColor = [curobj](const std::string& value, std::uint8_t& target, std::string_view name) {
+			if (!hasValue(value)) {
+				return;
+			}
+			try {
+				int parsed = std::stoi(value);
+				if (parsed < 0 || parsed > 255) {
+					logger::warn(FMT_STRING("cell formid: {:08X} {} {} is out of range 0-255, clamped"), curobj->formID, name, parsed);
+					parsed = std::clamp(parsed, 0, 255);
+				}
+				target = static_cast<std::uint8_t>(parsed);
+				logger::debug(FMT_STRING("cell formid: {:08X} changed {} to {}"), curobj->formID, name, target);
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
+		};
 		try {
 		if (!line.removeInheritanceFlags.empty()) {
 			static const std::unordered_map<std::string, RE::INTERIOR_DATA::Inherit> inheritFlagMap = {
@@ -667,86 +695,17 @@ namespace CELL
 
 
 
-		if (!line.fogColorNearRed.empty() && line.fogColorNearRed != "none") {
-			try {
-				curobj->GetRuntimeData().cellData.interior->fogColorNear.red = static_cast<std::uint8_t>(std::stoi(line.fogColorNearRed));
-				logger::debug(FMT_STRING("cell formid: {:08X} changed fogColorNear.red to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->fogColorNear.red);
-			} catch (const std::exception& e) {
-				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
-			}
-		}
+		setColor(line.fogColorNearRed, interior->fogColorNear.red, "fogColorNearRed");
+		setColor(line.fogColorNearGreen, interior->fogColorNear.green, "fogColorNearGreen");
+		setColor(line.fogColorNearBlue, interior->fogColorNear.blue, "fogColorNearBlue");
+		setColor(line.directionalRed, interior->directional.red, "directionalRed");
+		setColor(line.directionalGreen, interior->directional.green, "directionalGreen");
+		setColor(line.directionalBlue, interior->directional.blue, "directionalBlue");
+		setColor(line.ambientBlue, interior->ambient.blue, "ambientBlue");
+		setColor(line.ambientRed, interior->ambient.red, "ambientRed");
+		setColor(line.ambientGreen, interior->ambient.green, "ambientGreen");
 
-		if (!line.fogColorNearGreen.empty() && line.fogColorNearGreen != "none") {
-			try {
-				curobj->GetRuntimeData().cellData.interior->fogColorNear.green = static_cast<std::uint8_t>(std::stoi(line.fogColorNearGreen));
-				logger::debug(FMT_STRING("cell formid: {:08X} changed fogColorNear.green to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->fogColorNear.green);
-			} catch (const std::exception& e) {
-				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
-			}
-		}
-
-		if (!line.fogColorNearBlue.empty() && line.fogColorNearBlue != "none") {
-			try {
-				curobj->GetRuntimeData().cellData.interior->fogColorNear.blue = static_cast<std::uint8_t>(std::stoi(line.fogColorNearBlue));
-				logger::debug(FMT_STRING("cell formid: {:08X} changed fogColorNear.blue to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->fogColorNear.blue);
-			} catch (const std::exception& e) {
-				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
-			}
-		}
-
-		if (!line.directionalRed.empty() && line.directionalRed != "none") {
-			try {
-				curobj->GetRuntimeData().cellData.interior->directional.red = static_cast<std::uint8_t>(std::stoi(line.directionalRed));
-				logger::debug(FMT_STRING("cell formid: {:08X} changed directionalRed to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directional.red);
-			} catch (const std::exception& e) {
-				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
-			}
-		}
-		if (!line.directionalGreen.empty() && line.directionalGreen != "none") {
-			try {
-				curobj->GetRuntimeData().cellData.interior->directional.green = static_cast<std::uint8_t>(std::stoi(line.directionalGreen));
-				logger::debug(FMT_STRING("cell formid: {:08X} changed directionalGreen to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directional.green);
-			} catch (const std::exception& e) {
-				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
-			}
-		}
-		if (!line.directionalBlue.empty() && line.directionalBlue != "none") {
-			try {
-				curobj->GetRuntimeData().cellData.interior->directional.blue = static_cast<std::uint8_t>(std::stoi(line.directionalBlue));
-				logger::debug(FMT_STRING("cell formid: {:08X} changed directionalBlue to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directional.blue);
-			} catch (const std::exception& e) {
-				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
-			}
-		}
-
-		if (!line.ambientBlue.empty() && line.ambientBlue != "none") {
-			try {
-				curobj->GetRuntimeData().cellData.interior->ambient.blue = static_cast<std::uint8_t>(std::stoi(line.ambientBlue));
-				logger::debug(FMT_STRING("cell formid: {:08X} changed ambientBlue to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->ambient.blue);
-			} catch (const std::exception& e) {
-				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
-			}
-		}
-
-		if (!line.ambientRed.empty() && line.ambientRed != "none") {
-			try {
-				curobj->GetRuntimeData().cellData.interior->ambient.red = static_cast<std::uint8_t>(std::stoi(line.ambientRed));
-				logger::debug(FMT_STRING("cell formid: {:08X} changed ambientRed to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->ambient.red);
-			} catch (const std::exception& e) {
-				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
-			}
-		}
-
-		if (!line.ambientGreen.empty() && line.ambientGreen != "none") {
-			try {
-				curobj->GetRuntimeData().cellData.interior->ambient.green = static_cast<std::uint8_t>(std::stoi(line.ambientGreen));
-				logger::debug(FMT_STRING("cell formid: {:08X} changed ambientGreen to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->ambient.green);
-			} catch (const std::exception& e) {
-				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
-			}
-		}
-
-		if (!line.fogNear.empty() && line.fogNear != "none") {
+		if (hasValue(line.fogNear)) {
 			try {
 				curobj->GetRuntimeData().cellData.interior->fogNear = std::stof(line.fogNear);
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogNear to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->fogNear);
@@ -755,7 +714,7 @@ namespace CELL
 			}
 		}
 
-		if (!line.fogFar.empty() && line.fogFar != "none") {
+		if (hasValue(line.fogFar)) {
 			try {
 				curobj->GetRuntimeData().cellData.interior->fogFar = std::stof(line.fogFar);
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogFar to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->fogFar);
@@ -764,7 +723,7 @@ namespace CELL
 			}
 		}
 
-		if (!line.fogPower.empty() && line.fogPower != "none") {
+		if (hasValue(line.fogPower)) {
 			try {
 				curobj->GetRuntimeData().cellData.interior->fogPower = std::stof(line.fogPower);
 				logger::debug(FMT_STRING("cell formid: {:08X} changed fogPower to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->fogPower);
@@ -773,7 +732,7 @@ namespace CELL
 			}
 		}
 
-		if (!line.clipDist.empty() && line.clipDist != "none") {
+		if (hasValue(line.clipDist)) {
 			try {
 				curobj->GetRuntimeData().cellData.interior->clipDist = std::stof(line.clipDist);
 				logger::debug(FMT_STRING("cell formid: {:08X} changed clipDist to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->clipDist);
@@ -782,108 +741,47 @@ namespace CELL
 			}
 		}
 
-		if (!line.directionalAmbientXMinRed.empty() && line.directionalAmbientXMinRed != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.x.min.red = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientXMinRed));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientXMinRed to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.x.min.red);
-		}
-		if (!line.directionalAmbientXMinGreen.empty() && line.directionalAmbientXMinGreen != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.x.min.green = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientXMinGreen));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientXMinGreen to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.x.min.green);
-		}
-		if (!line.directionalAmbientXMinBlue.empty() && line.directionalAmbientXMinBlue != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.x.min.blue = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientXMinBlue));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientXMinBlue to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.x.min.blue);
-		}
-		if (!line.directionalAmbientXMaxRed.empty() && line.directionalAmbientXMaxRed != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.x.max.red = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientXMaxRed));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientXMaxRed to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.x.max.red);
-		}
-		if (!line.directionalAmbientXMaxGreen.empty() && line.directionalAmbientXMaxGreen != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.x.max.green = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientXMaxGreen));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientXMaxGreen to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.x.max.green);
-		}
-		if (!line.directionalAmbientXMaxBlue.empty() && line.directionalAmbientXMaxBlue != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.x.max.blue = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientXMaxBlue));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientXMaxBlue to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.x.max.blue);
+		setColor(line.directionalAmbientXMinRed, interior->directionalAmbientLightingColors.directional.x.min.red, "directionalAmbientXMinRed");
+		setColor(line.directionalAmbientXMinGreen, interior->directionalAmbientLightingColors.directional.x.min.green, "directionalAmbientXMinGreen");
+		setColor(line.directionalAmbientXMinBlue, interior->directionalAmbientLightingColors.directional.x.min.blue, "directionalAmbientXMinBlue");
+		setColor(line.directionalAmbientXMaxRed, interior->directionalAmbientLightingColors.directional.x.max.red, "directionalAmbientXMaxRed");
+		setColor(line.directionalAmbientXMaxGreen, interior->directionalAmbientLightingColors.directional.x.max.green, "directionalAmbientXMaxGreen");
+		setColor(line.directionalAmbientXMaxBlue, interior->directionalAmbientLightingColors.directional.x.max.blue, "directionalAmbientXMaxBlue");
+
+		setColor(line.directionalAmbientYMinRed, interior->directionalAmbientLightingColors.directional.y.min.red, "directionalAmbientYMinRed");
+		setColor(line.directionalAmbientYMinGreen, interior->directionalAmbientLightingColors.directional.y.min.green, "directionalAmbientYMinGreen");
+		setColor(line.directionalAmbientYMinBlue, interior->directionalAmbientLightingColors.directional.y.min.blue, "directionalAmbientYMinBlue");
+		setColor(line.directionalAmbientYMaxRed, interior->directionalAmbientLightingColors.directional.y.max.red, "directionalAmbientYMaxRed");
+		setColor(line.directionalAmbientYMaxGreen, interior->directionalAmbientLightingColors.directional.y.max.green, "directionalAmbientYMaxGreen");
+		setColor(line.directionalAmbientYMaxBlue, interior->directionalAmbientLightingColors.directional.y.max.blue, "directionalAmbientYMaxBlue");
+
+		setColor(line.directionalAmbientZMinRed, interior->directionalAmbientLightingColors.directional.z.min.red, "directionalAmbientZMinRed");
+		setColor(line.directionalAmbientZMinGreen, interior->directionalAmbientLightingColors.directional.z.min.green, "directionalAmbientZMinGreen");
+		setColor(line.directionalAmbientZMinBlue, interior->directionalAmbientLightingColors.directional.z.min.blue, "directionalAmbientZMinBlue");
+		setColor(line.directionalAmbientZMaxRed, interior->directionalAmbientLightingColors.directional.z.max.red, "directionalAmbientZMaxRed");
+		setColor(line.directionalAmbientZMaxGreen, interior->directionalAmbientLightingColors.directional.z.max.green, "directionalAmbientZMaxGreen");
+		setColor(line.directionalAmbientZMaxBlue, interior->directionalAmbientLightingColors.directional.z.max.blue, "directionalAmbientZMaxBlue");
+
+		setColor(line.directionalAmbientSpecularRed, interior->directionalAmbientLightingColors.specular.red, "directionalAmbientSpecularRed");
+		setColor(line.directionalAmbientSpecularGreen, interior->directionalAmbientLightingColors.specular.green, "directionalAmbientSpecularGreen");
+		setColor(line.directionalAmbientSpecularBlue, interior->directionalAmbientLightingColors.specular.blue, "directionalAmbientSpecularBlue");
+
+		if (hasValue(line.directionalXY)) {
+			try {
+				interior->directionalXY = static_cast<std::uint32_t>(std::stoi(line.directionalXY));
+				logger::debug(FMT_STRING("cell formid: {:08X} changed directionalXY to {}"), curobj->formID, interior->directionalXY);
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 
-		if (!line.directionalAmbientYMinRed.empty() && line.directionalAmbientYMinRed != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.y.min.red = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientYMinRed));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientYMinRed to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.y.min.red);
-		}
-		if (!line.directionalAmbientYMinGreen.empty() && line.directionalAmbientYMinGreen != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.y.min.green = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientYMinGreen));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientYMinGreen to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.y.min.green);
-		}
-		if (!line.directionalAmbientYMinBlue.empty() && line.directionalAmbientYMinBlue != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.y.min.blue = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientYMinBlue));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientYMinBlue to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.y.min.blue);
-		}
-		if (!line.directionalAmbientYMaxRed.empty() && line.directionalAmbientYMaxRed != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.y.max.red = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientYMaxRed));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientYMaxRed to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.y.max.red);
-		}
-		if (!line.directionalAmbientYMaxGreen.empty() && line.directionalAmbientYMaxGreen != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.y.max.green = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientYMaxGreen));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientYMaxGreen to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.y.max.green);
-		}
-		if (!line.directionalAmbientYMaxBlue.empty() && line.directionalAmbientYMaxBlue != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.y.max.blue = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientYMaxBlue));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientYMaxBlue to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.y.max.blue);
-		}
-
-		if (!line.directionalAmbientZMinRed.empty() && line.directionalAmbientZMinRed != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.z.min.red = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientZMinRed));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientZMinRed to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.z.min.red);
-		}
-		if (!line.directionalAmbientZMinGreen.empty() && line.directionalAmbientZMinGreen != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.z.min.green = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientZMinGreen));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientZMinGreen to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.z.min.green);
-		}
-		if (!line.directionalAmbientZMinBlue.empty() && line.directionalAmbientZMinBlue != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.z.min.blue = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientZMinBlue));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientZMinBlue to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.z.min.blue);
-		}
-		if (!line.directionalAmbientZMaxRed.empty() && line.directionalAmbientZMaxRed != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.z.max.red = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientZMaxRed));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientZMaxRed to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.z.max.red);
-		}
-		if (!line.directionalAmbientZMaxGreen.empty() && line.directionalAmbientZMaxGreen != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.z.max.green = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientZMaxGreen));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientZMaxGreen to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.z.max.green);
-		}
-		if (!line.directionalAmbientZMaxBlue.empty() && line.directionalAmbientZMaxBlue != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.z.max.blue = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientZMaxBlue));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientZMaxBlue to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.directional.z.max.blue);
-		}
-
-		if (!line.directionalAmbientSpecularRed.empty() && line.directionalAmbientSpecularRed != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.specular.red = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientSpecularRed));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientSpecularRed to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.specular.red);
-		}
-
-		if (!line.directionalAmbientSpecularGreen.empty() && line.directionalAmbientSpecularGreen != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.specular.green = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientSpecularGreen));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientSpecularGreen to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.specular.green);
-		}
-
-		if (!line.directionalAmbientSpecularBlue.empty() && line.directionalAmbientSpecularBlue != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.specular.blue = static_cast<std::uint8_t>(std::stoi(line.directionalAmbientSpecularBlue));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalAmbientSpecularBlue to {}"), curobj->formID, curobj->GetRuntimeData().cellData.interior->directionalAmbientLightingColors.specular.blue);
-		}
-
-		if (!line.directionalXY.empty() && line.directionalXY != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalXY = static_cast<std::uint32_t>(std::stoi(line.directionalXY));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalXY to {}"),
-				curobj->formID,
-				curobj->GetRuntimeData().cellData.interior->directionalXY);
-		}
-
-		if (!line.directionalZ.empty() && line.directionalZ != "none") {
-			curobj->GetRuntimeData().cellData.interior->directionalZ = static_cast<std::uint32_t>(std::stoi(line.directionalZ));
-			logger::debug(FMT_STRING("cell formid: {:08X} changed directionalZ to {}"),
-				curobj->formID,
-				curobj->GetRuntimeData().cellData.interior->directionalZ);
+		if (hasValue(line.directionalZ)) {
+			try {
+				interior->directionalZ = static_cast<std::uint32_t>(std::stoi(line.directionalZ));
+				logger::debug(FMT_STRING("cell formid: {:08X} changed directionalZ to {}"), curobj->formID, interior->directionalZ);
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
+			}
 		}
 		} catch (const std::exception& e) {
 			logger::warn(FMT_STRING("cell formid: {:08X} skipped an invalid interior value: {}"), curobj->formID, e.what());
@@ -892,20 +790,20 @@ namespace CELL
 			logger::warn(FMT_STRING("cell formid: {:08X} is exterior; skipped interior-only operations"), curobj->formID);
 		}
 
-		if (!line.lightingTemplate.empty() && line.lightingTemplate != "none") {
+		if (hasValue(line.lightingTemplate)) {
 			RE::TESForm* currentform = nullptr;
 			std::string  string_form = line.lightingTemplate;
 			currentform = GetFormFromIdentifier(string_form);
 			if (currentform && currentform->formType == RE::FormType::LightingMaster) {
 				curobj->GetRuntimeData().lightingTemplate = (RE::BGSLightingTemplate*)currentform;
 				logger::debug(FMT_STRING("cell formid: {:08X} {} changed lightingTemplate {:08X}"), curobj->formID, curobj->fullName, curobj->GetRuntimeData().lightingTemplate->formID);
-			} else if (toLowerCase(line.lightingTemplate) == "null") {
+			} else if (IsNullValue(line.lightingTemplate)) {
 				curobj->GetRuntimeData().lightingTemplate = nullptr;
 				logger::debug(FMT_STRING("cell formid: {:08X} {} changed lightingTemplate to null"), curobj->formID, curobj->fullName);
 			}
 		}
 
-		if (!line.fullName.empty() && line.fullName != "none") {
+		if (hasValue(line.fullName)) {
 			try {
 				logger::debug(FMT_STRING("cell formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
 				curobj->fullName = line.fullName;

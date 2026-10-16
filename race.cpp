@@ -1,12 +1,44 @@
 #include "race.h"
 #include "formfilter.h"
 #include "parsetable.h"
+#include <algorithm>
+#include <cmath>
+#include <random>
 #include <unordered_set>
 
 namespace RACE
 {
 
 	std::list<patch_instruction> hooktokens;
+
+	struct HookTokenSource
+	{
+		std::string plugin;
+		std::string path;
+	};
+	std::vector<HookTokenSource> hookTokenSources;
+
+	namespace
+	{
+		bool namesPlugin(const std::string& a_fileName)
+		{
+			const std::string lowerName = toLowerCase(a_fileName);
+			return lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos ||
+			       lowerName.find(".esm") != std::string::npos;
+		}
+
+		float randomInRange(float a_lo, float a_hi)
+		{
+			static thread_local std::mt19937 engine{ std::random_device{}() };
+			const int lo = static_cast<int>(std::ceil(std::min(a_lo, a_hi)));
+			const int hi = static_cast<int>(std::floor(std::max(a_lo, a_hi)));
+			if (lo > hi) {
+				return a_lo;
+			}
+			std::uniform_int_distribution<int> distribution(lo, hi);
+			return static_cast<float>(distribution(engine));
+		}
+	}
 
 	namespace
 	{
@@ -21,6 +53,7 @@ namespace RACE
 			{ "attackDataToAdd", sp::FieldKind::AttackData3D, RACEHOOK_F(addedObjects) },
 			{ "attackDataToChange", sp::FieldKind::AttackData3D, RACEHOOK_F(attackDataToChange) },
 			{ "attackDataToRemove", sp::FieldKind::ListAssign, RACEHOOK_F(removeAttackData) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, RACEHOOK_F(modNames) },
 		};
 
 #undef RACEHOOK_F
@@ -49,7 +82,7 @@ namespace RACE
 			{ "filterByKeywordsOr", sp::FieldKind::List, RACE_F(keywordsOr) },
 			{ "filterByVoiceTypeOr", sp::FieldKind::List, RACE_F(filterByVoiceTypeOr) },
 			{ "filterByKeywordsExcluded", sp::FieldKind::List, RACE_F(keywordsExcluded) },
-			{ "changeStats", sp::FieldKind::FactionRanks, RACE_F(avifs), RACE_F(values1), RACE_F(values2) },
+			{ "changeStats", sp::FieldKind::MultiFloat, RACE_F(avifs), RACE_F(values1), RACE_F(values2) },
 			{ "keywordsToAdd", sp::FieldKind::List, RACE_F(keywordsToAdd) },
 			{ "keywordsToRemove", sp::FieldKind::List, RACE_F(keywordsToRemove) },
 			{ "filterByMaleModelContains", sp::FieldKind::ListAssign, RACE_F(filterByMaleModelContains) },
@@ -76,6 +109,9 @@ namespace RACE
 			{ "reachUnarmed", sp::FieldKind::Value, RACE_F(reachUnarmed) },
 			{ "baseMassMult", sp::FieldKind::Value, RACE_F(baseMassMult) },
 			{ "baseCarryweightMult", sp::FieldKind::Value, RACE_F(baseCarryweightMult) },
+			{ "startingHealthMult", sp::FieldKind::Value, RACE_F(startingHealthMult) },
+			{ "startingStaminaMult", sp::FieldKind::Value, RACE_F(startingStaminaMult) },
+			{ "startingMagickaMult", sp::FieldKind::Value, RACE_F(startingMagickaMult) },
 			{ "regenHealthMult", sp::FieldKind::Value, RACE_F(regenHealthMult) },
 			{ "regenStaminaMult", sp::FieldKind::Value, RACE_F(regenStaminaMult) },
 			{ "regenMagickaMult", sp::FieldKind::Value, RACE_F(regenMagickaMult) },
@@ -84,7 +120,6 @@ namespace RACE
 			{ "weightMale", sp::FieldKind::Value, RACE_F(weightMale) },
 			{ "weightFemale", sp::FieldKind::Value, RACE_F(weightFemale) },
 			{ "heightMale", sp::FieldKind::Value, RACE_F(heightMale) },
-			{ "heightFemale", sp::FieldKind::Value, RACE_F(heightFemale) },
 			{ "heightFemale", sp::FieldKind::Value, RACE_F(heightFemale) },
 			{ "accelerationRate", sp::FieldKind::Value, RACE_F(rateAcceleration) },
 			{ "decelerationRate", sp::FieldKind::Value, RACE_F(rateDeceleration) },
@@ -109,10 +144,6 @@ namespace RACE
 	{
 		patch_instruction l;
 		raceKeyTable().parse(line, &l);
-
-		extractValueString(line, "startingHealthMult\\s*= ([^:]+)", l.startingHealthMult);
-		extractValueString(line, "startingStaminaMult\\s*= ([^:]+)", l.startingStaminaMult);
-		extractValueString(line, "startingMagickaMult\\s*= ([^:]+)", l.startingMagickaMult);
 
 		logger::debug(FMT_STRING("races: {}  keywords: {}  avifs: {} keywordsToAdd: {} spellsToAdd {}"), l.object.size(), l.keywords.size(), l.avifs.size(), l.keywordsToAdd.size(), l.spellsToAdd.size());
 		return l;
@@ -364,11 +395,13 @@ namespace RACE
 						newAttackData->data.attackChance = std::stof(object[1]);
 						logger::debug("race formid: {:08X} attackData - attackchance {}", curobj->formID, newAttackData->data.attackChance);
 					} else if (toLowerCase(object[0]) == "attackspell") {
-						if (object[1] != "null") {
+						if (!IsNullValue(object[1])) {
 							auto form = GetFormFromIdentifier(object[1]);
-							if (form) {
-								newAttackData->data.attackSpell = (RE::SpellItem*)form;
+							if (form && (form->formType == RE::FormType::Spell || form->formType == RE::FormType::Scroll)) {
+								newAttackData->data.attackSpell = static_cast<RE::SpellItem*>(form);
 								logger::debug("race formid: {:08X} attackData - attackspell {:08X}", curobj->formID, newAttackData->data.attackSpell->formID);
+							} else if (form) {
+								logger::warn("race formid: {:08X} attackData - attackSpell {} is not a spell", curobj->formID, object[1]);
 							}
 						} else {
 							newAttackData->data.attackSpell = nullptr;
@@ -384,11 +417,13 @@ namespace RACE
 						newAttackData->data.staggerOffset = std::stof(object[1]);
 						logger::debug("race formid: {:08X} attackData - staggeroffset {}", curobj->formID, newAttackData->data.staggerOffset);
 					} else if (toLowerCase(object[0]) == "attacktype") {
-						if (object[1] != "null") {
+						if (!IsNullValue(object[1])) {
 							auto form = GetFormFromIdentifier(object[1]);
-							if (form) {
-								newAttackData->data.attackType = (RE::BGSKeyword*)form;
+							if (form && form->formType == RE::FormType::Keyword) {
+								newAttackData->data.attackType = static_cast<RE::BGSKeyword*>(form);
 								logger::debug("race formid: {:08X} attackData - attacktype {:08X}", curobj->formID, newAttackData->data.attackType->formID);
+							} else if (form) {
+								logger::warn("race formid: {:08X} attackData - attackType {} is not a keyword", curobj->formID, object[1]);
 							}
 						} else {
 							newAttackData->data.attackType = nullptr;
@@ -518,11 +553,13 @@ namespace RACE
 							newAttackData->data.attackChance = std::stof(object[1]);
 							logger::debug("race formid: {:08X} attackData changed - attackchance {}", curobj->formID, newAttackData->data.attackChance);
 						} else if (toLowerCase(object[0]) == "attackspell") {
-							if (object[1] != "null") {
+							if (!IsNullValue(object[1])) {
 								auto form = GetFormFromIdentifier(object[1]);
-								if (form) {
-									newAttackData->data.attackSpell = (RE::SpellItem*)form;
+								if (form && (form->formType == RE::FormType::Spell || form->formType == RE::FormType::Scroll)) {
+									newAttackData->data.attackSpell = static_cast<RE::SpellItem*>(form);
 									logger::debug("race formid: {:08X} attackData changed - attackspell {:08X}", curobj->formID, newAttackData->data.attackSpell->formID);
+								} else if (form) {
+									logger::warn("race formid: {:08X} attackData changed - attackSpell {} is not a spell", curobj->formID, object[1]);
 								}
 							} else {
 								newAttackData->data.attackSpell = nullptr;
@@ -538,11 +575,13 @@ namespace RACE
 							newAttackData->data.staggerOffset = std::stof(object[1]);
 							logger::debug("race formid: {:08X} attackData changed - staggeroffset {}", curobj->formID, newAttackData->data.staggerOffset);
 						} else if (toLowerCase(object[0]) == "attacktype") {
-							if (object[1] != "null") {
+							if (!IsNullValue(object[1])) {
 								auto form = GetFormFromIdentifier(object[1]);
-								if (form) {
-									newAttackData->data.attackType = (RE::BGSKeyword*)form;
+								if (form && form->formType == RE::FormType::Keyword) {
+									newAttackData->data.attackType = static_cast<RE::BGSKeyword*>(form);
 									logger::debug("race formid: {:08X} attackData changed - attacktype {:08X}", curobj->formID, newAttackData->data.attackType->formID);
+								} else if (form) {
+									logger::warn("race formid: {:08X} attackData changed - attackType {} is not a keyword", curobj->formID, object[1]);
 								}
 							} else {
 								newAttackData->data.attackType = nullptr;
@@ -621,17 +660,6 @@ namespace RACE
 					}
 				}
 			}
-
-			for (auto attackData : line.removeAttackData) {
-				for (auto it = curobj->attackDataMap->attackDataMap.begin(); it != curobj->attackDataMap->attackDataMap.end();) {
-					if (it->second && toLowerCase(it->second.get()->event.c_str()) == toLowerCase(attackData)) {
-						logger::debug("race formid: {:08X} removing attackData with event {} ", curobj->formID, it->second.get()->event.c_str());
-						it = curobj->attackDataMap->attackDataMap.erase(it);
-					} else {
-						++it;
-					}
-				}
-			}
 		}
 	}
 
@@ -643,21 +671,25 @@ namespace RACE
 				std::string  string_form = line.avifs[i];
 
 				float randomValue = 0;
-				if (!line.values1.empty() && !line.values2.empty()) {
-					randomValue = floor((std::rand() / static_cast<float>(RAND_MAX)) * (line.values2[i] - line.values1[i] + 1) + line.values1[i]);
+				if (i < line.values1.size() && i < line.values2.size()) {
+					const float lo = line.values1[i];
+					const float hi = line.values2[i];
+					randomValue = lo == hi ? lo : randomInRange(lo, hi);
 				}
 
-				if (toLowerCase(string_form) == "health") {
+				const std::string lowerStat = toLowerCase(string_form);
+				if (lowerStat == "health") {
 					curobj->data.startingHealth = randomValue;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), randomValue);
-				} else if (toLowerCase(string_form) == "stamina") {
+					logger::debug(FMT_STRING("race formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), randomValue);
+				} else if (lowerStat == "stamina") {
 					curobj->data.startingStamina = randomValue;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), randomValue);
-				} else if (toLowerCase(string_form) == "magicka") {
+					logger::debug(FMT_STRING("race formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), randomValue);
+				} else if (lowerStat == "magicka") {
 					curobj->data.startingMagicka = randomValue;
-					logger::debug(FMT_STRING("npc formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), randomValue);
+					logger::debug(FMT_STRING("race formid: {:08X} {} changed {} to {}"), curobj->formID, curobj->fullName, string_form.c_str(), randomValue);
+				} else {
+					logger::warn(FMT_STRING("race formid: {:08X} changeStats: unknown stat '{}' (health, stamina, magicka)"), curobj->formID, string_form);
 				}
-				logger::debug(FMT_STRING("race formid: {:08X} {} changed {:08X} {} {}"), curobj->formID, curobj->formEditorID, ((RE::ActorValueInfo*)curobj)->formID, ((RE::ActorValueInfo*)curobj)->fullName, randomValue);
 			}
 		}
 
@@ -967,6 +999,9 @@ namespace RACE
 				if (currentform && currentform->formType == RE::FormType::Armor) {
 					curobj->skin = (RE::TESObjectARMO*)currentform;
 					logger::debug(FMT_STRING("race formid: {:08X} {} changed skin {:08X}"), curobj->formID, curobj->fullName, curobj->skin->formID);
+				} else if (IsNullValue(line.skin)) {
+					curobj->skin = nullptr;
+					logger::debug(FMT_STRING("race formid: {:08X} {} changed skin to null (none)"), curobj->formID, curobj->fullName);
 				}
 			} catch (const std::exception& e) {
 			}
@@ -1105,7 +1140,7 @@ namespace RACE
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								if (namesPlugin(fileName)) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -1147,6 +1182,7 @@ namespace RACE
 	void* readConfigHook(const std::string& folder)
 	{
 		hooktokens.clear();
+		hookTokenSources.clear();
 		char        skipChar = ';';
 		std::string extension = ".ini";
 
@@ -1187,6 +1223,7 @@ namespace RACE
 									}
 
 									hooktokens.push_back(create_patch_instruction_hook(line));
+									hookTokenSources.push_back({ namesPlugin(fileName) ? fileName : std::string(), fullPath });
 								}
 								infile.close();
 							}
@@ -1214,6 +1251,26 @@ namespace RACE
 		func(curobj);
 		if (!wasInitialized) {
 
+			static const std::vector<bool> tokenActive = [] {
+				std::vector<bool> active(hooktokens.size(), true);
+				if (!RE::TESDataHandler::GetSingleton()) {
+					return active;
+				}
+				std::unordered_set<std::string> loggedPaths;
+				for (std::size_t i = 0; i < hookTokenSources.size() && i < active.size(); ++i) {
+					const auto& source = hookTokenSources[i];
+					if (source.plugin.empty() || IsPluginInstalled(source.plugin.c_str())) {
+						continue;
+					}
+					active[i] = false;
+					if (loggedPaths.insert(source.path).second) {
+						logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), source.plugin, source.path);
+					}
+				}
+				return active;
+			}();
+
+			std::size_t tokenIndex = 0;
 			for (const auto& line : hooktokens) {
 				bool found = false;
 				bool keywordAnd = false;
@@ -1221,6 +1278,12 @@ namespace RACE
 
 				if (curobj->IsDeleted()) {
 					return;
+				}
+
+				const bool tokenUsed = tokenIndex >= tokenActive.size() || tokenActive[tokenIndex];
+				++tokenIndex;
+				if (!tokenUsed) {
+					continue;
 				}
 
 				const formfilter::CommonFilterView view{
@@ -1240,7 +1303,7 @@ namespace RACE
 
 						std::string string_form = npcstring;
 						currentform = GetFormFromIdentifier(string_form);
-						if (currentform) {
+						if (currentform && currentform->formType == RE::FormType::Race) {
 							if (curobj->formID == currentform->formID) {
 								found = true;
 								break;

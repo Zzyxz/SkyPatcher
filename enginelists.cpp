@@ -1,6 +1,9 @@
 #include "enginelists.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <unordered_set>
 
 namespace EngineLists
@@ -295,17 +298,30 @@ namespace EngineLists
 		return matches.size();
 	}
 
-	bool RemoveContainerObjectWithCount(RE::TESContainer& container, RE::TESBoundObject* object, std::int32_t count)
+	std::size_t RemoveContainerObjectWithCount(RE::TESContainer& container, RE::TESBoundObject* object, std::int32_t count)
 	{
-		bool removed = false;
-		RemoveContainerObjects(container, [&](const RE::ContainerObject& entry) {
-			if (!removed && entry.obj == object && entry.count == count) {
-				removed = true;
-				return true;
-			}
-			return false;
+		return RemoveContainerObjects(container, [object, count](const RE::ContainerObject& entry) {
+			return entry.obj == object && entry.count == count;
 		});
-		return removed;
+	}
+
+	std::size_t MultiplyContainerObjectCounts(RE::TESContainer& container, RE::TESBoundObject* object, float multiplier)
+	{
+		std::size_t changed = 0;
+		container.ForEachContainerObject([&](RE::ContainerObject& entry) {
+			if (!object || entry.obj == object) {
+				auto scaled = static_cast<double>(std::round(static_cast<float>(entry.count) * multiplier));
+				if (entry.count > 0 && scaled < 1.0) {
+					scaled = 1.0;
+				}
+				entry.count = static_cast<std::int32_t>(std::clamp(scaled,
+					static_cast<double>(std::numeric_limits<std::int32_t>::min()),
+					static_cast<double>(std::numeric_limits<std::int32_t>::max())));
+				++changed;
+			}
+			return RE::BSContainer::ForEachResult::kContinue;
+		});
+		return changed;
 	}
 
 	std::size_t RemoveContainerObjectInstances(RE::TESContainer& container, RE::TESBoundObject* object)

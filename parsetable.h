@@ -117,7 +117,7 @@ namespace sp
 		{
 			const std::string valueLine(a_value);
 			std::vector<std::string> arr;
-			std::size_t startPos = valueLine.find("=") + 1;
+			std::size_t startPos = 0;
 			std::size_t pos = 0;
 			while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
 				arr.push_back(trimSpaces(std::string_view(valueLine).substr(startPos, pos - startPos)));

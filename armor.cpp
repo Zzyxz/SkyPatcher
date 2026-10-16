@@ -10,11 +10,11 @@ namespace ARMOR
 	{
 		bool lookupArmorType(const std::string& a_lower, RE::BIPED_MODEL::ArmorType& a_out)
 		{
-			if (a_lower == "light") {
+			if (a_lower == "light" || a_lower == "lightarmor") {
 				a_out = RE::BIPED_MODEL::ArmorType::kLightArmor;
 				return true;
 			}
-			if (a_lower == "heavy") {
+			if (a_lower == "heavy" || a_lower == "heavyarmor") {
 				a_out = RE::BIPED_MODEL::ArmorType::kHeavyArmor;
 				return true;
 			}
@@ -112,12 +112,8 @@ namespace ARMOR
 
 			first = p.preds.size();
 			if (!line.filterByArmorAddons.empty()) {
-				std::vector<std::uint64_t> holes;
-				for (const RE::FormID id : formfilter::resolveFormIDsKeepingHoles(
-						 line.filterByArmorAddons, RE::FormType::Armature)) {
-					holes.push_back(id);
-				}
-				formfilter::addPred(p, Op::ArmorAddon, Mode::And, holes);
+				formfilter::addPred(p, Op::ArmorAddon, Mode::And,
+					formfilter::idOperands(line.filterByArmorAddons, RE::FormType::Armature));
 			}
 			if (!line.filterByArmorAddonsOr.empty()) {
 				formfilter::addPred(p, Op::ArmorAddon, Mode::Or,
@@ -315,6 +311,11 @@ namespace ARMOR
 			std::unordered_set<RE::FormID> patched;
 			indexStale = indexStale || armorRuleInvalidatesIndex(line);
 
+			if ((!line.hasPlugin.empty() && !formfilter::hasAllPlugins(line.hasPlugin)) ||
+				(!line.hasPluginOr.empty() && !formfilter::hasAnyPlugin(line.hasPluginOr))) {
+				continue;
+			}
+
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -413,7 +414,8 @@ namespace ARMOR
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -461,7 +463,26 @@ namespace ARMOR
 			{ "lightarmor", static_cast<std::uint32_t>(RE::BIPED_MODEL::ArmorType::kLightArmor), 0, "LightArmor" },
 			{ "heavyarmor", static_cast<std::uint32_t>(RE::BIPED_MODEL::ArmorType::kHeavyArmor), 0, "HeavyArmor" },
 			{ "clothing", static_cast<std::uint32_t>(RE::BIPED_MODEL::ArmorType::kClothing), 0, "Clothing" },
+			{ "light", static_cast<std::uint32_t>(RE::BIPED_MODEL::ArmorType::kLightArmor), 0, "LightArmor" },
+			{ "heavy", static_cast<std::uint32_t>(RE::BIPED_MODEL::ArmorType::kHeavyArmor), 0, "HeavyArmor" },
 		};
+
+		bool isRecordStateFlag(std::uint32_t a_value)
+		{
+			return a_value == static_cast<std::uint32_t>(RE::TESObjectARMO::RecordFlags::kDeleted) ||
+			       a_value == static_cast<std::uint32_t>(RE::TESObjectARMO::RecordFlags::kIgnored);
+		}
+
+		std::uint32_t toArmorRating(double a_value)
+		{
+			if (!(a_value > 0.0)) {
+				return 0;
+			}
+			if (a_value >= 4294967295.0) {
+				return 0xFFFFFFFFu;
+			}
+			return static_cast<std::uint32_t>(a_value);
+		}
 
 		constexpr ActionRow kArmorFlagRows[] = {
 			{ "nonplayable", static_cast<std::uint32_t>(RE::TESObjectARMO::RecordFlags::kNonPlayable) },
@@ -515,17 +536,24 @@ namespace ARMOR
 					logger::warn(FMT_STRING("armor {:08X}: reCalcArmorRating requires 7 values; skipped invalid entry"), curobj->formID);
 					continue;
 				}
-				float startRating = std::stof(objectToAdd[0]);
-				float multiplierBase = std::stof(objectToAdd[1]);
-				float multiplierSoft = std::stof(objectToAdd[2]);
-				float multiplierHard = std::stof(objectToAdd[3]);
-				float softCap = std::stof(objectToAdd[4]);
-				float hardCap = std::stof(objectToAdd[5]);
-				float gapSpreader = std::stof(objectToAdd[6]);
+				float startRating = 0, multiplierBase = 0, multiplierSoft = 0, multiplierHard = 0, softCap = 0, hardCap = 0, gapSpreader = 0;
+				try {
+					startRating = std::stof(objectToAdd[0]);
+					multiplierBase = std::stof(objectToAdd[1]);
+					multiplierSoft = std::stof(objectToAdd[2]);
+					multiplierHard = std::stof(objectToAdd[3]);
+					softCap = std::stof(objectToAdd[4]);
+					hardCap = std::stof(objectToAdd[5]);
+					gapSpreader = std::stof(objectToAdd[6]);
+				} catch (const std::exception&) {
+					logger::warn(FMT_STRING("armor {:08X}: reCalcArmorRating has an invalid number; skipped entry"), curobj->formID);
+					continue;
+				}
 				float multiplier = 1;
 				float armorRating = 1;
-				if (curobj->armorRating > 0 && (curobj->armorRating / 100) > startRating) {
-					armorRating = curobj->armorRating / 100;
+				const float currentRating = curobj->armorRating / 100.0f;
+				if (curobj->armorRating > 0 && currentRating > startRating) {
+					armorRating = currentRating;
 					armorRating = gapSpreader + armorRating;
 					if (armorRating < softCap) {
 						multiplier = multiplierBase;
@@ -547,13 +575,19 @@ namespace ARMOR
 					continue;
 				}
 
-				float startRating = std::stof(p[0]);
-				float maxGain = std::stof(p[1]);
-				float k = std::stof(p[2]);
-				float minGain = std::stof(p[3]);
-				float outSoftCap = std::stof(p[4]);
-				float outHardCap = std::stof(p[5]);
-				float gapSpreader = std::stof(p[6]);
+				float startRating = 0, maxGain = 0, k = 0, minGain = 0, outSoftCap = 0, outHardCap = 0, gapSpreader = 0;
+				try {
+					startRating = std::stof(p[0]);
+					maxGain = std::stof(p[1]);
+					k = std::stof(p[2]);
+					minGain = std::stof(p[3]);
+					outSoftCap = std::stof(p[4]);
+					outHardCap = std::stof(p[5]);
+					gapSpreader = std::stof(p[6]);
+				} catch (const std::exception&) {
+					logger::warn(FMT_STRING("armor {:08X}: reCalcArmorRatingv2 has an invalid number; skipped entry"), curobj->formID);
+					continue;
+				}
 
 				float base = curobj->armorRating / 100.0f;
 				if (base <= 0.0f || base <= startRating) {
@@ -590,7 +624,7 @@ namespace ARMOR
 
 		if (!line.damageResist.empty() && line.damageResist != "none") {
 			try {
-				curobj->armorRating = stoi(line.damageResist) * 100;
+				curobj->armorRating = toArmorRating(static_cast<double>(stoi(line.damageResist)) * 100.0);
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed armor rating {}"), curobj->formID, curobj->fullName, curobj->armorRating / 100);
 			} catch (const std::exception& e) {
 			}
@@ -598,7 +632,7 @@ namespace ARMOR
 
 		if (!line.damageResistMult.empty() && line.damageResistMult != "none") {
 			try {
-				curobj->armorRating = (uint32_t)(curobj->armorRating * stof(line.damageResistMult));
+				curobj->armorRating = toArmorRating(MultRoundDown(curobj->armorRating, std::stod(line.damageResistMult)));
 				logger::debug(FMT_STRING("armor formid: {:08X} {} changed(multiplied) armor rating {}"), curobj->formID, curobj->fullName, curobj->armorRating / 100);
 			} catch (const std::exception& e) {
 			}
@@ -664,10 +698,19 @@ namespace ARMOR
 
 		if (!line.setBipedSlot.empty()) {
 			for (const auto& slotString : line.setBipedSlot) {
-				int slot = std::stoi(slotString);
+				int slot = 0;
+				try {
+					slot = std::stoi(slotString);
+				} catch (const std::exception&) {
+					logger::warn(FMT_STRING("armor {:08X}: bipedSlotsToAdd has an invalid slot '{}'; skipped"), curobj->formID, slotString);
+					continue;
+				}
 				curobj->bipedModelData.bipedObjectSlots.set(getBipedObjectSlot(slot));
 				logger::debug(FMT_STRING("armor added bipedSlot to {} Slot {} and all its ARMAs"), curobj->fullName, slotString);
 				for (const auto& arma : curobj->armorAddons) {
+					if (!arma) {
+						continue;
+					}
 					arma->bipedModelData.bipedObjectSlots.set(getBipedObjectSlot(slot));
 					logger::debug(FMT_STRING("Added bipedSlot to {:08X} Slot {}"), arma->formID, slotString);
 				}
@@ -676,10 +719,19 @@ namespace ARMOR
 
 		if (!line.removeBipedSlot.empty()) {
 			for (const auto& slotString : line.removeBipedSlot) {
-				int slot = std::stoi(slotString);
+				int slot = 0;
+				try {
+					slot = std::stoi(slotString);
+				} catch (const std::exception&) {
+					logger::warn(FMT_STRING("armor {:08X}: bipedSlotsToRemove has an invalid slot '{}'; skipped"), curobj->formID, slotString);
+					continue;
+				}
 				curobj->bipedModelData.bipedObjectSlots.reset(getBipedObjectSlot(slot));
 				logger::debug(FMT_STRING("armor removed bipedSlot to {} Slot {} and all its ARMAs"), curobj->fullName, slotString);
 				for (const auto& arma : curobj->armorAddons) {
+					if (!arma) {
+						continue;
+					}
 					arma->bipedModelData.bipedObjectSlots.reset(getBipedObjectSlot(slot));
 					logger::debug(FMT_STRING("Removed bipedSlot from {:08X} Slot {}"), arma->formID, slotString);
 				}
@@ -720,7 +772,7 @@ namespace ARMOR
 
 		if (!line.valueMult.empty() && line.valueMult != "none") {
 			try {
-				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
+				curobj->value = static_cast<int32_t>(MultRoundUp(curobj->value, std::stod(line.valueMult)));
 				logger::debug(FMT_STRING("armor formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
 			} catch (const std::exception& e) {
 			}
@@ -825,7 +877,7 @@ namespace ARMOR
 
 
 
-		if (!line.clearArmorAddons.empty() && line.clearArmorAddons != "none") {
+		if (IsSwitchOn(line.clearArmorAddons)) {
 			curobj->armorAddons.clear();
 			logger::debug(FMT_STRING("armor formid: {:08X} {} cleared all armor addons"), curobj->formID, curobj->fullName);
 		}
@@ -855,6 +907,11 @@ namespace ARMOR
 				std::string  string_form = line.armorAddonToAdd[i];
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Armature) {
+					const bool present = std::any_of(curobj->armorAddons.begin(), curobj->armorAddons.end(),
+						[&](const RE::TESObjectARMA* addon) { return addon && addon->formID == currentform->formID; });
+					if (present) {
+						continue;
+					}
 					curobj->armorAddons.push_back((RE::TESObjectARMA*)currentform);
 					logger::debug(FMT_STRING("armor formid: {:08X} added armor addon {:08X} "), curobj->formID, (currentform)->formID);
 				}
@@ -1059,6 +1116,10 @@ namespace ARMOR
 
 			for (const auto& setFlagRaw : line.setFlags) {
 				if (const auto* row = formfilter::findAction(kArmorFlagRows, setFlagRaw)) {
+					if (isRecordStateFlag(row->value)) {
+						logger::warn(FMT_STRING("armor formid: {:08X} {} flag '{}' cannot be set, ignored"), curobj->formID, curobj->fullName, row->name);
+						continue;
+					}
 					curobj->formFlags |= row->value;
 					logger::debug(FMT_STRING("armor formid: {:08X} {} flag enabled {}"), curobj->formID, curobj->fullName, row->name);
 					changedFlags = true;

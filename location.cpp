@@ -72,7 +72,7 @@ namespace LOCATION
 				}
 			}
 
-			if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByParentLoc.empty()) {
+			if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByParentLoc.empty() && line.filterByMusicType.empty() && line.filterByUnreportedCrimeFaction.empty()) {
 				continue;
 			}
 
@@ -171,7 +171,7 @@ namespace LOCATION
 					found = true;
 				}
 
-				if (line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByParentLoc.empty()) {
+				if (line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByParentLoc.empty() && line.filterByMusicType.empty() && line.filterByUnreportedCrimeFaction.empty()) {
 					found = true;
 				}
 
@@ -233,7 +233,8 @@ namespace LOCATION
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -315,7 +316,7 @@ namespace LOCATION
 			if (currentform && currentform->formType == RE::FormType::MusicType) {
 				curobj->musicType = static_cast<RE::BGSMusicType*>(currentform);
 				logger::debug(FMT_STRING("location formid: {:08X} changed musicType to {:08X}"), curobj->formID, currentform->formID);
-			} else if (line.musicType == "null") {
+			} else if (IsNullValue(line.musicType)) {
 				curobj->musicType = nullptr;
 				logger::debug(FMT_STRING("location {:08X} changed musicType to null"), curobj->formID);
 			}
@@ -326,7 +327,7 @@ namespace LOCATION
 			if (currentform && currentform->formType == RE::FormType::Location) {
 				curobj->parentLoc = static_cast<RE::BGSLocation*>(currentform);
 				logger::debug(FMT_STRING("location formid: {:08X} changed parentLoc to {:08X}"), curobj->formID, currentform->formID);
-			} else if (line.parentLoc == "null") {
+			} else if (IsNullValue(line.parentLoc)) {
 				curobj->parentLoc = nullptr;
 				logger::debug(FMT_STRING("location formid: {:08X} changed parentLoc to null"), curobj->formID);
 			}
@@ -337,17 +338,9 @@ namespace LOCATION
 			if (currentform && currentform->formType == RE::FormType::Faction) {
 				curobj->unreportedCrimeFaction = static_cast<RE::TESFaction*>(currentform);
 				logger::debug(FMT_STRING("location {:08X} changed unreportedCrimeFaction to {:08X}"), curobj->formID, currentform->formID);
-			} else if (line.unreportedCrimeFaction == "null") {
+			} else if (IsNullValue(line.unreportedCrimeFaction)) {
 				curobj->unreportedCrimeFaction = nullptr;
 				logger::debug(FMT_STRING("location formid: {:08X} cleared unreportedCrimeFaction (set to null)"), curobj->formID);
-			}
-		}
-
-		if (!line.fullName.empty() && line.fullName != "none") {
-			try {
-				logger::debug(FMT_STRING("location formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
-				curobj->fullName = line.fullName;
-			} catch (const std::exception& e) {
 			}
 		}
 

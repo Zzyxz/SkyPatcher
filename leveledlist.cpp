@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <unordered_set>
 namespace LEVELEDLIST
 {
 	namespace
@@ -39,6 +40,20 @@ namespace LEVELEDLIST
 			static const sp::KeyTable table(kLeveledListKeys, std::size(kLeveledListKeys));
 			return table;
 		}
+
+		bool NamesPlugin(const std::string& a_name)
+		{
+			const auto lower = toLowerCase(a_name);
+			return lower.ends_with(".esp") || lower.ends_with(".esm") || lower.ends_with(".esl");
+		}
+
+		bool IsNoFilterOn(const std::string& a_value)
+		{
+			const auto lower = toLowerCase(trim(a_value));
+			return lower == "true" || lower == "yes";
+		}
+
+		constexpr std::uint32_t kBulkFilterEntryLimit = 120;
 	}
 
 	struct line_content create_patch_instruction(const std::string& line)
@@ -84,6 +99,8 @@ namespace LEVELEDLIST
 
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
+
 			if (!line.objects.empty()) {
 				for (const auto& objectstring : line.objects) {
 					RE::TESForm* currentform = nullptr;
@@ -93,11 +110,9 @@ namespace LEVELEDLIST
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::LeveledItem) {
 						object = (RE::TESLevItem*)currentform;
-						if (static_cast<uint32_t>(object->numEntries) > 120) {
-							logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), object->formID);
-							continue;
+						if (patched.insert(object->formID).second) {
+							patch(line, object);
 						}
-						patch(line, object);
 					}
 				}
 			}
@@ -111,19 +126,25 @@ namespace LEVELEDLIST
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::LeveledNPC) {
 						object = (RE::TESLevCharacter*)currentform;
-						patch(line, object);
+						if (patched.insert(object->formID).second) {
+							patch(line, object);
+						}
 					}
 				}
 			}
 
-			if (!line.noFilterLL.empty() && toLowerCase(line.noFilterLL) == "true") {
+			if (IsNoFilterOn(line.noFilterLL)) {
 				auto& objectArray = dataHandler->GetFormArray<RE::TESLevItem>();
 				for (const auto& curobj : objectArray) {
-					if (static_cast<uint32_t>(curobj->numEntries) > 120) {
+					if (!curobj || patched.contains(curobj->formID)) {
+						continue;
+					}
+					if (static_cast<uint32_t>(curobj->numEntries) > kBulkFilterEntryLimit) {
 						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
 						continue;
 					}
 
+					patched.insert(curobj->formID);
 					patch(line, curobj);
 				}
 			}
@@ -143,7 +164,11 @@ namespace LEVELEDLIST
 					bool containsOr = false;
 					bool found = false;
 
-					if (static_cast<uint32_t>(curobj->numEntries) > 120) {
+					if (!curobj || patched.contains(curobj->formID)) {
+						continue;
+					}
+
+					if (static_cast<uint32_t>(curobj->numEntries) > kBulkFilterEntryLimit) {
 						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
 						continue;
 					}
@@ -173,20 +198,25 @@ namespace LEVELEDLIST
 					}
 
 					if (found) {
+						patched.insert(curobj->formID);
 						patch(line, curobj);
 					}
 				}
 			}
 
 
-			if (!line.noFilterLLNPC.empty() && toLowerCase(line.noFilterLLNPC) == "true") {
+			if (IsNoFilterOn(line.noFilterLLNPC)) {
 				auto& tesLevCharArray = dataHandler->GetFormArray<RE::TESLevCharacter>();
 				for (const auto& curobj : tesLevCharArray) {
-					if (static_cast<uint32_t>(curobj->numEntries) > 120) {
+					if (!curobj || patched.contains(curobj->formID)) {
+						continue;
+					}
+					if (static_cast<uint32_t>(curobj->numEntries) > kBulkFilterEntryLimit) {
 						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
 						continue;
 					}
 
+					patched.insert(curobj->formID);
 					patch(line, curobj);
 				}
 			}
@@ -224,7 +254,7 @@ namespace LEVELEDLIST
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								if (NamesPlugin(fileName)) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -306,7 +336,7 @@ namespace LEVELEDLIST
 			if (relation == "<=") {
 				return value <= number;
 			}
-			if (relation.empty()) {
+			if (relation.empty() || relation == "=" || relation == "==") {
 				return value == number;
 			}
 			return false;
@@ -354,52 +384,49 @@ namespace LEVELEDLIST
 					continue;
 				}
 
-				std::string relationSign = "";
-				uint16_t    number = 0;
-				bool        hasNumberLvl = false;
-				bool        hasNumberCount = false;
+				std::string   levelRelation = "";
+				std::string   countRelation = "";
+				std::uint16_t levelNumber = 0;
+				std::uint16_t countNumber = 0;
+				bool          hasNumberLvl = false;
+				bool          hasNumberCount = false;
 
 				if (objectsToRemove.size() >= 2) {
 					std::vector<std::string> templvl = splitRelationNumber(objectsToRemove[1]);
 					if (templvl.size() == 2 && templvl[0] != "none") {
-						if (!parseUInt16(templvl[0], "remove level", number)) { continue; }
-						relationSign = templvl[1];
+						if (!parseUInt16(templvl[0], "remove level", levelNumber)) { continue; }
+						levelRelation = templvl[1];
 						hasNumberLvl = true;
 					}
 					else if (templvl.size() == 1 && templvl[0] != "none") {
-						if (!parseUInt16(templvl[0], "remove level", number)) { continue; }
+						if (!parseUInt16(templvl[0], "remove level", levelNumber)) { continue; }
 						hasNumberLvl = true;
-					}
-
-					if (hasNumberLvl) {
-						const auto removed = EngineLists::RemoveLeveledObjects(curobj, list, [&](const RE::LEVELED_OBJECT& x) {
-							return x.form == delForm && matchesRelation(x.level, relationSign, number);
-						});
-						logger::debug(FMT_STRING("leveled Lists {:08X} level {}{} removed Form {:08X} ({} entries)"), curobj->formID, relationSign.empty() ? "==" : relationSign, number, delForm->formID, removed);
 					}
 				}
 
 				if (objectsToRemove.size() >= 3) {
 					std::vector<std::string> tempcount = splitRelationNumber(objectsToRemove[2]);
-
-					relationSign = "";
-
 					if (tempcount.size() == 2 && tempcount[0] != "none") {
-						if (!parseUInt16(tempcount[0], "remove count", number)) { continue; }
-						relationSign = tempcount[1];
+						if (!parseUInt16(tempcount[0], "remove count", countNumber)) { continue; }
+						countRelation = tempcount[1];
 						hasNumberCount = true;
 					}
 					else if (tempcount.size() == 1 && tempcount[0] != "none") {
-						if (!parseUInt16(tempcount[0], "remove count", number)) { continue; }
+						if (!parseUInt16(tempcount[0], "remove count", countNumber)) { continue; }
 						hasNumberCount = true;
 					}
+				}
 
-					if (hasNumberCount) {
-						const auto removed = EngineLists::RemoveLeveledObjects(curobj, list, [&](const RE::LEVELED_OBJECT& x) {
-							return x.form == delForm && matchesRelation(x.count, relationSign, number);
-						});
-						logger::debug(FMT_STRING("leveled Lists {:08X} count {}{} removed Form {:08X} ({} entries)"), curobj->formID, relationSign.empty() ? "==" : relationSign, number, delForm->formID, removed);
-					}
+				if (hasNumberLvl || hasNumberCount) {
+					const auto removed = EngineLists::RemoveLeveledObjects(curobj, list, [&](const RE::LEVELED_OBJECT& x) {
+						return x.form == delForm &&
+						       (!hasNumberLvl || matchesRelation(x.level, levelRelation, levelNumber)) &&
+						       (!hasNumberCount || matchesRelation(x.count, countRelation, countNumber));
+					});
+					const auto describe = [](bool has, const std::string& relation, std::uint16_t number) {
+						return has ? fmt::format("{}{}", relation.empty() ? "==" : relation, number) : std::string("any");
+					};
+					logger::debug(FMT_STRING("leveled Lists {:08X} level {} count {} removed Form {:08X} ({} entries)"), curobj->formID, describe(hasNumberLvl, levelRelation, levelNumber), describe(hasNumberCount, countRelation, countNumber), delForm->formID, removed);
 				}
 
 				if (!hasNumberLvl && !hasNumberCount) {
@@ -426,42 +453,34 @@ namespace LEVELEDLIST
 			}
 		}
 
-		if (!line.clear.empty() && line.clear != "none") {
-			if (line.clear == "yes" || line.clear == "true") {
-				EngineLists::ClearLeveledList(curobj, list);
-				logger::debug(FMT_STRING("leveled lists {:08X} cleared"), curobj->formID);
-			}
+		if (IsSwitchOn(line.clear)) {
+			EngineLists::ClearLeveledList(curobj, list);
+			logger::debug(FMT_STRING("leveled lists {:08X} cleared"), curobj->formID);
 		}
 
-		if (!line.calcForLevel.empty() && line.calcForLevel != "none") {
-			if (line.calcForLevel == "yes" || line.calcForLevel == "true") {
-				curobj->llFlags = RE::TESLeveledList::Flag::kCalculateFromAllLevelsLTOrEqPCLevel;
-				logger::debug(FMT_STRING("leveled lists {:08X} set to Calculate from all levels <= players level"), curobj->formID);
-			}
+		if (IsSwitchOn(line.calcForLevel)) {
+			curobj->llFlags = RE::TESLeveledList::Flag::kCalculateFromAllLevelsLTOrEqPCLevel;
+			logger::debug(FMT_STRING("leveled lists {:08X} set to Calculate from all levels <= players level"), curobj->formID);
 		}
 
-		if (!line.calcEachItem.empty() && line.calcEachItem != "none") {
-			if (line.calcEachItem == "yes" || line.calcEachItem == "true") {
-				curobj->llFlags = RE::TESLeveledList::Flag::kCalculateForEachItemInCount;
-				logger::debug(FMT_STRING("leveled lists {:08X} set to Calculate for each item in count"), curobj->formID);
-			}
+		if (IsSwitchOn(line.calcEachItem)) {
+			curobj->llFlags = RE::TESLeveledList::Flag::kCalculateForEachItemInCount;
+			logger::debug(FMT_STRING("leveled lists {:08X} set to Calculate for each item in count"), curobj->formID);
 		}
 
-		if (!line.calcForLevelAndEachItem.empty() && line.calcForLevelAndEachItem != "none") {
-			if (line.calcForLevelAndEachItem == "yes" || line.calcForLevelAndEachItem == "true") {
-				curobj->llFlags = static_cast<RE::TESLeveledList::Flag>(
-					RE::TESLeveledList::Flag::kCalculateFromAllLevelsLTOrEqPCLevel |
-					RE::TESLeveledList::Flag::kCalculateForEachItemInCount);
-				logger::debug(FMT_STRING("leveled lists {:08X} set to  Calculate from all levels <= players level and for each item in count"), curobj->formID);
-			}
+		if (IsSwitchOn(line.calcForLevelAndEachItem)) {
+			curobj->llFlags = static_cast<RE::TESLeveledList::Flag>(
+				RE::TESLeveledList::Flag::kCalculateFromAllLevelsLTOrEqPCLevel |
+				RE::TESLeveledList::Flag::kCalculateForEachItemInCount);
+			logger::debug(FMT_STRING("leveled lists {:08X} set to  Calculate from all levels <= players level and for each item in count"), curobj->formID);
 		}
 
-		if (!line.calcUseAll.empty() && line.calcUseAll != "none") {
+		if (IsSwitchOn(line.calcUseAll)) {
 			curobj->llFlags = RE::TESLeveledList::kUseAll;
 			logger::debug(FMT_STRING("leveled lists {:08X} set to Use All"), curobj->formID);
 		}
 
-		if (!line.clearFlags.empty() && line.clearFlags != "none") {
+		if (IsSwitchOn(line.clearFlags)) {
 			curobj->llFlags = resetAllFlags(curobj->llFlags);
 			logger::debug(FMT_STRING("leveled lists {:08X} cleared all flags"), curobj->formID);
 		}
@@ -539,6 +558,10 @@ namespace LEVELEDLIST
 		if (!line.chanceNone.empty() && line.chanceNone != "none") {
 			std::uint16_t chance = 0;
 			if (parseUInt16(line.chanceNone, "chanceNone", chance)) {
+				if (chance > 100) {
+					logger::warn(FMT_STRING("leveled list {:08X}: chanceNone {} is above 100, using 100"), curobj->formID, chance);
+					chance = 100;
+				}
 				curobj->chanceNone = static_cast<int8_t>(chance);
 				logger::debug(FMT_STRING("leveled Lists {:08X} set chance of none to {}"), curobj->formID, curobj->chanceNone);
 			}
@@ -559,7 +582,7 @@ namespace LEVELEDLIST
 				int count = 0;
 				EngineLists::ForEachLeveledObject(list, [&](RE::LEVELED_OBJECT& obj) {
 					if (obj.form == formToReplace) {
-						const auto scaled = std::ceil(static_cast<double>(obj.count) * multiplier);
+						const auto scaled = MultRoundUp(static_cast<double>(obj.count), multiplier);
 						obj.count = static_cast<std::uint16_t>(std::clamp(scaled, 0.0, static_cast<double>(std::numeric_limits<std::uint16_t>::max())));
 						count++;
 					}

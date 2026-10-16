@@ -10,6 +10,7 @@ using namespace std;
 #	include <iostream>
 #	include <regex>
 #	include <string>
+#	include <unordered_set>
 #	include <vector>
 
 namespace AMMO
@@ -59,7 +60,7 @@ namespace AMMO
 	struct line_content create_patch_instruction_ammo(const std::string& line);
 	void process_patch_instructions_ammo(const std::list<line_content>& tokens);
 	void* readConfig(const std::string& folder);
-	void* patch(const AMMO::line_content& line, RE::TESAmmo* curobj);
+	void* patch(const AMMO::line_content& line, RE::TESAmmo* curobj, std::unordered_set<RE::FormID>* a_projectilesDone = nullptr);
 }
 
 #endif

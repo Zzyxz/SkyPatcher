@@ -3,6 +3,7 @@
 #include "parsetable.h"
 #include <utility.h>
 #include <cmath>
+#include <unordered_set>
 
 #ifndef M_PI
 #	define M_PI 3.14159265358979323846
@@ -29,6 +30,7 @@ namespace MOVETYPE
 			{ "rotateInPlaceRun", sp::FieldKind::Value, MOVE_F(rotateInPlaceRun) },
 			{ "rotateInPlaceWalk", sp::FieldKind::Value, MOVE_F(rotateInPlaceWalk) },
 			{ "rotateWhileMovingRun", sp::FieldKind::Value, MOVE_F(rotateWhileMovingRun) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, MOVE_F(modNames) },
 		};
 
 #undef MOVE_F
@@ -54,6 +56,7 @@ namespace MOVETYPE
 		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSMovementType>();
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -63,7 +66,9 @@ namespace MOVETYPE
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::MovementType) {
 						curobj = (RE::BGSMovementType*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -138,7 +143,8 @@ namespace MOVETYPE
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);

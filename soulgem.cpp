@@ -102,7 +102,7 @@ namespace SOULGEM
 					for (const auto& textureString : line.alternateTexturesFind) {
 						RE::TESForm* currentform = nullptr;
 						currentform = GetFormFromIdentifier(textureString);
-						if (currentform) {
+						if (currentform && currentform->formType == RE::FormType::TextureSet) {
 							if (findTextureSet(curobj, currentform->As<RE::BGSTextureSet>())) {
 								found = true;
 								break;
@@ -134,7 +134,7 @@ namespace SOULGEM
 				if (!line.objectExcluded.empty() && found) {
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::SoulGem)) {
 						found = false;
-						logger::info("soulgem Excluded.");
+						logger::debug(FMT_STRING("soulgem formid: {:08X} excluded"), curobj->formID);
 					}
 				}
 
@@ -174,7 +174,8 @@ namespace SOULGEM
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -242,7 +243,7 @@ namespace SOULGEM
 
 		if (!line.valueMult.empty() && line.valueMult != "none") {
 			try {
-				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
+				curobj->value = static_cast<int32_t>(MultRoundUp(curobj->value, std::stof(line.valueMult)));
 				logger::debug(FMT_STRING("soulgem formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
 			} catch (const std::exception& e) {
 			}
@@ -340,6 +341,11 @@ namespace SOULGEM
 			}
 		}
 
+		if (((!line.soulCapacity.empty() && line.soulCapacity != "none") || (!line.currentSoul.empty() && line.currentSoul != "none")) && curobj->GetContainedSoul() > curobj->GetMaximumCapacity()) {
+			logger::warn(FMT_STRING("soulgem formid: {:08X} {} current soul is bigger than the soul capacity, lowered to the capacity"), curobj->formID, curobj->fullName);
+			curobj->currentSoul = curobj->GetMaximumCapacity();
+		}
+
 		if (!line.fullName.empty() && line.fullName != "none") {
 			try {
 				logger::debug(FMT_STRING("soulgem formid: {:08X} {} changed fullname to {}"), curobj->formID, curobj->fullName, line.fullName);
@@ -357,7 +363,7 @@ namespace SOULGEM
 			}
 		}
 
-		if (!line.alternateTexturesClear.empty() && line.alternateTexturesClear != "none") {
+		if (IsSwitchOn(line.alternateTexturesClear)) {
 			clearAltTextures(curobj);
 			logger::debug(FMT_STRING("soulgem formid: {:08X} {} cleared all alternate textures"), curobj->formID, curobj->fullName);
 		}
@@ -372,7 +378,7 @@ namespace SOULGEM
 					if (removed) {
 						logger::debug(FMT_STRING("soulgem formid: {:08X} {} alternateTexture removed {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
 					} else {
-						logger::critical(FMT_STRING("soulgem formid: {:08X} {} alternateTexture not removed {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
+						logger::warn(FMT_STRING("soulgem formid: {:08X} {} alternateTexture not removed {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
 					}
 				}
 			}

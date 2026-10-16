@@ -1,6 +1,7 @@
 #include "reference.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <unordered_set>
 
 namespace REFERENCE
 {
@@ -25,6 +26,39 @@ namespace REFERENCE
 			static const sp::KeyTable table(kReferenceKeys, std::size(kReferenceKeys));
 			return table;
 		}
+
+		bool isSafeReplacementBase(const RE::TESForm* form)
+		{
+			switch (form->GetFormType()) {
+			case RE::FormType::Sound:
+			case RE::FormType::Scroll:
+			case RE::FormType::Activator:
+			case RE::FormType::TalkingActivator:
+			case RE::FormType::Armor:
+			case RE::FormType::Book:
+			case RE::FormType::Container:
+			case RE::FormType::Door:
+			case RE::FormType::Ingredient:
+			case RE::FormType::Light:
+			case RE::FormType::Misc:
+			case RE::FormType::Apparatus:
+			case RE::FormType::Static:
+			case RE::FormType::StaticCollection:
+			case RE::FormType::MovableStatic:
+			case RE::FormType::Tree:
+			case RE::FormType::Flora:
+			case RE::FormType::Furniture:
+			case RE::FormType::Weapon:
+			case RE::FormType::Ammo:
+			case RE::FormType::KeyMaster:
+			case RE::FormType::AlchemyItem:
+			case RE::FormType::IdleMarker:
+			case RE::FormType::SoulGem:
+				return true;
+			default:
+				return false;
+			}
+		}
 	}
 
 	struct patch_instruction create_patch_instructions(const std::string& line)
@@ -39,11 +73,17 @@ namespace REFERENCE
 		logger::debug("processing patch instructions");
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> excluded;
+			for (const auto& excludedString : line.objectExcluded) {
+				if (const auto excludedID = BuildFormIDFromIdentifier(excludedString); excludedID != 0x0) {
+					excluded.insert(excludedID);
+				}
+			}
 			if (!line.objects.empty()) {
 				for (const auto& npcstring : line.objects) {
 					std::string string_form = npcstring;
 					auto curFormID = BuildFormIDFromIdentifier(string_form);
-					if (curFormID != 0x0) {
+					if (curFormID != 0x0 && !excluded.contains(curFormID)) {
 						patch(line, curFormID);
 					}
 				}
@@ -79,7 +119,8 @@ namespace REFERENCE
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -126,16 +167,18 @@ namespace REFERENCE
 			RE::TESForm* currentform = nullptr;
 			std::string  string_form = line.baseobject;
 			currentform = GetFormFromIdentifier(string_form);
-			if (currentform && currentform->IsBoundObject()) {
+			if (currentform && currentform->IsBoundObject() && isSafeReplacementBase(currentform)) {
 				rData.refrDataMap[curobj].replaceWith = (RE::TESBoundObject*)currentform;
 				logger::debug(FMT_STRING("refr formid to replace: {:08X} "), curobj );
+			} else if (currentform && currentform->IsBoundObject()) {
+				logger::warn(FMT_STRING("refr formid: {:08X} replaceBaseObject {:08X} skipped, this kind of base object can not be used for a placed object"), curobj, currentform->formID);
 			}
 
 			
 		}
 
 
-		if(line.disable == "true"){
+		if (const auto disable = toLowerCase(trim(line.disable)); disable == "true" || disable == "yes") {
 			rData.refrDataMap[curobj].disable = true;
 			logger::debug(FMT_STRING("refr formid: {:08X} disabled"), curobj);
 		}

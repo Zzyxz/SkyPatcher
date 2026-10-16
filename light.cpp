@@ -325,9 +325,10 @@ void *readConfig(const std::string &folder) {
         continue;
       }
       fileName = fileName.substr(0, extensionPosition);
-      if ((fileName.find(".esp") != std::string::npos ||
-           fileName.find(".esl") != std::string::npos ||
-           fileName.find(".esm") != std::string::npos) &&
+      const std::string lowerName = toLowerCase(fileName);
+      if ((lowerName.find(".esp") != std::string::npos ||
+           lowerName.find(".esl") != std::string::npos ||
+           lowerName.find(".esm") != std::string::npos) &&
           !IsPluginInstalled(fileName.c_str())) {
         logger::info("{} not found or is not a valid plugin file, skipping "
                      "config file {}.",

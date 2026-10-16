@@ -2,6 +2,8 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <algorithm>
+#include <cmath>
 #include <unordered_set>
 
 namespace ENCOUNTERZONE
@@ -114,7 +116,7 @@ namespace ENCOUNTERZONE
 
 
 
-				if (!line.objectExcluded.empty()) {
+				if (!line.objectExcluded.empty() && found) {
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::EncounterZone)) {
 						found = false;
 					}
@@ -165,7 +167,8 @@ namespace ENCOUNTERZONE
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -243,19 +246,15 @@ namespace ENCOUNTERZONE
 
 
 		if (!line.minLevelMult.empty() && line.minLevelMult != "none") {
-			try {
-				int val = std::stoi(line.minLevelMult);
-				if (val < INT8_MIN || val > INT8_MAX) {
-					logger::debug(FMT_STRING("encounterzone formid: {:08X} {} minLevelMult out of bound"), curobj->formID, clib_util::editorID::get_editorID(curobj));
-				} else {
-					int result = curobj->data.minLevel * val;
-					result = clamp(result, static_cast<int>(INT8_MIN), static_cast<int>(INT8_MAX));
-					curobj->data.minLevel = static_cast<int8_t>(result);
+			const auto mult = tryParseFloat(line.minLevelMult);
+			if (!mult || !std::isfinite(*mult)) {
+				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} minLevelMult invalid"), curobj->formID, clib_util::editorID::get_editorID(curobj));
+			} else {
+				const double product = static_cast<double>(curobj->data.minLevel) * static_cast<double>(*mult);
+				const double result = std::clamp(std::round(product), static_cast<double>(INT8_MIN), static_cast<double>(INT8_MAX));
+				curobj->data.minLevel = static_cast<int8_t>(result);
 
-					logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed(mult) minLevel {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.minLevel);
-				}
-
-			} catch (const std::exception& e) {
+				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed(mult) minLevel {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.minLevel);
 			}
 		}
 
@@ -292,20 +291,28 @@ namespace ENCOUNTERZONE
 		}
 
 		if (!line.maxLevelMult.empty() && line.maxLevelMult != "none") {
-			try {
-				int val = std::stoi(line.maxLevelMult);
-				if (val < INT8_MIN || val > INT8_MAX) {
-					logger::debug(FMT_STRING("encounterzone formid: {:08X} {} maxLevelMult out of bound"), curobj->formID, clib_util::editorID::get_editorID(curobj));
-				} else {
-					int result = curobj->data.maxLevel * val;
-					result = clamp(result, static_cast<int>(INT8_MIN), static_cast<int>(INT8_MAX));
-					curobj->data.maxLevel = static_cast<int8_t>(result);
+			const auto mult = tryParseFloat(line.maxLevelMult);
+			if (!mult || !std::isfinite(*mult)) {
+				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} maxLevelMult invalid"), curobj->formID, clib_util::editorID::get_editorID(curobj));
+			} else {
+				const double product = static_cast<double>(curobj->data.maxLevel) * static_cast<double>(*mult);
+				const double result = std::clamp(std::round(product), static_cast<double>(INT8_MIN), static_cast<double>(INT8_MAX));
+				curobj->data.maxLevel = static_cast<int8_t>(result);
 
-					logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed(mult) maxLevel {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.maxLevel);
-				}
-
-			} catch (const std::exception& e) {
+				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} changed(mult) maxLevel {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.maxLevel);
 			}
+		}
+
+		const auto isSet = [](const std::string& value) { return !value.empty() && value != "none"; };
+		const bool minChanged = isSet(line.minLevel) || isSet(line.minLevelAdd) || isSet(line.minLevelMult);
+		const bool maxChanged = isSet(line.maxLevel) || isSet(line.maxLevelAdd) || isSet(line.maxLevelMult);
+		if ((minChanged || maxChanged) && curobj->data.maxLevel > 0 && curobj->data.minLevel > curobj->data.maxLevel) {
+			if (maxChanged && !minChanged) {
+				curobj->data.minLevel = curobj->data.maxLevel;
+			} else {
+				curobj->data.maxLevel = curobj->data.minLevel;
+			}
+			logger::warn(FMT_STRING("encounterzone formid: {:08X} {} minLevel was above maxLevel, set both to {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.minLevel);
 		}
 
 		if (!line.location.empty() && line.location != "none") {
@@ -314,7 +321,7 @@ namespace ENCOUNTERZONE
 			currentform = GetFormFromIdentifier(string_form);
 			if (currentform && currentform->formType == RE::FormType::Location) {
 				curobj->data.location = (RE::BGSLocation*)currentform;
-				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} set location {:08X} {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.location->formID, curobj->formID, clib_util::editorID::get_editorID(curobj->data.location));
+				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} set location {:08X} {}"), curobj->formID, clib_util::editorID::get_editorID(curobj), curobj->data.location->formID, clib_util::editorID::get_editorID(curobj->data.location));
 			} else if (toLowerCase(line.location) == "null") {
 				curobj->data.location = nullptr;
 				logger::debug(FMT_STRING("encounterzone formid: {:08X} {} removed location"), curobj->formID, clib_util::editorID::get_editorID(curobj) );

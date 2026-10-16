@@ -3,7 +3,10 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <algorithm>
+#include <cmath>
 #include <limits>
+#include <random>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -120,6 +123,11 @@ namespace NPC
 			{ "changeBaseObject", sp::FieldKind::Value, NPC_F(baseObject) },
 		};
 
+		constexpr sp::KeySpec kNpcFlagKeys[] = {
+			{ "setFlags", sp::FieldKind::ListAssign, NPC_F(setFlags) },
+			{ "removeFlags", sp::FieldKind::ListAssign, NPC_F(removeFlags) },
+		};
+
 #undef NPC_F
 
 		const sp::KeyTable& npcKeyTable()
@@ -127,12 +135,60 @@ namespace NPC
 			static const sp::KeyTable table(kNpcKeys, std::size(kNpcKeys));
 			return table;
 		}
+
+		const sp::KeyTable& npcFlagKeyTable()
+		{
+			static const sp::KeyTable table(kNpcFlagKeys, std::size(kNpcFlagKeys));
+			return table;
+		}
+
+		bool isAttackDataToken(std::string_view a_token)
+		{
+			const std::size_t eq = a_token.find('=');
+			if (eq == std::string_view::npos) {
+				return false;
+			}
+			std::size_t keyEnd = eq;
+			while (keyEnd > 0 && sp::detail::isRegexSpace(a_token[keyEnd - 1])) {
+				--keyEnd;
+			}
+			const std::string key = toLowerCase(std::string(a_token.substr(0, keyEnd)));
+			return key.ends_with("attackdatatoadd") || key.ends_with("attackdatatochange");
+		}
+
+		void reparseFlagKeysWithoutAttackData(const std::string& a_line, patch_instruction& a_l)
+		{
+			if (a_l.setFlags.empty() && a_l.removeFlags.empty()) {
+				return;
+			}
+			std::string ownTokens;
+			std::size_t start = 0;
+			while (start <= a_line.size()) {
+				std::size_t end = a_line.find(':', start);
+				if (end == std::string::npos) {
+					end = a_line.size();
+				}
+				const std::string_view token(a_line.data() + start, end - start);
+				if (!isAttackDataToken(token)) {
+					ownTokens.append(token);
+					ownTokens.push_back(':');
+				}
+				if (end == a_line.size()) {
+					break;
+				}
+				start = end + 1;
+			}
+			a_l.setFlags.clear();
+			a_l.removeFlags.clear();
+			npcFlagKeyTable().parse(ownTokens, &a_l);
+		}
 	}
 
 	struct patch_instruction create_patch_instruction(const std::string& line)
 	{
 		patch_instruction l;
 		npcKeyTable().parse(line, &l);
+		reparseFlagKeysWithoutAttackData(line, l);
 		return l;
 	}
 
@@ -144,10 +200,16 @@ namespace NPC
 			return !a_value.empty() && a_value != "none";
 		}
 
-		bool switchOn(const std::string& a_value)
+		float randomInRange(float a_lo, float a_hi)
 		{
-			const auto v = toLowerCase(a_value);
-			return !v.empty() && v != "none" && v != "false" && v != "no" && v != "0";
+			static thread_local std::mt19937 engine{ std::random_device{}() };
+			const int lo = static_cast<int>(std::ceil(std::min(a_lo, a_hi)));
+			const int hi = static_cast<int>(std::floor(std::max(a_lo, a_hi)));
+			if (lo > hi) {
+				return a_lo;
+			}
+			std::uniform_int_distribution<int> distribution(lo, hi);
+			return static_cast<float>(distribution(engine));
 		}
 
 		bool npcRuleInvalidatesIndex(const patch_instruction& line)
@@ -218,7 +280,7 @@ namespace NPC
 				}
 			}
 
-			if (!line.object.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterClass.empty() && line.filterCombatStyle.empty() && line.filterTemplate.empty() && line.filterFactions.empty() && line.filterFactionsOr.empty() && line.filterByOutfit.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
+			if (!line.object.empty() && line.races.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.filterClass.empty() && line.filterCombatStyle.empty() && line.filterTemplate.empty() && line.filterFactions.empty() && line.filterFactionsOr.empty() && line.filterByOutfit.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
 				continue;
 			}
 
@@ -532,7 +594,7 @@ namespace NPC
 					curobj->formID, curobj->fullName, lowerFlag);
 			}
 			else {
-				logger::warn(FMT_STRING("Unknown aggression level '{}' provided in restrictToTemplateFlags"), lowerFlag);
+				logger::warn(FMT_STRING("Unknown aggression level '{}' provided in setAggression"), lowerFlag);
 			}
 		}
 
@@ -648,7 +710,7 @@ namespace NPC
 				if (line.setRandomVisualStyle[0].size() > 3 && toLowerCase(line.setRandomVisualStyle[0][3]) == "protected") {
 					aData.npcData[curobj->formID].protectVoice = true;
 				}
-				if (switchOn(line.rvsRestrictToTraits)) {
+				if (IsSwitchOn(line.rvsRestrictToTraits)) {
 					aData.npcData[curobj->formID].restrictToTraits = true;
 				}
 
@@ -695,7 +757,7 @@ namespace NPC
 				if (line.addRandomVisualStyle[0].size() > 3 && toLowerCase(line.addRandomVisualStyle[0][3]) == "protected") {
 					aData.npcData[curobj->formID].protectVoice = true;
 				}
-				if (switchOn(line.rvsRestrictToTraits)) {
+				if (IsSwitchOn(line.rvsRestrictToTraits)) {
 					aData.npcData[curobj->formID].restrictToTraits = true;
 				}
 
@@ -754,7 +816,7 @@ namespace NPC
 					if (i < line.factionsToAddRank1.size()) {
 						const float lo = line.factionsToAddRank1[i];
 						const float hi = i < line.factionsToAddRank2.size() ? line.factionsToAddRank2[i] : lo;
-						finalValue = hi > lo ? floor((std::rand() / static_cast<float>(RAND_MAX)) * (hi - lo + 1) + lo) : lo;
+						finalValue = hi > lo ? randomInRange(lo, hi) : lo;
 						finalValue = std::clamp(finalValue, 0.0f, 127.0f);
 					}
 					bool factionFound = false;
@@ -784,9 +846,9 @@ namespace NPC
 
 				if (line.level_min == "none") {
 					if (!line.values1.empty() && !line.values2.empty()) {
-						unsigned seed = static_cast<unsigned>(std::time(nullptr)) + static_cast<unsigned>(std::clock());
-						std::srand(seed);
-						finalValue = floor((std::rand() / static_cast<float>(RAND_MAX)) * (line.values2[i] - line.values1[i] + 1) + line.values1[i]);
+						const float lo = line.values1[i];
+						const float hi = line.values2[i];
+						finalValue = lo == hi ? lo : randomInRange(lo, hi);
 					}
 
 				}
@@ -1213,7 +1275,7 @@ namespace NPC
 			}
 		}
 
-		if (switchOn(line.clearInventory)) {
+		if (IsSwitchOn(line.clearInventory)) {
 			EngineLists::ClearContainer(*curobj);
 			logger::debug(FMT_STRING("npc formid: {:08X} removed all objects "), curobj->formID);
 		}
@@ -1411,7 +1473,7 @@ namespace NPC
 
 
 
-		if (!line.clearClassFromAttributes.empty() && line.clearClassFromAttributes != "none") {
+		if (IsSwitchOn(line.clearClassFromAttributes)) {
 			if (curobj->npcClass) {
 				auto newClass = copyClass(curobj->npcClass)->As<RE::TESClass>();
 				newClass->data.attributeWeights.health = 0;
@@ -1560,11 +1622,14 @@ namespace NPC
 						logger::debug("npc formid: {:08X} attackData - attackchance {}", curobj->formID, newAttackData->data.attackChance);
 					}
 					else if (lowerKey == "attackspell") {
-						if (object[1] != "null") {
+						if (!IsNullValue(object[1])) {
 							auto form = GetFormFromIdentifier(object[1]);
-							if (form) {
-								newAttackData->data.attackSpell = (RE::SpellItem*)form;
+							if (form && (form->formType == RE::FormType::Spell || form->formType == RE::FormType::Scroll)) {
+								newAttackData->data.attackSpell = static_cast<RE::SpellItem*>(form);
 								logger::debug("npc formid: {:08X} attackData - attackspell {:08X}", curobj->formID, newAttackData->data.attackSpell->formID);
+							}
+							else if (form) {
+								logger::warn("npc formid: {:08X} attackData - attackSpell {} is not a spell", curobj->formID, object[1]);
 							}
 						}
 						else {
@@ -1585,11 +1650,14 @@ namespace NPC
 						logger::debug("npc formid: {:08X} attackData - staggeroffset {}", curobj->formID, newAttackData->data.staggerOffset);
 					}
 					else if (lowerKey == "attacktype") {
-						if (object[1] != "null") {
+						if (!IsNullValue(object[1])) {
 							auto form = GetFormFromIdentifier(object[1]);
-							if (form) {
-								newAttackData->data.attackType = (RE::BGSKeyword*)form;
+							if (form && form->formType == RE::FormType::Keyword) {
+								newAttackData->data.attackType = static_cast<RE::BGSKeyword*>(form);
 								logger::debug("npc formid: {:08X} attackData - attacktype {:08X}", curobj->formID, newAttackData->data.attackType->formID);
+							}
+							else if (form) {
+								logger::warn("npc formid: {:08X} attackData - attackType {} is not a keyword", curobj->formID, object[1]);
 							}
 						}
 						else {
@@ -1697,11 +1765,14 @@ namespace NPC
 							logger::debug("npc formid: {:08X} attackData changed - attackchance {}", curobj->formID, newAttackData->data.attackChance);
 						}
 						else if (lowerKey == "attackspell") {
-							if (object[1] != "null") {
+							if (!IsNullValue(object[1])) {
 								auto form = GetFormFromIdentifier(object[1]);
-								if (form) {
-									newAttackData->data.attackSpell = (RE::SpellItem*)form;
+								if (form && (form->formType == RE::FormType::Spell || form->formType == RE::FormType::Scroll)) {
+									newAttackData->data.attackSpell = static_cast<RE::SpellItem*>(form);
 									logger::debug("npc formid: {:08X} attackData changed - attackspell {:08X}", curobj->formID, newAttackData->data.attackSpell->formID);
+								}
+								else if (form) {
+									logger::warn("npc formid: {:08X} attackData changed - attackSpell {} is not a spell", curobj->formID, object[1]);
 								}
 							}
 							else {
@@ -1722,11 +1793,14 @@ namespace NPC
 							logger::debug("npc formid: {:08X} attackData changed - staggeroffset {}", curobj->formID, newAttackData->data.staggerOffset);
 						}
 						else if (lowerKey == "attacktype") {
-							if (object[1] != "null") {
+							if (!IsNullValue(object[1])) {
 								auto form = GetFormFromIdentifier(object[1]);
-								if (form) {
-									newAttackData->data.attackType = (RE::BGSKeyword*)form;
+								if (form && form->formType == RE::FormType::Keyword) {
+									newAttackData->data.attackType = static_cast<RE::BGSKeyword*>(form);
 									logger::debug("npc formid: {:08X} attackData changed - attacktype {:08X}", curobj->formID, newAttackData->data.attackType->formID);
+								}
+								else if (form) {
+									logger::warn("npc formid: {:08X} attackData changed - attackType {} is not a keyword", curobj->formID, object[1]);
 								}
 							}
 							else {
@@ -1820,8 +1894,9 @@ namespace NPC
 							if (pos != std::string::npos) {
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
+								const std::string lowerName = toLowerCase(fileName);
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);

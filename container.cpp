@@ -27,6 +27,7 @@ namespace CONTAINER
 			{ "clear", sp::FieldKind::Value, CONT_F(clear) },
 			{ "removeContainerObjectsByKeywords", sp::FieldKind::List, CONT_F(removeContainerObjectsByKeyword) },
 			{ "objectMultCount", sp::FieldKind::Arr2D, CONT_F(objectMultCount) },
+			{ "filterByModNames", sp::FieldKind::ListAssign, CONT_F(modNames) },
 		};
 
 #undef CONT_F
@@ -35,6 +36,28 @@ namespace CONTAINER
 		{
 			static const sp::KeyTable table(kContainerKeys, std::size(kContainerKeys));
 			return table;
+		}
+
+		bool NamesPlugin(const std::string& a_name)
+		{
+			const auto lower = toLowerCase(a_name);
+			return lower.ends_with(".esp") || lower.ends_with(".esm") || lower.ends_with(".esl");
+		}
+
+		bool ParseAddCount(const std::string& a_text, std::string_view a_key, std::int32_t& a_count)
+		{
+			try {
+				const auto value = std::stoi(a_text);
+				if (value <= 0) {
+					logger::warn(FMT_STRING("Count for {} must be above 0, skipping entry: {}"), a_key, a_text);
+					return false;
+				}
+				a_count = value;
+				return true;
+			} catch (...) {
+				logger::warn(FMT_STRING("Invalid count for {}: {}"), a_key, a_text);
+				return false;
+			}
 		}
 	}
 
@@ -189,7 +212,7 @@ namespace CONTAINER
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								if (NamesPlugin(fileName)) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -236,7 +259,7 @@ namespace CONTAINER
 	{
 
 
-		if (!line.clear.empty() && line.clear != "none") {
+		if (IsSwitchOn(line.clear)) {
 			try {
 				EngineLists::ClearContainer(*curobj);
 				logger::debug(FMT_STRING("container formid: {:08X} cleared all objects"), curobj->formID);
@@ -268,7 +291,7 @@ namespace CONTAINER
 					logger::warn(FMT_STRING("removeContainerObjectsByCount is missing its count, skipping entry: {}"), addFormStr);
 					continue;
 				}
-				uint32_t count = 0;
+				std::int32_t count = 0;
 				try {
 					count = std::stoi(objectToAdd[1]);
 				} catch (...) {
@@ -279,8 +302,8 @@ namespace CONTAINER
 				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
-					EngineLists::RemoveContainerObjectWithCount(*curobj, addForm, static_cast<std::int32_t>(count));
-					logger::debug(FMT_STRING("container formid: {:08X} removed by count Form {:08X}"), curobj->formID, addForm->formID);
+					const auto removed = EngineLists::RemoveContainerObjectWithCount(*curobj, addForm, count);
+					logger::debug(FMT_STRING("container formid: {:08X} removed by count Form {:08X} ({} entries)"), curobj->formID, addForm->formID, removed);
 				}
 				else {
 					logger::critical(FMT_STRING("container formid: {:08X} Form not found: {} (removeContainerObjectsByCount)"), curobj->formID, objectToAdd[0]);
@@ -298,7 +321,7 @@ namespace CONTAINER
 					logger::debug(FMT_STRING("container formid: {:08X} removed by keyword Form {:08X}"), curobj->formID, addForm->formID);
 				}
 				else {
-					logger::critical(FMT_STRING("container formid: {:08X} Form not found: {} (remove by keyword)"), curobj->formID, objectToAdd[0]);
+					logger::critical(FMT_STRING("container formid: {:08X} Form not found: {} (remove by keyword)"), curobj->formID, objectToAdd);
 				}
 			}
 		}
@@ -306,15 +329,10 @@ namespace CONTAINER
 		if (!line.addedContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjects) {
 				if (objectToAdd.empty()) { logger::warn("container {:08X}: empty addedContainerObjects entry", curobj->formID); continue; }
-				uint32_t            count = 1;
+				std::int32_t        count = 1;
 				std::string         addFormStr = objectToAdd[0];
-				if (objectToAdd.size() > 1) {
-					try {
-						count = std::stoi(objectToAdd[1]);
-					} catch (...) {
-						logger::warn(FMT_STRING("Invalid count for addToContainers: {}"), objectToAdd[1]);
-						continue;
-					}
+				if (objectToAdd.size() > 1 && !ParseAddCount(objectToAdd[1], "addToContainers", count)) {
+					continue;
 				}
 				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
 				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
@@ -323,7 +341,7 @@ namespace CONTAINER
 						logger::debug(FMT_STRING("container {:08X} add container objects skipped Leveled Item {:08X}"), curobj->formID, addForm->formID);
 						continue;
 					}
-					EngineLists::AddContainerObject(*curobj, addForm, static_cast<std::int32_t>(count));
+					EngineLists::AddContainerObject(*curobj, addForm, count);
 					logger::debug(FMT_STRING("container {:08X} added Form {:08X}"), curobj->formID, addForm->formID);
 				}
 				else {
@@ -335,15 +353,10 @@ namespace CONTAINER
 		if (!line.addedContainerObjectsOnce.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjectsOnce) {
 				if (objectToAdd.empty()) { logger::warn("container {:08X}: empty addedContainerObjectsOnce entry", curobj->formID); continue; }
-				uint32_t            count = 1;
+				std::int32_t        count = 1;
 				std::string         addFormStr = objectToAdd[0];
-				if (objectToAdd.size() > 1) {
-					try {
-						count = std::stoi(objectToAdd[1]);
-					} catch (...) {
-						logger::warn(FMT_STRING("Invalid count for addOnceToContainers: {}"), objectToAdd[1]);
-						continue;
-					}
+				if (objectToAdd.size() > 1 && !ParseAddCount(objectToAdd[1], "addOnceToContainers", count)) {
+					continue;
 				}
 				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
 				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
@@ -354,7 +367,7 @@ namespace CONTAINER
 					}
 					bool formExists = curobj->CountObjectsInContainer(addForm) != 0;
 					if (!formExists) {
-						EngineLists::AddContainerObject(*curobj, addForm, static_cast<std::int32_t>(count));
+						EngineLists::AddContainerObject(*curobj, addForm, count);
 						logger::debug(FMT_STRING("container {:08X} added once Form  {:08X}"), curobj->formID, addForm->formID);
 					}
 					else {
@@ -374,20 +387,26 @@ namespace CONTAINER
 					continue;
 				}
 				std::string formToReplaceString = objectToreplace[0];
-				float multiplier = 1;
-				if (objectToreplace.size() > 1) {
-					try {
-						multiplier = std::stof(objectToreplace[1]);
-					} catch (...) {
-						logger::warn(FMT_STRING("Invalid multiplier for objectMultCount: {}"), objectToreplace[1]);
-						continue;
-					}
+				if (objectToreplace.size() < 2) {
+					logger::warn(FMT_STRING("objectMultCount is missing its multiplier, skipping entry: {}"), formToReplaceString);
+					continue;
 				}
-				int          count = 0;
+				float multiplier = 1;
+				try {
+					multiplier = std::stof(objectToreplace[1]);
+				} catch (...) {
+					logger::warn(FMT_STRING("Invalid multiplier for objectMultCount: {}"), objectToreplace[1]);
+					continue;
+				}
+				if (!(multiplier > 0.0f)) {
+					logger::warn(FMT_STRING("Multiplier for objectMultCount must be above 0, skipping entry: {}"), objectToreplace[1]);
+					continue;
+				}
+				std::size_t  count = 0;
 				RE::TESForm* formToReplace = GetFormFromIdentifier(formToReplaceString);
 				if (formToReplace && formToReplace->IsBoundObject() && curobj->CountObjectsInContainer(formToReplace->As<RE::TESBoundObject>()) > 0) {
-					count = multiplyContainerObjectCount(*curobj, formToReplace->As<RE::TESBoundObject>(), multiplier);
-					logger::debug(FMT_STRING("container {:08X} all matching forms of {:08X} have their count multiplied by {}"), curobj->formID, formToReplace->formID, multiplier, count);
+					count = EngineLists::MultiplyContainerObjectCounts(*curobj, formToReplace->As<RE::TESBoundObject>(), multiplier);
+					logger::debug(FMT_STRING("container {:08X} all matching forms of {:08X} have their count multiplied by {} ({} entries)"), curobj->formID, formToReplace->formID, multiplier, count);
 				}
 			}
 		}
@@ -406,8 +425,13 @@ namespace CONTAINER
 				auto* oldObject = resolvedOldObject ? resolvedOldObject->As<RE::TESBoundObject>() : nullptr;
 				auto* newObject = resolvedNewObject ? resolvedNewObject->As<RE::TESBoundObject>() : nullptr;
 
+				if (oldObject && newObject && newObject->As<RE::TESLevItem>() && iAllowLeveledListsAddedToContainers == 0) {
+					logger::debug(FMT_STRING("container {:08X} replace skipped Leveled Item {:08X}"), curobj->formID, newObject->formID);
+					continue;
+				}
+
 				if (oldObject && newObject) {
-				replaceObjectInContainer(*curobj, oldObject, newObject);
+					replaceObjectInContainer(*curobj, oldObject, newObject);
 					logger::debug(FMT_STRING("container formid: {:08X} replaced Form {:08X} with Form {:08X} "), curobj->formID, oldObject->formID, newObject->formID);
 				}
 			}

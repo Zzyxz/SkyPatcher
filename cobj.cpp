@@ -3,6 +3,8 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <algorithm>
+#include <limits>
 #include <unordered_set>
 
 namespace COBJ
@@ -15,6 +17,7 @@ namespace COBJ
 			{ "filterByCobjs", sp::FieldKind::List, COBJ_F(object) },
 			{ "filterByWorkBenchKeywords", sp::FieldKind::List, COBJ_F(filterWorkbenchKeywords) },
 			{ "filterWorkbenchKeywordsExcluded", sp::FieldKind::List, COBJ_F(filterWorkbenchKeywordsExcluded) },
+			{ "filterByWorkbenchKeywordsExcluded", sp::FieldKind::List, COBJ_F(filterWorkbenchKeywordsExcluded) },
 			{ "filterByEditorIdContains", sp::FieldKind::ListAssign, COBJ_F(filterByEditorIdContains) },
 			{ "filterByEditorIdContainsOr", sp::FieldKind::ListAssign, COBJ_F(filterByEditorIdContainsOr) },
 			{ "filterByEditorIdContainsExcluded", sp::FieldKind::ListAssign, COBJ_F(filterByEditorIdContainsExcluded) },
@@ -50,6 +53,30 @@ namespace COBJ
 			static const sp::KeyTable table(kCobjKeys, std::size(kCobjKeys));
 			return table;
 		}
+
+		bool NamesPlugin(const std::string& a_name)
+		{
+			const auto lower = toLowerCase(a_name);
+			return lower.ends_with(".esp") || lower.ends_with(".esm") || lower.ends_with(".esl");
+		}
+
+		bool ParseIngredientCount(const std::string& a_text, std::string_view a_key, std::int32_t& a_count)
+		{
+			try {
+				const auto value = std::stoi(a_text);
+				if (value <= 0) {
+					logger::warn(FMT_STRING("Count for {} must be above 0, skipping entry: {}"), a_key, a_text);
+					return false;
+				}
+				a_count = value;
+				return true;
+			} catch (...) {
+				logger::warn(FMT_STRING("Invalid count for {}: {}"), a_key, a_text);
+				return false;
+			}
+		}
+
+		constexpr double kMaxCreatedCount = static_cast<double>(std::numeric_limits<std::uint16_t>::max());
 	}
 
 	struct patch_instruction create_patch_instructions(const std::string& line)
@@ -113,13 +140,13 @@ namespace COBJ
 
 				RE::BGSKeywordForm* createdItemKw = curobj->createdItem ? ngcompat::KeywordForm(curobj->createdItem) : nullptr;
 
-				if (!line.keywordsNew.empty() && createdItemKw) {
-					keywordNewAnd = formfilter::matchesKeywordsAnd(view, createdItemKw, nullptr);
+				if (!line.keywordsNew.empty()) {
+					keywordNewAnd = createdItemKw && formfilter::matchesKeywordsAnd(view, createdItemKw, nullptr);
 				} else {
 					keywordNewAnd = true;
 				}
-				if (!line.keywordsNewOr.empty() && createdItemKw) {
-					keywordNewOr = formfilter::matchesKeywordsOr(view, createdItemKw, nullptr);
+				if (!line.keywordsNewOr.empty()) {
+					keywordNewOr = createdItemKw && formfilter::matchesKeywordsOr(view, createdItemKw, nullptr);
 				} else {
 					keywordNewOr = true;
 				}
@@ -322,7 +349,7 @@ namespace COBJ
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								if (NamesPlugin(fileName)) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -366,7 +393,7 @@ namespace COBJ
 	{
 
 
-		if (!line.clearIngredients.empty() && line.clearIngredients != "none") {
+		if (IsSwitchOn(line.clearIngredients)) {
 			try {
 				EngineLists::ClearContainer(curobj->requiredItems);
 				logger::debug(FMT_STRING("cobj formid: {:08X} cleared all ingredients"), curobj->formID);
@@ -382,7 +409,7 @@ namespace COBJ
 					logger::warn(FMT_STRING("removeFromCobjsByCount is missing its count, skipping entry: {}"), addFormStr);
 					continue;
 				}
-				uint32_t count = 0;
+				std::int32_t count = 0;
 				try {
 					count = std::stoi(objectToAdd[1]);
 				} catch (...) {
@@ -393,8 +420,8 @@ namespace COBJ
 				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
-					EngineLists::RemoveContainerObjectWithCount(curobj->requiredItems, addForm, static_cast<std::int32_t>(count));
-					logger::debug(FMT_STRING("cobj formid: {:08X} removed Form {:08X}"), curobj->formID, addForm->formID);
+					const auto removed = EngineLists::RemoveContainerObjectWithCount(curobj->requiredItems, addForm, count);
+					logger::debug(FMT_STRING("cobj formid: {:08X} removed Form {:08X} ({} entries)"), curobj->formID, addForm->formID, removed);
 				} else {
 					logger::critical(FMT_STRING("cobj formid: {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
 				}
@@ -418,22 +445,17 @@ namespace COBJ
 
 		if (!line.addedContainerObjects.empty()) {
 			for (const auto& objectToAdd : line.addedContainerObjects) {
-				if (objectToAdd.size() < 2) { logger::warn("cobj {:08X}: invalid addedContainerObjects entry, expected 2 values", curobj->formID); continue; }
+				if (objectToAdd.empty()) { logger::warn("cobj {:08X}: empty addedContainerObjects entry", curobj->formID); continue; }
 				std::string addFormStr = objectToAdd[0];
-				uint32_t count = 1;
-				if (objectToAdd.size() > 1) {
-					try {
-						count = std::stoi(objectToAdd[1]);
-					} catch (...) {
-						logger::warn(FMT_STRING("Invalid count for addToCobjs: {}"), objectToAdd[1]);
-						continue;
-					}
+				std::int32_t count = 1;
+				if (objectToAdd.size() > 1 && !ParseIngredientCount(objectToAdd[1], "addToCobjs", count)) {
+					continue;
 				}
 				auto* resolvedForm = GetFormFromIdentifier(addFormStr);
 				auto* addForm = resolvedForm ? resolvedForm->As<RE::TESBoundObject>() : nullptr;
 
 				if (addForm) {
-					EngineLists::AddContainerObject(curobj->requiredItems, addForm, static_cast<std::int32_t>(count));
+					EngineLists::AddContainerObject(curobj->requiredItems, addForm, count);
 					logger::debug(FMT_STRING("cobj formid: {:08X} added Form {:08X}"), curobj->formID, addForm->formID);
 				} else {
 					logger::critical(FMT_STRING("cobj formid: {:08X} Form not found: {}"), curobj->formID, objectToAdd[0]);
@@ -507,7 +529,7 @@ namespace COBJ
 			std::string multStr = entry[1];
 
 			RE::TESBoundObject* oldObject = nullptr;
-			if (!identifier.empty() && identifier != "null") {
+			if (!identifier.empty() && !IsNullValue(identifier)) {
 				auto* resolvedObject = GetFormFromIdentifier(identifier);
 				oldObject = resolvedObject ? resolvedObject->As<RE::TESBoundObject>() : nullptr;
 				if (!oldObject) {
@@ -517,10 +539,7 @@ namespace COBJ
 			}
 
 			int32_t newCount = 1;
-			try {
-				newCount = std::stoi(multStr);
-			} catch (...) {
-				logger::warn(FMT_STRING("Invalid count for cobj change: {}"), multStr);
+			if (!ParseIngredientCount(multStr, "changeCobjsCount", newCount)) {
 				continue;
 			}
 
@@ -544,7 +563,7 @@ namespace COBJ
 			std::string multStr = entry[1];
 
 			RE::TESBoundObject* oldObject = nullptr;
-			if (!identifier.empty() && identifier != "null") {
+			if (!identifier.empty() && !IsNullValue(identifier)) {
 				auto* resolvedObject = GetFormFromIdentifier(identifier);
 				oldObject = resolvedObject ? resolvedObject->As<RE::TESBoundObject>() : nullptr;
 				if (!oldObject) {
@@ -561,12 +580,12 @@ namespace COBJ
 				continue;
 			}
 
-			if (multiplier <= 0.0f) {
+			if (!(multiplier > 0.0f)) {
 				logger::warn(FMT_STRING("Multiplier must be > 0: {}"), multStr);
 				continue;
 			}
 
-			if (multiplyContainerObjectCount(curobj->requiredItems, oldObject, multiplier)) {
+			if (EngineLists::MultiplyContainerObjectCounts(curobj->requiredItems, oldObject, multiplier) > 0) {
 				if (oldObject) {
 					logger::debug(FMT_STRING("cobj formid: {:08X} changed/multiplied count for {:08X} by {}"),
 						curobj->formID, oldObject->formID, multiplier);
@@ -584,7 +603,7 @@ namespace COBJ
 			if (currentform && currentform->formType == RE::FormType::Keyword) {
 				curobj->benchKeyword = (RE::BGSKeyword*)currentform;
 				logger::debug(FMT_STRING("cobj formid: {:08X} changed workbench keyword to {:08X} {} "), curobj->formID, ((RE::BGSKeyword*)currentform)->formID, ((RE::BGSKeyword*)currentform)->formEditorID);
-			} else if (line.workbenchKeyword == "null") {
+			} else if (IsNullValue(line.workbenchKeyword)) {
 				curobj->benchKeyword = nullptr;
 				logger::debug(FMT_STRING("cobj formid: {:08X} changed workbench keyword to null (none)"), curobj->formID);
 			}
@@ -597,7 +616,7 @@ namespace COBJ
 			if (currentform && currentform->IsBoundObject()) {
 				curobj->createdItem = (RE::TESBoundObject*)currentform;
 				logger::debug(FMT_STRING("cobj formid: {:08X} changed createdObject {:08X} "), curobj->formID, (currentform)->formID);
-			} else if (line.createdObject == "null") {
+			} else if (IsNullValue(line.createdObject)) {
 				curobj->createdItem = nullptr;
 				logger::debug(FMT_STRING("cobj formid: {:08X} changed createdObject null (none)"), curobj->formID);
 			}
@@ -605,8 +624,16 @@ namespace COBJ
 
 		if (!line.count.empty() && line.count != "none") {
 			try {
-				curobj->data.numConstructed = std::stoi(line.count);
-				logger::debug(FMT_STRING("cobj formid: {:08X} changed count {}"), curobj->formID, curobj->data.numConstructed);
+				const auto value = std::stoi(line.count);
+				if (value < 0) {
+					logger::warn(FMT_STRING("Count for cobj must not be negative: {}"), line.count);
+				} else {
+					if (value > static_cast<int>(kMaxCreatedCount)) {
+						logger::warn(FMT_STRING("Count for cobj {} is above 65535, using 65535"), line.count);
+					}
+					curobj->data.numConstructed = static_cast<std::uint16_t>(std::min(value, static_cast<int>(kMaxCreatedCount)));
+					logger::debug(FMT_STRING("cobj formid: {:08X} changed count {}"), curobj->formID, curobj->data.numConstructed);
+				}
 			} catch (...) {
 				logger::warn(FMT_STRING("Invalid count for cobj: {}"), line.count);
 			}
@@ -614,8 +641,18 @@ namespace COBJ
 
 		if (!line.countMult.empty() && line.countMult != "none") {
 			try {
-				curobj->data.numConstructed = curobj->data.numConstructed * std::stof(line.countMult);
-				logger::debug(FMT_STRING("cobj formid: {:08X} multiplied count {}"), curobj->formID, curobj->data.numConstructed);
+				const auto mult = std::stof(line.countMult);
+				if (!(mult >= 0.0f)) {
+					logger::warn(FMT_STRING("countMult for cobj must not be negative: {}"), line.countMult);
+				} else {
+					const auto oldCount = curobj->data.numConstructed;
+					auto       scaled = MultRoundDown(static_cast<double>(oldCount), mult);
+					if (oldCount > 0 && mult > 0.0f && scaled < 1.0) {
+						scaled = 1.0;
+					}
+					curobj->data.numConstructed = static_cast<std::uint16_t>(std::clamp(scaled, 0.0, kMaxCreatedCount));
+					logger::debug(FMT_STRING("cobj formid: {:08X} multiplied count {}"), curobj->formID, curobj->data.numConstructed);
+				}
 			} catch (...) {
 				logger::warn(FMT_STRING("Invalid countMult for cobj: {}"), line.countMult);
 			}

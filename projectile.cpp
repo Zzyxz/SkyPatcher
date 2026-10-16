@@ -76,7 +76,11 @@ namespace PROJECTILE
 				}
 			}
 
-			if (!line.object.empty() && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
+			if (!line.alternateTexturesFind.empty()) {
+				logger::warn("filterByAlternateTextures finds no projectiles (they have no alternate textures)");
+			}
+
+			if (!line.object.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
 				continue;
 			}
 
@@ -116,7 +120,8 @@ namespace PROJECTILE
 					found = true;
 				}
 
-				if (!found && line.object.empty() && line.alternateTexturesFind.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty()) {
+				if (!found && line.object.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() &&
+					line.alternateTexturesFind.empty()) {
 					found = true;
 				}
 
@@ -321,11 +326,24 @@ namespace PROJECTILE
 			currentform = GetFormFromIdentifier(string_form);
 			if (currentform && currentform->formType == RE::FormType::Explosion) {
 				curobj->data.explosionType = (RE::BGSExplosion*)currentform;
-				logger::debug(FMT_STRING("npc formid: {:08X} changed explosion to {:08X} "), curobj->formID, currentform->formID);
-			} else if (line.explosion == "null") {
+				logger::debug(FMT_STRING("projectile formid: {:08X} changed explosion to {:08X} "), curobj->formID, currentform->formID);
+			} else if (IsNullValue(line.explosion)) {
 				curobj->data.explosionType = nullptr;
-				logger::debug(FMT_STRING("npc formid: {:08X} changed explosion to null (none) "), curobj->formID);
+				logger::debug(FMT_STRING("projectile formid: {:08X} changed explosion to null (none) "), curobj->formID);
 			}
+		}
+
+		if (!line.model.empty() && line.model != "none") {
+			try {
+				curobj->SetModel(line.model.c_str());
+				curobj->ReplaceModel();
+				logger::debug(FMT_STRING("projectile formid: {:08X} {} changed model path {}"), curobj->formID, curobj->fullName, curobj->model.c_str());
+			} catch (const std::exception& e) {
+			}
+		}
+
+		if (!line.alternateTextures.empty() || !line.alternateTexturesRemove.empty() || IsSwitchOn(line.alternateTexturesClear)) {
+			logger::debug(FMT_STRING("projectile formid: {:08X} {} has no alternate textures; alternate texture keys ignored"), curobj->formID, curobj->fullName);
 		}
 
 
@@ -360,7 +378,8 @@ namespace PROJECTILE
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);

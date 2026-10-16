@@ -2,6 +2,7 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <unordered_set>
 
 namespace FACTION
 {
@@ -43,6 +44,7 @@ namespace FACTION
 		auto& ObjectArray = dataHandler->GetFormArray<RE::TESFaction>();
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -52,7 +54,9 @@ namespace FACTION
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Faction) {
 						curobj = (RE::TESFaction*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
@@ -91,7 +95,7 @@ namespace FACTION
 				if (!line.objectExcluded.empty() && found) {
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Faction)) {
 						found = false;
-						logger::info("Projectile Excluded.");
+						logger::debug(FMT_STRING("faction formid: {:08X} excluded"), curobj->formID);
 					}
 				}
 
@@ -134,7 +138,8 @@ namespace FACTION
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -200,13 +205,13 @@ namespace FACTION
 				} else if (lowerRemoveFlag == "ignorescrimes_murder") {
 					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Murder);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled IgnoresCrimes_Murder"), curobj->formID, curobj->fullName);
-				} else if (lowerRemoveFlag == "ignorescrimes_assult") {
+				} else if (lowerRemoveFlag == "ignorescrimes_assult" || lowerRemoveFlag == "ignorescrimes_assault") {
 					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Assult);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled IgnoresCrimes_Assult"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "ignorescrimes_stealing") {
 					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Stealing);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled IgnoresCrimes_Stealing"), curobj->formID, curobj->fullName);
-				} else if (lowerRemoveFlag == "ingorescrimes_trespass") {
+				} else if (lowerRemoveFlag == "ingorescrimes_trespass" || lowerRemoveFlag == "ignorescrimes_trespass") {
 					ngcompat::ClearFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIngoresCrimes_Trespass);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag disabled IngoresCrimes_Trespass"), curobj->formID, curobj->fullName);
 				} else if (lowerRemoveFlag == "donotreportcrimesagainstmembers") {
@@ -253,7 +258,7 @@ namespace FACTION
 				} else if (lowerSetFlag == "ignorescrimes_murder") {
 					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Murder);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled IgnoresCrimes_Murder"), curobj->formID, curobj->fullName);
-				} else if (lowerSetFlag == "ignorescrimes_assult") {
+				} else if (lowerSetFlag == "ignorescrimes_assult" || lowerSetFlag == "ignorescrimes_assault") {
 					ngcompat::SetFlag(curobj->data.flags, RE::FACTION_DATA::Flag::kIgnoresCrimes_Assult);
 					logger::debug(FMT_STRING("faction formid: {:08X} {} flag enabled IgnoresCrimes_Assult"), curobj->formID, curobj->fullName);
 				} else if (lowerSetFlag == "ignorescrimes_stealing") {
@@ -302,6 +307,25 @@ namespace FACTION
 				RE::TESForm* form = GetFormFromIdentifier(factionStr);
 
 				if (!form || form->formType != RE::FormType::Faction) {
+					continue;
+				}
+
+				bool updated = false;
+				for (auto* existing : curobj->reactions) {
+					if (existing && existing->form == form) {
+						existing->reaction = modifier;
+						existing->fightReaction = fightReaction;
+						updated = true;
+					}
+				}
+				if (updated) {
+					logger::debug(
+						FMT_STRING("faction {:08X} {} relationship to {:08X} already exists, changed it, modifier {}, reaction {}"),
+						curobj->formID,
+						curobj->fullName,
+						form->formID,
+						modifier,
+						static_cast<int>(fightReaction));
 					continue;
 				}
 
@@ -359,8 +383,6 @@ namespace FACTION
 						form->formID,
 						modifier,
 						static_cast<int>(fightReaction));
-
-					break;
 				}
 
 				if (!found) {

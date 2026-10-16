@@ -167,6 +167,20 @@ namespace MGEF
 			bool                        playerGuard = false;
 		};
 
+		std::optional<RE::ActorValue> resolveActorValueName(const std::string& a_raw, const char* a_key)
+		{
+			const std::string name = toLowerCase(trim(a_raw));
+			if (IsNullValue(name)) {
+				return RE::ActorValue::kNone;
+			}
+			const RE::ActorValue av = StringToActorValue(name);
+			if (av == RE::ActorValue::kNone || av == RE::ActorValue::kTotal) {
+				logger::warn(FMT_STRING("mgef - unknown actor value in {}: {}"), a_key, name);
+				return std::nullopt;
+			}
+			return av;
+		}
+
 		MgefRuleExtras compileMgefExtras(const patch_instruction& line)
 		{
 			MgefRuleExtras x;
@@ -186,11 +200,13 @@ namespace MGEF
 				x.sounds.push_back(static_cast<RE::BGSSoundDescriptorForm*>(form));
 			}
 
-			for (const auto& npcstring : line.effectExcluded) {
-				std::string  string_form = npcstring;
-				RE::TESForm* currentform = GetFormFromIdentifier(string_form);
-				if (currentform) {
-					x.effectShadersExcluded.push_back(currentform->formID);
+			for (const auto* list : { &line.effectExcluded, &line.hitShaderExcluded }) {
+				for (const auto& npcstring : *list) {
+					std::string  string_form = npcstring;
+					RE::TESForm* currentform = GetFormFromIdentifier(string_form);
+					if (currentform && currentform->formType == RE::FormType::EffectShader) {
+						x.effectShadersExcluded.push_back(currentform->formID);
+					}
 				}
 			}
 
@@ -240,21 +256,30 @@ namespace MGEF
 			}
 
 			for (const auto& raw : line.restrictToMagicSkill) {
-				x.magicSkills.push_back(StringToActorValue(toLowerCase(raw)));
+				if (const auto av = resolveActorValueName(raw, "restrictToMagicSkill")) {
+					x.magicSkills.push_back(*av);
+				}
 			}
 			for (const auto& raw : line.restrictToActorValue) {
-				x.actorValues.push_back(StringToActorValue(toLowerCase(raw)));
+				if (const auto av = resolveActorValueName(raw, "restrictToActorValue")) {
+					x.actorValues.push_back(*av);
+				}
 			}
 
 			x.area = toLowerCase(line.restrictToArea);
 			x.detrimental = toLowerCase(line.restrictToDetrimental);
 
-			x.damageHealthActive = line.filterByDamageHealthMgefs != "none";
+			x.damageHealthActive = IsSwitchOn(line.filterByDamageHealthMgefs);
 			x.damageHealthHostile = toLowerCase(line.filterByDamageHealthMgefs) == "hostile";
 
 			x.playerGuard =
 				line.filterByEditorIdContains.empty() != line.filterByEditorIdContainsOr.empty();
 			return x;
+		}
+
+		bool isNullOrClear(const std::string& a_value)
+		{
+			return IsNullValue(a_value) || toLowerCase(trim(a_value)) == "clear";
 		}
 
 		const std::string& loweredEditorId(const RE::TESForm* a_form, formfilter::MatchScratch& a_s)
@@ -336,8 +361,9 @@ namespace MGEF
 
 				if (!line.filterByModNamesLastOverriddenExcluded.empty()) {
 					bool modFound = false;
+					const auto* lastFile = curobj->GetFile();
 					for (auto const modName : line.filterByModNamesLastOverriddenExcluded) {
-						if (modName == curobj->GetFile()->fileName) {
+						if (lastFile && modName == lastFile->fileName) {
 							modFound = true;
 							break;
 						}
@@ -396,7 +422,7 @@ namespace MGEF
 					}
 				}
 
-				if (!line.effectExcluded.empty() && found) {
+				if ((!line.effectExcluded.empty() || !line.hitShaderExcluded.empty()) && found) {
 					for (const RE::FormID id : extra.effectShadersExcluded) {
 						if (curobj->data.effectShader && curobj->data.effectShader->formID == id) {
 							found = false;
@@ -538,7 +564,8 @@ namespace MGEF
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -589,7 +616,7 @@ namespace MGEF
 				if (currentform && currentform->formType == RE::FormType::ArtObject) {
 					curobj->data.enchantEffectArt = (RE::BGSArtObject*)currentform;
 					logger::debug(FMT_STRING("mgef formid: {:08X} {} changed enchantEffectArt {:08X}"), curobj->formID, curobj->fullName, curobj->data.enchantEffectArt->formID);
-				} else if (line.enchantArt == "null" || line.enchantArt == "clear") {
+				} else if (isNullOrClear(line.enchantArt)) {
 					curobj->data.enchantEffectArt = nullptr;
 					logger::debug(FMT_STRING("mgef formid: {:08X} changed enchantEffectArt null (none)"), curobj->formID);
 				}
@@ -605,7 +632,7 @@ namespace MGEF
 				if (currentform && currentform->formType == RE::FormType::EffectShader ) {
 					curobj->data.enchantShader = (RE::TESEffectShader*)currentform;
 					logger::debug(FMT_STRING("mgef formid: {:08X} {} changed enchantShader {:08X}"), curobj->formID, curobj->fullName, curobj->data.enchantShader->formID);
-				} else if (line.enchantShader == "null" || line.enchantShader == "clear") {
+				} else if (isNullOrClear(line.enchantShader)) {
 					curobj->data.enchantShader = nullptr;
 					logger::debug(FMT_STRING("mgef formid: {:08X} changed enchantShader null (none)"), curobj->formID);
 				}
@@ -621,7 +648,7 @@ namespace MGEF
 				if (currentform && currentform->formType == RE::FormType::EffectShader) {
 					curobj->data.effectShader = (RE::TESEffectShader*)currentform;
 					logger::debug(FMT_STRING("mgef formid: {:08X} {} changed hitShader {:08X}"), curobj->formID, curobj->fullName, curobj->data.effectShader->formID);
-				} else if (line.hitShader == "null" || line.hitShader == "clear") {
+				} else if (isNullOrClear(line.hitShader)) {
 					curobj->data.effectShader = nullptr;
 					logger::debug(FMT_STRING("mgef formid: {:08X} changed hitShader null (none)"), curobj->formID);
 				}
@@ -795,13 +822,13 @@ namespace MGEF
 			try {
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.impactDataSet;
-				if (toLowerCase(string_form) != "null") {
+				if (!IsNullValue(string_form)) {
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::ImpactDataSet) {
 					curobj->data.impactDataSet = (RE::BGSImpactDataSet*)currentform;
 					logger::debug(FMT_STRING("mgef formid: {:08X} {} changed impactDataSet {:08X}"), curobj->formID, curobj->fullName, curobj->data.impactDataSet->formID);
 				}
-				} else if (toLowerCase(string_form) == "null") {
+				} else {
 				curobj->data.impactDataSet = nullptr;
 				logger::debug(FMT_STRING("mgef formid: {:08X} {} changed impactDataSet to null"), curobj->formID, curobj->fullName);
 
@@ -811,28 +838,48 @@ namespace MGEF
 		}
 
 		if (!line.baseCost.empty() && line.baseCost != "none") {
+			try {
 			curobj->data.baseCost = std::stof(line.baseCost);
 			logger::debug(FMT_STRING("mgef {:08X} {} changed base cost to {}"), curobj->formID, curobj->fullName, curobj->data.baseCost);
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("magic effect {:08X}: invalid baseCost skipped: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.minimumSkillLevel.empty() && line.minimumSkillLevel != "none") {
+			try {
 			curobj->data.minimumSkill = std::stoi(line.minimumSkillLevel);
 			logger::debug(FMT_STRING("mgef {:08X} {} changed minimum skill level to {}"), curobj->formID, curobj->fullName, curobj->data.minimumSkill);
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("magic effect {:08X}: invalid minimumSkillLevel skipped: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.spellmakingCastingTime.empty() && line.spellmakingCastingTime != "none") {
+			try {
 			curobj->data.spellmakingChargeTime = std::stof(line.spellmakingCastingTime);
 			logger::debug(FMT_STRING("mgef {:08X} {} changed spellmaking casting time to {}"), curobj->formID, curobj->fullName, curobj->data.spellmakingChargeTime);
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("magic effect {:08X}: invalid spellmakingCastingTime skipped: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.spellmakingArea.empty() && line.spellmakingArea != "none") {
+			try {
 			curobj->data.spellmakingArea = std::stoi(line.spellmakingArea);
 			logger::debug(FMT_STRING("mgef {:08X} {} changed spellmaking area to {}"), curobj->formID, curobj->fullName, curobj->data.spellmakingArea);
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("magic effect {:08X}: invalid spellmakingArea skipped: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.skillUsageMult.empty() && line.skillUsageMult != "none") {
+			try {
 			curobj->data.skillUsageMult = std::stof(line.skillUsageMult);
 			logger::debug(FMT_STRING("mgef {:08X} {} changed skillUsageMult to {}"), curobj->formID, curobj->fullName, curobj->data.skillUsageMult);
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("magic effect {:08X}: invalid skillUsageMult skipped: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if (!line.castType.empty() && line.castType != "none") {
@@ -855,13 +902,13 @@ namespace MGEF
 			try {
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.projectile;
-				if (toLowerCase(string_form) != "null") {
+				if (!IsNullValue(string_form)) {
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::Projectile) {
 					curobj->data.projectileBase = (RE::BGSProjectile*)currentform;
 					logger::debug(FMT_STRING("mgef formid: {:08X} {} changed projectileBase {:08X}"), curobj->formID, curobj->fullName, curobj->data.projectileBase->formID);
 				}
-				} else if (toLowerCase(string_form) == "null") {
+				} else {
 					curobj->data.projectileBase = nullptr;
 				logger::debug(FMT_STRING("mgef formid: {:08X} {} changed projectileBase to null"), curobj->formID, curobj->fullName);
 
@@ -875,13 +922,13 @@ namespace MGEF
 			try {
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.castingArt;
-				if (toLowerCase(string_form) != "null") {
+				if (!isNullOrClear(string_form)) {
 				currentform = GetFormFromIdentifier(string_form);
 				if (currentform && currentform->formType == RE::FormType::ArtObject) {
 					curobj->data.castingArt = (RE::BGSArtObject*)currentform;
 					logger::debug(FMT_STRING("mgef formid: {:08X} {} changed castingArt {:08X}"), curobj->formID, curobj->fullName, curobj->data.castingArt->formID);
 				}
-				} else if (toLowerCase(string_form) == "null" || toLowerCase(string_form) == "clear") {
+				} else {
 				curobj->data.castingArt = nullptr;
 				logger::debug(FMT_STRING("mgef formid: {:08X} {} changed castingArt to null"), curobj->formID, curobj->fullName);
 				}
@@ -894,13 +941,13 @@ namespace MGEF
 			try {
 				RE::TESForm* currentform = nullptr;
 				std::string  string_form = line.perk;
-				if (toLowerCase(string_form) != "null") {
+				if (!isNullOrClear(string_form)) {
 				currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Perk) {
 						curobj->data.perk = (RE::BGSPerk*)currentform;
 						logger::debug(FMT_STRING("mgef formid: {:08X} {} changed perk {:08X}"), curobj->formID, curobj->fullName, curobj->data.perk->formID);
 					}
-				} else if (toLowerCase(string_form) == "null" || toLowerCase(string_form) == "clear") {
+				} else {
 					curobj->data.perk = nullptr;
 					logger::debug(FMT_STRING("mgef formid: {:08X} {} changed perk to null"), curobj->formID, curobj->fullName);
 				}
@@ -909,7 +956,7 @@ namespace MGEF
 			}
 		}
 
-		if (!line.removeEdgeGlow.empty() && line.removeEdgeGlow != "none") {
+		if (IsSwitchOn(line.removeEdgeGlow)) {
 			RE::TESEffectShader* effectShader = curobj->data.effectShader;
 			
 			if (effectShader) {
@@ -953,16 +1000,20 @@ namespace MGEF
 
 				RE::MagicSystem::SoundID soundID = *soundIDOpt;
 
-				if (spellFormStr == "null") {
+				if (IsNullValue(spellFormStr)) {
 					auto& sounds = curobj->effectSounds;
-					auto it = std::remove_if(sounds.begin(), sounds.end(),
-						[soundID](const RE::EffectSetting::SoundPair& pair) {
-							return pair.id == soundID;
-						});
+					bool  removed = false;
+					for (auto it = sounds.begin(); it != sounds.end();) {
+						if (it->id == soundID) {
+							it = sounds.erase(it);
+							removed = true;
+						} else {
+							++it;
+						}
+					}
 
-					if (it != sounds.end()) {
+					if (removed) {
 						logger::debug(FMT_STRING("mgef {:08X} removed sound {}"), curobj->formID, soundName);
-						sounds.erase(it);
 					}
 					else {
 						logger::debug(FMT_STRING("mgef {:08X} sound {} not found for removal"), curobj->formID, soundName);

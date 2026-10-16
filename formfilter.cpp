@@ -587,17 +587,16 @@ namespace formfilter
 					return false;
 				}
 				if (static_cast<Op>(a_p.op) == Op::ArmorAddon) {
-					bool foundInList = false;
+					bool anyResolved = false;
 					for (std::uint16_t i = 0; i < a_p.count; ++i) {
-						foundInList = false;
 						if (a_prog.pool[a_p.operands + i]) {
-							foundInList = operandHolds(a_prog, a_p, i, a_t, a_s);
-							if (!foundInList) {
+							if (!operandHolds(a_prog, a_p, i, a_t, a_s)) {
 								return false;
 							}
+							anyResolved = true;
 						}
 					}
-					return foundInList;
+					return anyResolved;
 				}
 				for (std::uint16_t i = 0; i < a_p.count; ++i) {
 					if (!operandHolds(a_prog, a_p, i, a_t, a_s)) {

@@ -214,6 +214,10 @@ RE::FormID BuildFormIDFromIdentifier(const std::string& identifier)
 		logger::warn("Mod not found: {}", modName);
 		return 0x0;
 	}
+	if (mod->GetCompileIndex() == 0xFF) {
+		logger::warn("Mod not active: {}", modName);
+		return 0x0;
+	}
 	std::uint32_t fullFormID = 0;
 	if (mod->IsLight() && (!REL::Module::IsVR() || ngcompat::VRESLFileCollection())) {
 		fullFormID = 0xFE000000 | (static_cast<std::uint32_t>(mod->GetSmallFileCompileIndex()) << 12) | (rawFormID & 0xFFF);
@@ -241,6 +245,27 @@ std::string toLowerCase(std::string pString)
 	return pString;
 }
 
+bool IsSwitchOn(const std::string& value)
+{
+	const auto v = toLowerCase(trim(value));
+	return !v.empty() && v != "none" && v != "false" && v != "no" && v != "0";
+}
+
+bool IsNullValue(const std::string& value)
+{
+	return toLowerCase(trim(value)) == "null";
+}
+
+double MultRoundUp(double value, double mult)
+{
+	return std::ceil(value * mult - 1e-4);
+}
+
+double MultRoundDown(double value, double mult)
+{
+	return std::floor(value * mult + 1e-4);
+}
+
 std::string normalizePath(const std::string& path)
 {
 	std::string normalized = path;
@@ -260,14 +285,17 @@ std::string trim(const std::string& str)
 
 std::vector<std::string> splitRelationNumber(const std::string& input)
 {
-	const std::regex&         re = cached_regex(R"(([<>]=?|[<>])\s*(\d+))", std::regex::ECMAScript);
+	const std::regex&         re = cached_regex(R"(([<>]=?|==?)\s*(\d+))", std::regex::ECMAScript);
 	std::smatch               match;
 	std::vector<std::string>  result;
 	result.reserve(2);
 
 	if (std::regex_search(input, match, re)) {
 		result.emplace_back(match[2].first, match[2].second);
-		result.emplace_back(match[1].first, match[1].second);
+		const std::string relation(match[1].first, match[1].second);
+		if (relation != "=" && relation != "==") {
+			result.push_back(relation);
+		}
 	} else {
 		const std::regex& digitRe = cached_regex(R"(\d+)", std::regex::ECMAScript);
 		if (std::regex_search(input, digitRe)) {
@@ -308,7 +336,7 @@ void extractToArr2D(const std::string& line, const std::string& regex_pattern_st
 	if (match.empty() || match[1].str().empty()) {
 	} else {
 		std::string valueLine = match[1].str();
-		size_t      startPos = valueLine.find("=") + 1;
+		size_t      startPos = 0;
 		size_t      pos = 0;
 		std::string token;
 		while ((pos = valueLine.find(",", startPos)) != std::string::npos) {
@@ -341,14 +369,12 @@ void extractToArr2D(const std::string& line, const std::string& regex_pattern_st
 	}
 }
 
-	void moveEffectToPosition0(RE::BSTArray<RE::Effect*>& effects, const RE::Effect* targetEffect)
-	{
-		if (!targetEffect || !targetEffect->baseEffect) {
-			return;
-		}
-		auto it = std::find_if(effects.begin(), effects.end(), [targetEffect](const RE::Effect* x) {
-			return x && x->baseEffect && x->baseEffect->formID == targetEffect->baseEffect->formID;
-		});
+void moveEffectToPosition0(RE::BSTArray<RE::Effect*>& effects, const RE::Effect* targetEffect)
+{
+	if (!targetEffect) {
+		return;
+	}
+	auto it = std::find(effects.begin(), effects.end(), targetEffect);
 
 	if (it != effects.end()) {
 		std::rotate(effects.begin(), it, it + 1);
@@ -419,6 +445,7 @@ RE::BGSKeyword* createKeyword()
 		{"onehanded", RE::ActorValue::kOneHanded},
 		{"twohanded", RE::ActorValue::kTwoHanded},
 		{"archery", RE::ActorValue::kArchery},
+		{"marksman", RE::ActorValue::kArchery},
 		{"block", RE::ActorValue::kBlock},
 		{"smithing", RE::ActorValue::kSmithing},
 		{"heavyarmor", RE::ActorValue::kHeavyArmor},
@@ -428,6 +455,7 @@ RE::BGSKeyword* createKeyword()
 		{"sneak", RE::ActorValue::kSneak},
 		{"alchemy", RE::ActorValue::kAlchemy},
 		{"speech", RE::ActorValue::kSpeech},
+		{"speechcraft", RE::ActorValue::kSpeech},
 		{"alteration", RE::ActorValue::kAlteration},
 		{"conjuration", RE::ActorValue::kConjuration},
 		{"destruction", RE::ActorValue::kDestruction},
@@ -523,12 +551,12 @@ RE::BGSKeyword* createKeyword()
 		{"reflectdamage", RE::ActorValue::kReflectDamage}
 	};
 
-	auto it = actorValueMap.find(valueString);
+	auto it = actorValueMap.find(toLowerCase(trim(valueString)));
 	if (it != actorValueMap.end()) {
 		return it->second;
 	}
 
-	return RE::ActorValue::kNone;
+	return kActorValueUnknown;
 }
 
 

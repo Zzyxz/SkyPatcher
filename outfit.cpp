@@ -2,6 +2,7 @@
 #include "formfilter.h"
 #include "parsetable.h"
 #include <utility.h>
+#include <unordered_set>
 
 namespace OUTFIT
 {
@@ -28,6 +29,37 @@ namespace OUTFIT
 			static const sp::KeyTable table(kOutfitKeys, std::size(kOutfitKeys));
 			return table;
 		}
+
+		bool NamesPlugin(const std::string& a_name)
+		{
+			const auto lower = toLowerCase(a_name);
+			return lower.ends_with(".esp") || lower.ends_with(".esm") || lower.ends_with(".esl");
+		}
+
+		void splitReplacePairs(const std::string& a_value, std::vector<std::string>& a_old, std::vector<std::string>& a_new)
+		{
+			std::size_t start = 0;
+			while (start <= a_value.size()) {
+				const auto comma = a_value.find(',', start);
+				const auto entry = a_value.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+				auto       separator = entry.find('=');
+				if (separator == std::string::npos) {
+					separator = entry.find('~');
+				}
+				if (separator != std::string::npos) {
+					const auto oldForm = trim(entry.substr(0, separator));
+					const auto newForm = trim(entry.substr(separator + 1));
+					if (!oldForm.empty() && oldForm.front() != ' ' && !newForm.empty() && newForm.front() != ' ') {
+						a_old.push_back(oldForm);
+						a_new.push_back(newForm);
+					}
+				}
+				if (comma == std::string::npos) {
+					break;
+				}
+				start = comma + 1;
+			}
+		}
 	}
 
 	struct patch_instruction create_patch_instructions(const std::string& line)
@@ -38,21 +70,8 @@ namespace OUTFIT
 		std::regex  formListReplace_regex("formsToReplace\\s*=([^:]+)", regex::icase);
 		std::smatch formListReplace_match;
 		std::regex_search(line, formListReplace_match, formListReplace_regex);
-		std::vector<std::string> formListReplace;
-		if (formListReplace_match.empty() || formListReplace_match[1].str().empty()) {
-		} else {
-			std::string formListReplace_str = formListReplace_match[1];
-			std::regex  pattern("([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\\s*=\\s*([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})", regex::icase);
-			std::smatch match;
-
-			auto begin = std::sregex_iterator(formListReplace_str.begin(), formListReplace_str.end(), pattern);
-			auto end = std::sregex_iterator();
-
-			for (std::sregex_iterator i = begin; i != end; ++i) {
-				std::smatch match = *i;
-				l.formsToReplace.push_back(match[1]);
-				l.formsToReplaceWith.push_back(match[2]);
-			}
+		if (!formListReplace_match.empty() && !formListReplace_match[1].str().empty()) {
+			splitReplacePairs(formListReplace_match[1].str(), l.formsToReplace, l.formsToReplaceWith);
 		}
 
 		return l;
@@ -65,6 +84,8 @@ namespace OUTFIT
 		auto& ObjectArray = dataHandler->GetFormArray<RE::BGSOutfit>();
 
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
+
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -74,12 +95,14 @@ namespace OUTFIT
 					currentform = GetFormFromIdentifier(string_form);
 					if (currentform && currentform->formType == RE::FormType::Outfit) {
 						curobj = (RE::BGSOutfit*)currentform;
-						patch(line, curobj);
+						if (patched.insert(curobj->formID).second) {
+							patch(line, curobj);
+						}
 					}
 				}
 			}
 
-			if (!line.object.empty() && !line.formAnd.empty() && !line.formOr.empty()) {
+			if (!line.object.empty() && line.formAnd.empty() && line.formOr.empty()) {
 				continue;
 			}
 
@@ -95,7 +118,7 @@ namespace OUTFIT
 				bool mgefAnd = false;
 				bool mgefOr = false;
 
-				if (!curobj || curobj->IsDeleted()) {
+				if (!curobj || curobj->IsDeleted() || patched.contains(curobj->formID)) {
 					continue;
 				}
 
@@ -104,15 +127,16 @@ namespace OUTFIT
 				}
 
 				if (!line.formAnd.empty()) {
-					bool foundInList = false;
+					bool anyResolved = false;
+					bool allInList = true;
 					for (const auto& mgefstring : line.formAnd) {
-						foundInList = false;
 						RE::TESForm*       currentform = nullptr;
 
 						std::string string_form = mgefstring;
 						currentform = GetFormFromIdentifier(string_form);
-						if (currentform ) {
-							
+						if (currentform) {
+							anyResolved = true;
+							bool foundInList = false;
 							for (const auto& outfit : curobj->outfitItems) {
 								if (outfit && outfit->formID == currentform->formID) {
 									foundInList = true;
@@ -120,14 +144,12 @@ namespace OUTFIT
 								}
 							}
 							if (!foundInList) {
-								mgefAnd = false;
+								allInList = false;
 								break;
 							}
 						}
 					}
-					if (foundInList) {
-						mgefAnd = true;
-					}
+					mgefAnd = anyResolved && allInList;
 				} else {
 					mgefAnd = true;
 				}
@@ -182,6 +204,7 @@ namespace OUTFIT
 				
 
 				if (found) {
+					patched.insert(curobj->formID);
 					patch(line, curobj);
 				}
 			}
@@ -215,7 +238,7 @@ namespace OUTFIT
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								if (NamesPlugin(fileName)) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -259,7 +282,7 @@ namespace OUTFIT
 	{
 		
 
-		if (!line.clear.empty() && line.clear != "none") {
+		if (IsSwitchOn(line.clear)) {
 			try {
 				curobj->outfitItems.clear();
 				logger::debug(FMT_STRING("outfit formid: {:08X} cleared"), curobj->formID);

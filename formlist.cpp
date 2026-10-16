@@ -24,6 +24,37 @@ namespace FORMLIST
 			static const sp::KeyTable table(kFormlistKeys, std::size(kFormlistKeys));
 			return table;
 		}
+
+		bool NamesPlugin(const std::string& a_name)
+		{
+			const auto lower = toLowerCase(a_name);
+			return lower.ends_with(".esp") || lower.ends_with(".esm") || lower.ends_with(".esl");
+		}
+
+		void splitReplacePairs(const std::string& a_value, std::vector<std::string>& a_old, std::vector<std::string>& a_new)
+		{
+			std::size_t start = 0;
+			while (start <= a_value.size()) {
+				const auto comma = a_value.find(',', start);
+				const auto entry = a_value.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+				auto       separator = entry.find('=');
+				if (separator == std::string::npos) {
+					separator = entry.find('~');
+				}
+				if (separator != std::string::npos) {
+					const auto oldForm = trim(entry.substr(0, separator));
+					const auto newForm = trim(entry.substr(separator + 1));
+					if (!oldForm.empty() && oldForm.front() != ' ' && !newForm.empty() && newForm.front() != ' ') {
+						a_old.push_back(oldForm);
+						a_new.push_back(newForm);
+					}
+				}
+				if (comma == std::string::npos) {
+					break;
+				}
+				start = comma + 1;
+			}
+		}
 	}
 
 	struct line_content create_patch_instruction(const std::string& line)
@@ -34,21 +65,8 @@ namespace FORMLIST
 		std::regex  formListReplace_regex("formsToReplace\\s*=([^:]+)", regex::icase);
 		std::smatch formListReplace_match;
 		std::regex_search(line, formListReplace_match, formListReplace_regex);
-		std::vector<std::string> formListReplace;
-		if (formListReplace_match.empty() || formListReplace_match[1].str().empty()) {
-		} else {
-			std::string formListReplace_str = formListReplace_match[1];
-			std::regex  pattern("([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})\\s*=\\s*([^,]+[ ]*[|][ ]*[a-zA-Z0-9]{1,8})", regex::icase);
-			std::smatch match;
-
-			auto begin = std::sregex_iterator(formListReplace_str.begin(), formListReplace_str.end(), pattern);
-			auto end = std::sregex_iterator();
-
-			for (std::sregex_iterator i = begin; i != end; ++i) {
-				std::smatch match = *i;
-				l.formsToReplace.push_back(match[1]);
-				l.formsToReplaceWith.push_back(match[2]);
-			}
+		if (!formListReplace_match.empty() && !formListReplace_match[1].str().empty()) {
+			splitReplacePairs(formListReplace_match[1].str(), l.formsToReplace, l.formsToReplaceWith);
 		}
 		return l;
 	}
@@ -90,7 +108,7 @@ namespace FORMLIST
 
 	void patch(const FORMLIST::line_content& line, RE::BGSListForm* curobj)
 	{
-		if (!line.clear.empty() && line.clear != "none") {
+		if (IsSwitchOn(line.clear)) {
 			curobj->forms.clear();
 		}
 
@@ -168,7 +186,7 @@ namespace FORMLIST
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								if (NamesPlugin(fileName)) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);

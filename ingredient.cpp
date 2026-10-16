@@ -1,6 +1,7 @@
 #include "ingredient.h"
 #include "formfilter.h"
 #include "parsetable.h"
+#include <sstream>
 #include <unordered_set>
 namespace INGR
 {
@@ -45,12 +46,70 @@ namespace INGR
 			static const sp::KeyTable table(kIngredientKeys, std::size(kIngredientKeys));
 			return table;
 		}
+
+		std::string standaloneClearValue(const std::string& a_line)
+		{
+			const std::size_t n = a_line.size();
+			std::size_t       tokStart = 0;
+			while (tokStart <= n) {
+				std::size_t tokEnd = a_line.find(':', tokStart);
+				if (tokEnd == std::string::npos) {
+					tokEnd = n;
+				}
+				for (std::size_t e = tokStart; e < tokEnd; ++e) {
+					if (a_line[e] != '=') {
+						continue;
+					}
+					std::size_t k = e;
+					while (k > tokStart && sp::detail::isRegexSpace(a_line[k - 1])) {
+						--k;
+					}
+					if (k - tokStart < 5 || a_line.compare(k - 5, 5, "clear") != 0) {
+						continue;
+					}
+					const std::size_t start = k - 5;
+					if (start > tokStart && std::isalnum(static_cast<unsigned char>(a_line[start - 1]))) {
+						continue;
+					}
+					if (e + 1 < tokEnd) {
+						return sp::detail::trimWs(std::string_view(a_line).substr(e + 1, tokEnd - e - 1));
+					}
+				}
+				if (tokEnd == n) {
+					break;
+				}
+				tokStart = tokEnd + 1;
+			}
+			return "none";
+		}
+
+		bool resolveTypeMatches(const std::string& a_value)
+		{
+			bool              matches = false;
+			std::stringstream ss(a_value);
+			std::string       piece;
+			while (std::getline(ss, piece, ',')) {
+				const std::string name = toLowerCase(trim(piece));
+				if (name.empty()) {
+					continue;
+				}
+				if (name == "ingredient" || name == "wortcraft" || name == "wordcraft") {
+					matches = true;
+				} else {
+					logger::warn("ingredient - unknown type in filterByType: {}", name);
+				}
+			}
+			return matches;
+		}
 	}
 
 	struct line_content create_patch_instruction(const std::string& line)
 	{
 		line_content l;
 		ingredientKeyTable().parse(line, &l);
+		if (l.clear != "none") {
+			l.clear = standaloneClearValue(line);
+		}
 		return l;
 	}
 
@@ -78,7 +137,7 @@ namespace INGR
 				}
 			}
 
-			if (!line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.mgefs.empty() && line.mgefsOr.empty() && line.alternateTexturesFind.empty()) {
+			if (!line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.mgefs.empty() && line.mgefsOr.empty() && line.alternateTexturesFind.empty() && line.filterType == "none") {
 				continue;
 			}
 
@@ -88,6 +147,17 @@ namespace INGR
 				formfilter::noStrings(), formfilter::noStrings(),
 				formfilter::noStrings(), line.objectExcluded
 			};
+
+			std::vector<RE::BGSTextureSet*> textureSets;
+			for (const auto& textureString : line.alternateTexturesFind) {
+				RE::TESForm* currentform = GetFormFromIdentifier(textureString);
+				if (currentform && currentform->formType == RE::FormType::TextureSet) {
+					textureSets.push_back(currentform->As<RE::BGSTextureSet>());
+				}
+			}
+			const std::vector<RE::FormID> mgefsAnd = formfilter::resolveFormIDs(line.mgefs, RE::FormType::MagicEffect);
+			const bool typePresent = line.filterType != "none";
+			const bool typeMatches = typePresent && resolveTypeMatches(line.filterType);
 
 			for (const auto& curobj : objectIngredientArray) {
 				bool found = false;
@@ -105,15 +175,11 @@ namespace INGR
 				}
 
 
-				if (!line.alternateTexturesFind.empty()) {
-					for (const auto& textureString : line.alternateTexturesFind) {
-						RE::TESForm* currentform = nullptr;
-						currentform = GetFormFromIdentifier(textureString);
-						if (currentform) {
-							if (findTextureSet(curobj, currentform->As<RE::BGSTextureSet>())) {
-								found = true;
-								break;
-							}
+				if (!textureSets.empty()) {
+					for (RE::BGSTextureSet* const ts : textureSets) {
+						if (findTextureSet(curobj, ts)) {
+							found = true;
+							break;
 						}
 					}
 				}
@@ -135,30 +201,19 @@ namespace INGR
 				}
 
 				if (!line.mgefs.empty()) {
-					bool foundInList = false;
-					for (const auto& mgefstring : line.mgefs) {
-						foundInList = false;
-						RE::TESForm* currentform = nullptr;
-						RE::EffectSetting* keyword = nullptr;
-
-						std::string string_form = mgefstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
-							keyword = (RE::EffectSetting*)currentform;
-							for (const auto& effect : curobj->effects) {
-								if (effect && effect->baseEffect && effect->baseEffect->formID == keyword->formID) {
-									foundInList = true;
-									break;
-								}
-							}
-							if (!foundInList) {
-								mgefAnd = false;
+					mgefAnd = !mgefsAnd.empty();
+					for (const RE::FormID id : mgefsAnd) {
+						bool foundInList = false;
+						for (const auto& effect : curobj->effects) {
+							if (effect && effect->baseEffect && effect->baseEffect->formID == id) {
+								foundInList = true;
 								break;
 							}
 						}
-					}
-					if (foundInList) {
-						mgefAnd = true;
+						if (!foundInList) {
+							mgefAnd = false;
+							break;
+						}
 					}
 				} else {
 					mgefAnd = true;
@@ -192,7 +247,11 @@ namespace INGR
 					found = true;
 				}
 
-				if (!found && line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.mgefs.empty() && line.mgefsOr.empty() && line.alternateTexturesFind.empty()) {
+				if (!found && typeMatches) {
+					found = true;
+				}
+
+				if (!found && line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.mgefs.empty() && line.mgefsOr.empty() && line.alternateTexturesFind.empty() && line.filterType == "none") {
 					found = true;
 				}
 
@@ -267,7 +326,8 @@ namespace INGR
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -334,7 +394,7 @@ namespace INGR
 			}
 		}
 
-		if ( !line.clear.empty() && line.clear != "none") {
+		if (IsSwitchOn(line.clear)) {
 			curobj->effects.clear();
 			logger::debug(FMT_STRING("ingredient formid: {:08X} {} cleared all mgefs"), curobj->formID, curobj->fullName);
 		}
@@ -360,6 +420,7 @@ namespace INGR
 
 		if ( !line.addedObjects.empty()) {
 			for (const auto& objectToAdd : line.addedObjects) {
+				try {
 				if (objectToAdd.size() < 4) { logger::warn("ingredient {:08X}: invalid addedObjects entry, expected 4 values", curobj->formID); continue; }
 				std::string        addFormStr = objectToAdd[0];
 				float              magnitude = std::stof(objectToAdd[1]);
@@ -382,11 +443,15 @@ namespace INGR
 					curobj->effects.push_back(tempEffectItem);
 					logger::debug(FMT_STRING("ingredient {:08X} {} added effect {:08X} {} magnitude {} duration {} area {} cost {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, objectToAdd[1], objectToAdd[2], objectToAdd[3], tempEffectItem->cost);
 				}
+				} catch (const std::exception& e) {
+					logger::warn(FMT_STRING("ingredient {:08X}: invalid mgefsToAdd entry skipped: {}"), curobj->formID, e.what());
+				}
 			}
 		}
 
 		if ( !line.changedObjects.empty()) {
 			for (auto objectToAdd : line.changedObjects) {
+				try {
 				if (objectToAdd.empty()) { logger::warn("ingredient {:08X}: empty changedObjects entry", curobj->formID); continue; }
 				objectToAdd.resize(5, "null");
 				std::string        addFormStr = objectToAdd[0];
@@ -394,51 +459,55 @@ namespace INGR
 				auto* addForm = resolvedAddForm ? resolvedAddForm->As<RE::EffectSetting>() : nullptr;
 				if (addForm) {
 					float magnitude = 0.0f;
-					if (objectToAdd[1] != "null") {
+					if (!IsNullValue(objectToAdd[1])) {
 						magnitude = std::stof(objectToAdd[1]);
 					}
 
 					int32_t duration = 0;
-					if (objectToAdd[2] != "null") {
+					if (!IsNullValue(objectToAdd[2])) {
 						duration = std::stoi(objectToAdd[2]);
 					}
 
 					int32_t area = 0;
-					if (objectToAdd[3] != "null") {
+					if (!IsNullValue(objectToAdd[3])) {
 						area = std::stoi(objectToAdd[3]);
 					}
 
 					float multiplier = 0;
-					if (objectToAdd[4] != "null") {
+					if (!IsNullValue(objectToAdd[4])) {
 						multiplier = multiplier + std::stof(objectToAdd[4]);
 					}
 
 					for (const auto& effect : curobj->effects) {
 						if (effect && effect->baseEffect && effect->baseEffect->formID == addForm->formID) {
-							if (objectToAdd[1] != "null") {
+							if (!IsNullValue(objectToAdd[1])) {
 								effect->effectItem.magnitude = magnitude;
 								logger::debug(FMT_STRING("ingredient {:08X} {} changed magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, effect->effectItem.magnitude);
 							}
-							if (objectToAdd[2] != "null") {
+							if (!IsNullValue(objectToAdd[2])) {
 								effect->effectItem.duration = duration;
 								logger::debug(FMT_STRING("ingredient {:08X} {} changed duration of {:08X} {} to {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, effect->effectItem.duration);
 							}
-							if (objectToAdd[3] != "null") {
+							if (!IsNullValue(objectToAdd[3])) {
 								effect->effectItem.area = area;
 								logger::debug(FMT_STRING("ingredient {:08X} {} changed area of {:08X} {} to {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, effect->effectItem.area);
 							}
-							if (objectToAdd[4] != "null") {
+							if (!IsNullValue(objectToAdd[4])) {
 								effect->effectItem.magnitude = effect->effectItem.magnitude * multiplier;
 								logger::debug(FMT_STRING("ingredient {:08X} {} changed(multiplied) magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, effect->effectItem.magnitude);
 							}
 						}
 					}
 				}
+				} catch (const std::exception& e) {
+					logger::warn(FMT_STRING("ingredient {:08X}: invalid mgefsToChange entry skipped: {}"), curobj->formID, e.what());
+				}
 			}
 		}
 
 		if (!line.changedAddObjects.empty()) {
 			for (auto objectToAdd : line.changedAddObjects) {
+				try {
 				if (objectToAdd.empty()) { logger::warn("ingredient {:08X}: empty changedAddObjects entry", curobj->formID); continue; }
 				objectToAdd.resize(4, "null");
 				std::string        addFormStr = objectToAdd[0];
@@ -446,36 +515,39 @@ namespace INGR
 				auto* addForm = resolvedAddForm ? resolvedAddForm->As<RE::EffectSetting>() : nullptr;
 				if (addForm) {
 					float magnitude = 0.0f;
-					if (objectToAdd[1] != "null") {
+					if (!IsNullValue(objectToAdd[1])) {
 						magnitude = std::stof(objectToAdd[1]);
 					}
 
 					int32_t duration = 0;
-					if (objectToAdd[2] != "null") {
+					if (!IsNullValue(objectToAdd[2])) {
 						duration = std::stoi(objectToAdd[2]);
 					}
 
 					int32_t area = 0;
-					if (objectToAdd[3] != "null") {
+					if (!IsNullValue(objectToAdd[3])) {
 						area = std::stoi(objectToAdd[3]);
 					}
 
 					for (const auto& effect : curobj->effects) {
 						if (effect && effect->baseEffect && effect->baseEffect->formID == addForm->formID) {
-							if (objectToAdd[1] != "null") {
+							if (!IsNullValue(objectToAdd[1])) {
 								effect->effectItem.magnitude += magnitude;
 								logger::debug(FMT_STRING("ingredient {:08X} {} added {} to magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, magnitude, addForm->formID, addForm->fullName, effect->effectItem.magnitude);
 							}
-							if (objectToAdd[2] != "null") {
+							if (!IsNullValue(objectToAdd[2])) {
 								effect->effectItem.duration += duration;
 								logger::debug(FMT_STRING("ingredient {:08X} {} added {} to duration of {:08X} {} to {}"), curobj->formID, curobj->fullName, duration, addForm->formID, addForm->fullName, effect->effectItem.duration);
 							}
-							if (objectToAdd[3] != "null") {
+							if (!IsNullValue(objectToAdd[3])) {
 								effect->effectItem.area += area;
 								logger::debug(FMT_STRING("ingredient {:08X} {} added {} to area of {:08X} {} to {}"), curobj->formID, curobj->fullName, area, addForm->formID, addForm->fullName, effect->effectItem.area);
 							}
 						}
 					}
+				}
+				} catch (const std::exception& e) {
+					logger::warn(FMT_STRING("ingredient {:08X}: invalid mgefsToChangeAdd entry skipped: {}"), curobj->formID, e.what());
 				}
 			}
 		}
@@ -485,6 +557,7 @@ namespace INGR
 				curobj->weight = std::stof(line.weight);
 				logger::debug(FMT_STRING("ingredient formid: {:08X} {} changed weight {}"), curobj->formID, curobj->fullName, curobj->weight);
 			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("ingredient {:08X}: invalid weight skipped: {}"), curobj->formID, e.what());
 			}
 		}
 
@@ -493,6 +566,7 @@ namespace INGR
 				curobj->weight = curobj->weight * std::stof(line.weightMult);
 				logger::debug(FMT_STRING("ingredient formid: {:08X} {} multiplied weight {}"), curobj->formID, curobj->fullName, curobj->weight);
 			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("ingredient {:08X}: invalid weightMult skipped: {}"), curobj->formID, e.what());
 			}
 		}
 
@@ -501,14 +575,16 @@ namespace INGR
 				curobj->value = std::stoi(line.capsvalue);
 				logger::debug(FMT_STRING("ingredient formid: {:08X} {} changed value {}"), curobj->formID, curobj->fullName, curobj->value);
 			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("ingredient {:08X}: invalid value skipped: {}"), curobj->formID, e.what());
 			}
 		}
 
 		if (!line.valueMult.empty() && line.valueMult != "none") {
 			try {
-				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
+				curobj->value = static_cast<int32_t>(MultRoundUp(curobj->value, std::stof(line.valueMult)));
 				logger::debug(FMT_STRING("ingredient formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
 			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("ingredient {:08X}: invalid valueMult skipped: {}"), curobj->formID, e.what());
 			}
 		}
 
@@ -529,7 +605,7 @@ namespace INGR
 			}
 		}
 
-		if (!line.alternateTexturesClear.empty() && line.alternateTexturesClear != "none") {
+		if (IsSwitchOn(line.alternateTexturesClear)) {
 			clearAltTextures(curobj);
 			logger::debug(FMT_STRING("ingredient formid: {:08X} {} cleared all alternate textures"), curobj->formID, curobj->fullName);
 		}
@@ -552,6 +628,7 @@ namespace INGR
 
 		if (!line.alternateTextures.empty()) {
 			for (const auto& objectToAdd : line.alternateTextures) {
+				try {
 				if (objectToAdd.size() < 3) {
 					logger::warn(FMT_STRING("alternateTexturesToAdd requires texture, 3D name and index; skipped invalid entry"));
 					continue;
@@ -567,6 +644,9 @@ namespace INGR
 					newTex.index3D = index;
 					addAltTexture(curobj, newTex);
 					logger::debug(FMT_STRING("ingredient formid: {:08X} {} changed alternate textures {:08X} name3d {} index3d {}"), curobj->formID, curobj->fullName, newTex.textureSet->formID, newTex.name3D.c_str(), newTex.index3D);
+				}
+				} catch (const std::exception& e) {
+					logger::warn(FMT_STRING("ingredient {:08X}: invalid alternateTexturesToAdd entry skipped: {}"), curobj->formID, e.what());
 				}
 			}
 		}

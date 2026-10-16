@@ -108,7 +108,7 @@ namespace MISC
 					for (const auto& textureString : line.alternateTexturesFind) {
 						RE::TESForm* currentform = nullptr;
 						currentform = GetFormFromIdentifier(textureString);
-						if (currentform) {
+						if (currentform && currentform->formType == RE::FormType::TextureSet) {
 							if (findTextureSet(curobj, currentform->As<RE::BGSTextureSet>())) {
 								found = true;
 								break;
@@ -154,10 +154,10 @@ namespace MISC
 
 
 
-				if (!line.objectExcluded.empty()) {
+				if (!line.objectExcluded.empty() && found) {
 					if (formfilter::isObjectExcluded(view, curobj, RE::FormType::Misc)) {
 						found = false;
-						logger::info("Misc Excluded.");
+						logger::debug(FMT_STRING("misc formid: {:08X} excluded"), curobj->formID);
 					}
 				}
 
@@ -167,7 +167,7 @@ namespace MISC
 					}
 				}
 
-				if (!line.keywordsExcluded.empty()) {
+				if (!line.keywordsExcluded.empty() && found) {
 					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
 						found = false;
 					}
@@ -211,7 +211,8 @@ namespace MISC
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -280,7 +281,7 @@ namespace MISC
 
 		if (!line.valueMult.empty() && line.valueMult != "none") {
 			try {
-				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
+				curobj->value = static_cast<int32_t>(MultRoundUp(curobj->value, std::stod(line.valueMult)));
 				logger::debug(FMT_STRING("misc formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
 			} catch (const std::exception& e) {
 			}
@@ -353,7 +354,7 @@ namespace MISC
 			}
 		}
 
-		if (!line.alternateTexturesClear.empty() && line.alternateTexturesClear != "none") {
+		if (IsSwitchOn(line.alternateTexturesClear)) {
 			clearAltTextures(curobj);
 			logger::debug(FMT_STRING("misc formid: {:08X} {} cleared all alternate textures"), curobj->formID, curobj->fullName);
 		}

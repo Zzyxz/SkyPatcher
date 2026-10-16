@@ -69,6 +69,15 @@ namespace AMMO
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
 		auto& AmmoArray = dataHandler->GetFormArray<RE::TESAmmo>();
 		for (const auto& line : tokens) {
+			std::unordered_set<RE::FormID> patched;
+			std::unordered_set<RE::FormID> projectilesDone;
+
+			if (!line.hasPlugin.empty() && !formfilter::hasAllPlugins(line.hasPlugin)) {
+				continue;
+			}
+			if (!line.hasPluginOr.empty() && !formfilter::hasAnyPlugin(line.hasPluginOr)) {
+				continue;
+			}
 
 			if (!line.ammo.empty()) {
 				for (const auto& ammostring : line.ammo) {
@@ -80,7 +89,9 @@ namespace AMMO
 					if (currentform && currentform->formType == RE::FormType::Ammo) {
 						ammo = (RE::TESAmmo*)currentform;
 
-						patch(line, ammo);
+						if (patched.insert(ammo->formID).second) {
+							patch(line, ammo, &projectilesDone);
+						}
 					}
 				}
 			}
@@ -95,13 +106,6 @@ namespace AMMO
 				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
 				line.filterByEditorIdContainsExcluded, line.objectExcluded
 			};
-
-			if (!line.hasPlugin.empty() && !formfilter::hasAllPlugins(line.hasPlugin)) {
-				continue;
-			}
-			if (!line.hasPluginOr.empty() && !formfilter::hasAnyPlugin(line.hasPluginOr)) {
-				continue;
-			}
 
 			for (const auto& curobj : AmmoArray) {
 				bool found = false;
@@ -123,7 +127,7 @@ namespace AMMO
 					for (const auto& textureString : line.alternateTexturesFind) {
 						RE::TESForm* currentform = nullptr;
 						currentform = GetFormFromIdentifier(textureString);
-						if (currentform) {
+						if (currentform && currentform->formType == RE::FormType::TextureSet) {
 							if (findTextureSet(curobj, currentform->As<RE::BGSTextureSet>())) {
 								found = true;
 								break;
@@ -179,10 +183,12 @@ namespace AMMO
 					}
 				}
 
-				if (!line.restrictToBolts.empty() && line.restrictToBolts != "none" && toLowerCase(line.restrictToBolts) == "true" && !ngcompat::AmmoIsBolt(curobj)) {
-					try {
+				if (found && !line.restrictToBolts.empty() && line.restrictToBolts != "none") {
+					const std::string bolts = toLowerCase(trim(line.restrictToBolts));
+					if ((bolts == "true" || bolts == "yes") && !ngcompat::AmmoIsBolt(curobj)) {
 						found = false;
-					} catch (const std::exception& e) {
+					} else if ((bolts == "false" || bolts == "no") && ngcompat::AmmoIsBolt(curobj)) {
+						found = false;
 					}
 				}
 
@@ -198,8 +204,8 @@ namespace AMMO
 					}
 				}
 
-				if (found) {
-					patch(line, curobj);
+				if (found && patched.insert(curobj->formID).second) {
+					patch(line, curobj, &projectilesDone);
 				}
 
 		
@@ -235,7 +241,8 @@ namespace AMMO
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -274,22 +281,34 @@ namespace AMMO
 		}
 		return nullptr;
 	}
-	void* patch(const AMMO::line_content& line, RE::TESAmmo* curobj) {
+	void* patch(const AMMO::line_content& line, RE::TESAmmo* curobj, std::unordered_set<RE::FormID>* a_projectilesDone) {
 		try {
 		
 		if (!line.damage.empty() && line.damage != "none") {
+			try {
 				ngcompat::AmmoData(curobj).damage = stof(line.damage);
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed damage {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).damage);
+			} catch (const std::exception&) {
+				logger::warn(FMT_STRING("ammo {:08X}: invalid attackDamage '{}', skipped"), curobj->formID, line.damage);
+			}
 		}
 
 		if (!line.damageToAdd.empty() && line.damageToAdd != "none") {
+			try {
 				ngcompat::AmmoData(curobj).damage = ngcompat::AmmoData(curobj).damage + stof(line.damageToAdd);
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed damage {}"), curobj->formID, curobj->fullName, line.damageToAdd);
+			} catch (const std::exception&) {
+				logger::warn(FMT_STRING("ammo {:08X}: invalid attackDamageToAdd '{}', skipped"), curobj->formID, line.damageToAdd);
+			}
 		}
 
 		if (!line.damageMult.empty() && line.damageMult != "none") {
+			try {
 				ngcompat::AmmoData(curobj).damage = ngcompat::AmmoData(curobj).damage * stof(line.damageMult);
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} changed(mult) damage {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).damage);
+			} catch (const std::exception&) {
+				logger::warn(FMT_STRING("ammo {:08X}: invalid attackDamageMult '{}', skipped"), curobj->formID, line.damageMult);
+			}
 		}
 
 		if (!line.projectile.empty() && line.projectile != "none") {
@@ -364,7 +383,7 @@ namespace AMMO
 		}
 		if (!line.valueMult.empty() && line.valueMult != "none") {
 			try {
-				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
+				curobj->value = static_cast<int32_t>(MultRoundUp(curobj->value, std::stod(line.valueMult)));
 				logger::debug(FMT_STRING("ammo formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
 			} catch (const std::exception& e) {
 			}
@@ -379,7 +398,7 @@ namespace AMMO
 			}
 		}
 
-		if (!line.alternateTexturesClear.empty() && line.alternateTexturesClear != "none") {
+		if (IsSwitchOn(line.alternateTexturesClear)) {
 			clearAltTextures(curobj);
 			logger::debug(FMT_STRING("ammo formid: {:08X} {} cleared all alternate textures"), curobj->formID, curobj->fullName);
 		}
@@ -408,7 +427,13 @@ namespace AMMO
 				}
 				std::string  texture = objectToAdd[0];
 				std::string  name = objectToAdd[1];
-				int32_t      index = std::stoi(objectToAdd[2]);
+				int32_t      index = 0;
+				try {
+					index = std::stoi(objectToAdd[2]);
+				} catch (const std::exception&) {
+					logger::warn(FMT_STRING("alternateTexturesToAdd: invalid index '{}', skipped"), objectToAdd[2]);
+					continue;
+				}
 				RE::TESForm* currentform = GetFormFromIdentifier(texture);
 				if (currentform && currentform->formType == RE::FormType::TextureSet) {
 					RE::TESModelTextureSwap::AlternateTexture newTex;
@@ -424,7 +449,19 @@ namespace AMMO
 
 
 
-		if (!line.speed.empty() && line.speed != "none" && ngcompat::AmmoData(curobj).projectile) {
+		bool projectileOpen = ngcompat::AmmoData(curobj).projectile != nullptr;
+		if (projectileOpen && a_projectilesDone) {
+			const bool hasProjectileKey =
+				(!line.speed.empty() && line.speed != "none") || (!line.speedMult.empty() && line.speedMult != "none") ||
+				(!line.range.empty() && line.range != "none") || (!line.rangeMult.empty() && line.rangeMult != "none") ||
+				(!line.gravity.empty() && line.gravity != "none") || (!line.gravityMult.empty() && line.gravityMult != "none");
+			if (hasProjectileKey && !a_projectilesDone->insert(ngcompat::AmmoData(curobj).projectile->formID).second) {
+				projectileOpen = false;
+				logger::debug(FMT_STRING("ammo formid: {:08X} {} projectile {:08X} already changed by this line"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->formID);
+			}
+		}
+
+		if (projectileOpen && !line.speed.empty() && line.speed != "none") {
 			try {
 				ngcompat::AmmoData(curobj).projectile->data.speed = std::stof(line.speed);
 				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed speed {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->data.speed);
@@ -432,7 +469,7 @@ namespace AMMO
 			}
 		}
 
-		if (!line.speedMult.empty() && line.speedMult != "none" && ngcompat::AmmoData(curobj).projectile) {
+		if (projectileOpen && !line.speedMult.empty() && line.speedMult != "none") {
 			try {
 				ngcompat::AmmoData(curobj).projectile->data.speed = ngcompat::AmmoData(curobj).projectile->data.speed * std::stof(line.speedMult);
 				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied speed {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->data.speed);
@@ -440,7 +477,7 @@ namespace AMMO
 			}
 		}
 
-		if (!line.range.empty() && line.range != "none" && ngcompat::AmmoData(curobj).projectile) {
+		if (projectileOpen && !line.range.empty() && line.range != "none") {
 			try {
 				ngcompat::AmmoData(curobj).projectile->data.range = std::stof(line.range);
 				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed range {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->data.range);
@@ -448,7 +485,7 @@ namespace AMMO
 			}
 		}
 
-		if (!line.rangeMult.empty() && line.rangeMult != "none" && ngcompat::AmmoData(curobj).projectile) {
+		if (projectileOpen && !line.rangeMult.empty() && line.rangeMult != "none") {
 			try {
 				ngcompat::AmmoData(curobj).projectile->data.range = ngcompat::AmmoData(curobj).projectile->data.range * std::stof(line.rangeMult);
 				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied range {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->data.range);
@@ -456,7 +493,7 @@ namespace AMMO
 			}
 		}
 
-		if (!line.gravity.empty() && line.gravity != "none" && ngcompat::AmmoData(curobj).projectile) {
+		if (projectileOpen && !line.gravity.empty() && line.gravity != "none") {
 			try {
 				ngcompat::AmmoData(curobj).projectile->data.gravity = std::stof(line.gravity);
 				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} changed gravity {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->data.gravity);
@@ -464,7 +501,7 @@ namespace AMMO
 			}
 		}
 
-		if (!line.gravityMult.empty() && line.gravityMult != "none" && ngcompat::AmmoData(curobj).projectile) {
+		if (projectileOpen && !line.gravityMult.empty() && line.gravityMult != "none") {
 			try {
 				ngcompat::AmmoData(curobj).projectile->data.gravity = ngcompat::AmmoData(curobj).projectile->data.gravity * std::stof(line.gravityMult);
 				logger::debug(FMT_STRING("ammo projectile formid: {:08X} {} multiplied gravity {}"), curobj->formID, curobj->fullName, ngcompat::AmmoData(curobj).projectile->data.gravity);

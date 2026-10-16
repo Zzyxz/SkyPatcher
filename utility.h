@@ -28,6 +28,7 @@ struct AttributePoints
 	int magicka;
 };
 bool                             IsPluginInstalled(const char* name);
+inline constexpr RE::ActorValue  kActorValueUnknown = RE::ActorValue::kTotal;
 RE::ActorValue StringToActorValue(const std::string& valueString);
 RE::TESForm*                     GetFormFromIdentifier(const std::string& identifier);
 RE::FormID BuildFormIDFromIdentifier(const std::string& identifier);
@@ -56,6 +57,11 @@ void                              setMoodLevel(RE::TESNPC* npc, RE::ACTOR_MOOD l
 bool                              createsFaceNPCLoop(const RE::TESNPC* target, const RE::TESNPC* source);
 std::optional<float>              tryParseFloat(const std::string& text);
 void                              copyKeywordArray(RE::BGSKeywordForm* target, const RE::BGSKeywordForm* source);
+
+bool                              IsSwitchOn(const std::string& value);
+bool                              IsNullValue(const std::string& value);
+double                            MultRoundUp(double value, double mult);
+double                            MultRoundDown(double value, double mult);
 
 
 #endif

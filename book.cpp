@@ -122,7 +122,7 @@ namespace BOOK
 						RE::TESForm* currentform = nullptr;
 						std::string  string_form = npcstring;
 						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::Book && curobj->TeachesSpell() && curobj->data.teaches.spell && curobj->data.teaches.spell->data.castingPerk && curobj->data.teaches.spell->data.castingPerk->formID == currentform->formID) {
+						if (currentform && currentform->formType == RE::FormType::Perk && curobj->TeachesSpell() && curobj->data.teaches.spell && curobj->data.teaches.spell->data.castingPerk && curobj->data.teaches.spell->data.castingPerk->formID == currentform->formID) {
 							found = true;
 							break;
 						}
@@ -149,7 +149,7 @@ namespace BOOK
 					for (const auto& textureString : line.alternateTexturesFind) {
 						RE::TESForm*       currentform = nullptr;
 						currentform = GetFormFromIdentifier(textureString);
-						if (currentform) {
+						if (currentform && currentform->formType == RE::FormType::TextureSet) {
 							if (findTextureSet(curobj, currentform->As<RE::BGSTextureSet>())) {
 								found = true;
 								break;
@@ -224,6 +224,12 @@ namespace BOOK
 					}
 				}
 
+				if (!line.keywordsExcluded.empty() && found) {
+					if (formfilter::hasExcludedKeyword(view, curobj, nullptr)) {
+						found = false;
+					}
+				}
+
 				if (!line.filterByEditorIdContainsExcluded.empty() && found && curobj->formID != 0x000007) {
 					if (formfilter::hasExcludedEditorId(view, curobj)) {
 						found = false;
@@ -266,7 +272,8 @@ namespace BOOK
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -335,7 +342,7 @@ namespace BOOK
 
 		if (!line.valueMult.empty() && line.valueMult != "none") {
 			try {
-				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
+				curobj->value = static_cast<int32_t>(MultRoundUp(curobj->value, std::stof(line.valueMult)));
 				logger::debug(FMT_STRING("book formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
 			} catch (const std::exception& e) {
 			}
@@ -380,15 +387,11 @@ namespace BOOK
 
 		if (!line.setFlags.empty()) {
 			for (const auto& setFlag : line.setFlags) {
-				if (toLowerCase(setFlag) == "advancesactorvalue") {
-					curobj->data.flags.set(RE::OBJ_BOOK::Flag::kAdvancesActorValue);
-					logger::debug(FMT_STRING("book formid: {:08X} {} flag enabled AdvancesActorValue"), curobj->formID, curobj->fullName);
+				if (toLowerCase(setFlag) == "advancesactorvalue" || toLowerCase(setFlag) == "teachesspell") {
+					logger::warn(FMT_STRING("book formid: {:08X} {} setFlags={} ignored, use teachSpell or teachSkill"), curobj->formID, curobj->fullName, setFlag);
 				} else if (toLowerCase(setFlag) == "canttake") {
 					curobj->data.flags.set(RE::OBJ_BOOK::Flag::kCantTake);
 					logger::debug(FMT_STRING("book formid: {:08X} {} flag enabled CantTake"), curobj->formID, curobj->fullName);
-				} else if (toLowerCase(setFlag) == "teachesspell") {
-					curobj->data.flags.set(RE::OBJ_BOOK::Flag::kTeachesSpell);
-					logger::debug(FMT_STRING("book formid: {:08X} {} flag enabled TeachesSpell"), curobj->formID, curobj->fullName);
 				} else if (toLowerCase(setFlag) == "hasbeenread") {
 					curobj->data.flags.set(RE::OBJ_BOOK::Flag::kHasBeenRead);
 					logger::debug(FMT_STRING("book formid: {:08X} {} flag enabled HasBeenRead"), curobj->formID, curobj->fullName);
@@ -400,13 +403,21 @@ namespace BOOK
 		if (!line.removeFlags.empty()) {
 			for (const auto& removeFlag : line.removeFlags) {
 				if (toLowerCase(removeFlag) == "advancesactorvalue") {
-					curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kAdvancesActorValue);
+					if (curobj->data.flags.all(RE::OBJ_BOOK::Flag::kAdvancesActorValue)) {
+						if (!curobj->data.flags.all(RE::OBJ_BOOK::Flag::kTeachesSpell)) {
+							curobj->data.teaches.spell = nullptr;
+						}
+						curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kAdvancesActorValue);
+					}
 					logger::debug(FMT_STRING("book formid: {:08X} {} flag disabled AdvancesActorValue"), curobj->formID, curobj->fullName);
 				} else if (toLowerCase(removeFlag) == "canttake") {
 					curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kCantTake);
 					logger::debug(FMT_STRING("book formid: {:08X} {} flag disabled CantTake"), curobj->formID, curobj->fullName);
 				} else if (toLowerCase(removeFlag) == "teachesspell") {
-					curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kTeachesSpell);
+					if (curobj->data.flags.all(RE::OBJ_BOOK::Flag::kTeachesSpell)) {
+						curobj->data.teaches.spell = nullptr;
+						curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kTeachesSpell, RE::OBJ_BOOK::Flag::kAdvancesActorValue);
+					}
 					logger::debug(FMT_STRING("book formid: {:08X} {} flag disabled TeachesSpell"), curobj->formID, curobj->fullName);
 				} else if (toLowerCase(removeFlag) == "hasbeenread") {
 					curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kHasBeenRead);
@@ -488,11 +499,11 @@ namespace BOOK
 			};
 			if (const auto it = skills.find(toLowerCase(line.teachSkill)); it != skills.end()) {
 				curobj->data.teaches.spell = nullptr;
-				curobj->data.teaches.actorValueToAdvance = it->second;
 				curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kTeachesSpell);
 				if (it->second == RE::ActorValue::kNone) {
 					curobj->data.flags.reset(RE::OBJ_BOOK::Flag::kAdvancesActorValue);
 				} else {
+					curobj->data.teaches.actorValueToAdvance = it->second;
 					curobj->data.flags.set(RE::OBJ_BOOK::Flag::kAdvancesActorValue);
 				}
 				logger::debug(FMT_STRING("book formid: {:08X} {} changed taught skill to {}"), curobj->formID, curobj->fullName, it->first);
@@ -508,7 +519,7 @@ namespace BOOK
 			}
 		}
 
-		if (!line.alternateTexturesClear.empty() && line.alternateTexturesClear != "none") {
+		if (IsSwitchOn(line.alternateTexturesClear)) {
 			clearAltTextures(curobj);
 			logger::debug(FMT_STRING("book formid: {:08X} {} cleared all alternate textures"), curobj->formID, curobj->fullName);
 		}
@@ -523,7 +534,7 @@ namespace BOOK
 					if (removed) {
 						logger::debug(FMT_STRING("book formid: {:08X} {} alternateTexture removed {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
 					} else {
-						logger::critical(FMT_STRING("book formid: {:08X} {} alternateTexture not removed {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
+						logger::warn(FMT_STRING("book formid: {:08X} {} alternateTexture not removed {:08X}"), curobj->formID, curobj->fullName, currentform->formID);
 					}
 				}
 			}

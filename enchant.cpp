@@ -1,6 +1,7 @@
 #include "enchant.h"
 #include "formfilter.h"
 #include "parsetable.h"
+#include <sstream>
 #include <unordered_set>
 namespace ENCH
 {
@@ -51,6 +52,39 @@ namespace ENCH
 			static const sp::KeyTable table(kEnchKeys, std::size(kEnchKeys));
 			return table;
 		}
+
+		std::vector<RE::MagicSystem::SpellType> resolveSpellTypes(const std::string& a_value)
+		{
+			using T = RE::MagicSystem::SpellType;
+			static const std::unordered_map<std::string, T> map{
+				{ "spell", T::kSpell }, { "disease", T::kDisease }, { "power", T::kPower },
+				{ "lesserpower", T::kLesserPower }, { "lesser_power", T::kLesserPower },
+				{ "ability", T::kAbility }, { "poison", T::kPoison }, { "enchantment", T::kEnchantment },
+				{ "potion", T::kPotion }, { "alchemy", T::kPotion },
+				{ "wortcraft", T::kWortCraft }, { "wordcraft", T::kWortCraft }, { "ingredient", T::kIngredient },
+				{ "leveledspell", T::kLeveledSpell }, { "leveled_spell", T::kLeveledSpell },
+				{ "addiction", T::kAddiction },
+				{ "voicepower", T::kVoicePower }, { "voice_power", T::kVoicePower }, { "shout", T::kVoicePower },
+				{ "staffenchantment", T::kStaffEnchantment }, { "staff_enchantment", T::kStaffEnchantment },
+				{ "staff", T::kStaffEnchantment }, { "scroll", T::kScroll },
+			};
+			std::vector<T>    out;
+			std::stringstream ss(a_value);
+			std::string       piece;
+			while (std::getline(ss, piece, ',')) {
+				const std::string name = toLowerCase(trim(piece));
+				if (name.empty()) {
+					continue;
+				}
+				const auto it = map.find(name);
+				if (it != map.end()) {
+					out.push_back(it->second);
+				} else {
+					logger::warn("enchantment - unknown type in filterByType: {}", name);
+				}
+			}
+			return out;
+		}
 	}
 
 	struct line_content create_patch_instruction(const std::string& line)
@@ -84,7 +118,7 @@ namespace ENCH
 					}
 				}
 
-				if (!line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.mgefs.empty() && line.mgefsOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByMinimumSkillLevel.empty()) {
+				if (!line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.mgefs.empty() && line.mgefsOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByMinimumSkillLevel.empty() && line.filterType == "none") {
 					continue;
 				}
 
@@ -94,6 +128,19 @@ namespace ENCH
 				line.filterByEditorIdContains, line.filterByEditorIdContainsOr,
 				line.filterByEditorIdContainsExcluded, line.objectExcluded
 			};
+
+			std::vector<int> minimumSkillLevels;
+			for (const auto& skillLevel : line.filterByMinimumSkillLevel) {
+				try {
+					minimumSkillLevels.push_back(std::stoi(skillLevel));
+				} catch (...) {
+					logger::warn("enchantment - invalid filterByMinimumSkillLevel value: {}", skillLevel);
+				}
+			}
+			const std::vector<RE::FormID> mgefsAnd = formfilter::resolveFormIDs(line.mgefs, RE::FormType::MagicEffect);
+			const bool                    typePresent = line.filterType != "none";
+			const std::vector<RE::MagicSystem::SpellType> spellTypes =
+				typePresent ? resolveSpellTypes(line.filterType) : std::vector<RE::MagicSystem::SpellType>{};
 
 			for (const auto& curobj : objectSpellArray) {
 				bool found = false;
@@ -128,21 +175,24 @@ namespace ENCH
 					found = true;
 				}
 
-				if (!line.filterByMinimumSkillLevel.empty()) {
-					for (const auto& skillLevel : line.filterByMinimumSkillLevel) {
-						try {
-							const int levelAsInt = std::stoi(skillLevel);
+				if (!minimumSkillLevels.empty() &&
+					!curobj->effects.empty() &&
+					curobj->effects.front() &&
+					curobj->effects.front()->baseEffect) {
+					const int minimumSkill = static_cast<int>(curobj->effects.front()->baseEffect->data.minimumSkill);
+					for (const int levelAsInt : minimumSkillLevels) {
+						if (minimumSkill == levelAsInt) {
+							found = true;
+							break;
+						}
+					}
+				}
 
-							if (!curobj->effects.empty() &&
-								curobj->effects.front() &&
-								curobj->effects.front()->baseEffect &&
-								static_cast<int>(curobj->effects.front()->baseEffect->data.minimumSkill) == levelAsInt) {
-								found = true;
-								break;
-							}
-
-						} catch (...) {
-							logger::warn("ERROR - enchantment patcher - {:08X} - filterByMinimumSkillLevel", curobj->formID);
+				if (!found && typePresent) {
+					for (const auto t : spellTypes) {
+						if (curobj->data.spellType == t) {
+							found = true;
+							break;
 						}
 					}
 				}
@@ -165,30 +215,19 @@ namespace ENCH
 				}
 
 				if (!line.mgefs.empty()) {
-					bool foundInList = false;
-					for (const auto& mgefstring : line.mgefs) {
-						foundInList = false;
-						RE::TESForm* currentform = nullptr;
-						RE::EffectSetting* keyword = nullptr;
-
-						std::string string_form = mgefstring;
-						currentform = GetFormFromIdentifier(string_form);
-						if (currentform && currentform->formType == RE::FormType::MagicEffect) {
-							keyword = (RE::EffectSetting*)currentform;
-							for (const auto& effect : curobj->effects) {
-								if (effect && effect->baseEffect && effect->baseEffect->formID == keyword->formID) {
-									foundInList = true;
-									break;
-								}
-							}
-							if (!foundInList) {
-								mgefAnd = false;
+					mgefAnd = !mgefsAnd.empty();
+					for (const RE::FormID id : mgefsAnd) {
+						bool foundInList = false;
+						for (const auto& effect : curobj->effects) {
+							if (effect && effect->baseEffect && effect->baseEffect->formID == id) {
+								foundInList = true;
 								break;
 							}
 						}
-					}
-					if (foundInList) {
-						mgefAnd = true;
+						if (!foundInList) {
+							mgefAnd = false;
+							break;
+						}
 					}
 				} else {
 					mgefAnd = true;
@@ -222,7 +261,7 @@ namespace ENCH
 					found = true;
 				}
 
-				if (!found && line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.mgefs.empty() && line.mgefsOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByMinimumSkillLevel.empty()) {
+				if (!found && line.objects.empty() && line.keywords.empty() && line.keywordsOr.empty() && line.mgefs.empty() && line.mgefsOr.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByMinimumSkillLevel.empty() && line.filterType == "none") {
 					found = true;
 				}
 
@@ -447,7 +486,8 @@ namespace ENCH
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -514,7 +554,7 @@ namespace ENCH
 			}
 		}
 
-		if ( !line.clear.empty() && line.clear != "none") {
+		if (IsSwitchOn(line.clear)) {
 			curobj->effects.clear();
 			logger::debug(FMT_STRING("enchantment formid: {:08X} {} cleared all mgefs"), curobj->formID, curobj->fullName);
 		}
@@ -540,6 +580,7 @@ namespace ENCH
 
 		if ( !line.addedObjects.empty()) {
 		for (const auto& objectToAdd : line.addedObjects) {
+			try {
 			if (objectToAdd.size() < 4) { logger::warn("enchant {:08X}: invalid addedObjects entry, expected 4 values", curobj->formID); continue; }
 				std::string        addFormStr = objectToAdd[0];
 				float              magnitude = std::stof(objectToAdd[1]);
@@ -561,16 +602,20 @@ namespace ENCH
 					
 					curobj->effects.push_back(tempEffectItem);
 					logger::debug(FMT_STRING("enchantment {:08X} {} added effect {:08X} {} magnitude {} duration {} area {} cost {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, objectToAdd[1], objectToAdd[2], objectToAdd[3], tempEffectItem->cost);
-					if (objectToAdd.size() == 5) {
+					if (objectToAdd.size() >= 5) {
 						moveEffectToPosition0(curobj->effects, tempEffectItem);
 						logger::debug(FMT_STRING("enchantment {:08X} {} added effect {:08X} {} moved to first position"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName);
 					}
 				}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("enchantment {:08X}: invalid mgefsToAdd entry skipped: {}"), curobj->formID, e.what());
+			}
 			}
 		}
 
 		if ( !line.changedObjects.empty()) {
 		for (auto objectToAdd : line.changedObjects) {
+			try {
 			if (objectToAdd.empty()) { logger::warn("enchant {:08X}: empty changedObjects entry", curobj->formID); continue; }
 			objectToAdd.resize(5, "null");
 				std::string        addFormStr = objectToAdd[0];
@@ -578,51 +623,55 @@ namespace ENCH
 				auto* addForm = resolvedAddForm ? resolvedAddForm->As<RE::EffectSetting>() : nullptr;
 				if (addForm) {
 					float magnitude = 0.0f;
-					if (objectToAdd[1] != "null") {
+					if (!IsNullValue(objectToAdd[1])) {
 						magnitude = std::stof(objectToAdd[1]);
 					}
 
 					int32_t duration = 0;
-					if (objectToAdd[2] != "null") {
+					if (!IsNullValue(objectToAdd[2])) {
 						duration = std::stoi(objectToAdd[2]);
 					}
 
 					int32_t area = 0;
-					if (objectToAdd[3] != "null") {
+					if (!IsNullValue(objectToAdd[3])) {
 						area = std::stoi(objectToAdd[3]);
 					}
 
 					float multiplier = 0;
-					if (objectToAdd[4] != "null") {
+					if (!IsNullValue(objectToAdd[4])) {
 						multiplier = multiplier + std::stof(objectToAdd[4]);
 					}
 
 					for (const auto& effect : curobj->effects) {
 						if (effect && effect->baseEffect && effect->baseEffect->formID == addForm->formID) {
-							if (objectToAdd[1] != "null") {
+							if (!IsNullValue(objectToAdd[1])) {
 								effect->effectItem.magnitude = magnitude;
 								logger::debug(FMT_STRING("enchantment {:08X} {} changed magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, effect->effectItem.magnitude);
 							}
-							if (objectToAdd[2] != "null") {
+							if (!IsNullValue(objectToAdd[2])) {
 								effect->effectItem.duration = duration;
 								logger::debug(FMT_STRING("enchantment {:08X} {} changed duration of {:08X} {} to {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, effect->effectItem.duration);
 							}
-							if (objectToAdd[3] != "null") {
+							if (!IsNullValue(objectToAdd[3])) {
 								effect->effectItem.area = area;
 								logger::debug(FMT_STRING("enchantment {:08X} {} changed area of {:08X} {} to {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, effect->effectItem.area);
 							}
-							if (objectToAdd[4] != "null") {
+							if (!IsNullValue(objectToAdd[4])) {
 								effect->effectItem.magnitude = effect->effectItem.magnitude * multiplier;
 								logger::debug(FMT_STRING("enchantment {:08X} {} changed(multiplied) magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, addForm->formID, addForm->fullName, effect->effectItem.magnitude);
 							}
 						}
 					}
 				}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("enchantment {:08X}: invalid mgefsToChange entry skipped: {}"), curobj->formID, e.what());
+			}
 			}
 		}
 
 		if (!line.changedAddObjects.empty()) {
 		for (auto objectToAdd : line.changedAddObjects) {
+			try {
 			if (objectToAdd.empty()) { logger::warn("enchant {:08X}: empty changedAddObjects entry", curobj->formID); continue; }
 			objectToAdd.resize(4, "null");
 				std::string        addFormStr = objectToAdd[0];
@@ -630,132 +679,143 @@ namespace ENCH
 				auto* addForm = resolvedAddForm ? resolvedAddForm->As<RE::EffectSetting>() : nullptr;
 				if (addForm) {
 					float magnitude = 0.0f;
-					if (objectToAdd[1] != "null") {
+					if (!IsNullValue(objectToAdd[1])) {
 						magnitude = std::stof(objectToAdd[1]);
 					}
 
 					int32_t duration = 0;
-					if (objectToAdd[2] != "null") {
+					if (!IsNullValue(objectToAdd[2])) {
 						duration = std::stoi(objectToAdd[2]);
 					}
 
 					int32_t area = 0;
-					if (objectToAdd[3] != "null") {
+					if (!IsNullValue(objectToAdd[3])) {
 						area = std::stoi(objectToAdd[3]);
 					}
 
 					for (const auto& effect : curobj->effects) {
 						if (effect && effect->baseEffect && effect->baseEffect->formID == addForm->formID) {
-							if (objectToAdd[1] != "null") {
+							if (!IsNullValue(objectToAdd[1])) {
 								effect->effectItem.magnitude = effect->effectItem.magnitude + magnitude;
 								logger::debug(FMT_STRING("enchantment {:08X} {} added {} to magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, magnitude, addForm->formID, addForm->fullName, effect->effectItem.magnitude);
 							}
-							if (objectToAdd[2] != "null") {
+							if (!IsNullValue(objectToAdd[2])) {
 								effect->effectItem.duration = effect->effectItem.duration + duration;
 								logger::debug(FMT_STRING("enchantment {:08X} {} added {} to duration of {:08X} {} to {}"), curobj->formID, curobj->fullName, duration, addForm->formID, addForm->fullName, effect->effectItem.duration);
 							}
-							if (objectToAdd[3] != "null") {
+							if (!IsNullValue(objectToAdd[3])) {
 								effect->effectItem.area = effect->effectItem.area + area;
 								logger::debug(FMT_STRING("enchantment {:08X} {} added {} to area of {:08X} {} to {}"), curobj->formID, curobj->fullName, area, addForm->formID, addForm->fullName, effect->effectItem.area);
 							}
 						}
 					}
 				}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("enchantment {:08X}: invalid mgefsToChangeAdd entry skipped: {}"), curobj->formID, e.what());
+			}
 			}
 		}
 
 		if (!line.changedFirstObjects.empty()) {
 		for (auto objectToAdd : line.changedFirstObjects) {
+			try {
 			if (objectToAdd.empty()) { logger::warn("enchant {:08X}: empty changedFirstObjects entry", curobj->formID); continue; }
 			objectToAdd.resize(4, "null");
 				float magnitude = 0.0f;
-				if (objectToAdd[0] != "null") {
+				if (!IsNullValue(objectToAdd[0])) {
 					magnitude = std::stof(objectToAdd[0]);
 				}
 
 				int32_t duration = 0;
-				if (objectToAdd[1] != "null") {
+				if (!IsNullValue(objectToAdd[1])) {
 					duration = std::stoi(objectToAdd[1]);
 				}
 
 				int32_t area = 0;
-				if (objectToAdd[2] != "null") {
+				if (!IsNullValue(objectToAdd[2])) {
 					area = std::stoi(objectToAdd[2]);
 				}
 
 				float multiplier = 0;
-				if (objectToAdd[3] != "null") {
+				if (!IsNullValue(objectToAdd[3])) {
 					multiplier = multiplier + std::stof(objectToAdd[3]);
 				}
 
 				if (!curobj->effects.empty()) {
 					auto& effect = curobj->effects.front();
 					if (effect && effect->baseEffect) {
-					if (objectToAdd[0] != "null") {
+					if (!IsNullValue(objectToAdd[0])) {
 						effect->effectItem.magnitude = magnitude;
 						logger::debug(FMT_STRING("enchantment {:08X} {} changed first {} to magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, magnitude, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
 					}
-					if (objectToAdd[1] != "null") {
+					if (!IsNullValue(objectToAdd[1])) {
 						effect->effectItem.duration = duration;
 						logger::debug(FMT_STRING("enchantment {:08X} {} changed first {} to duration of {:08X} {} to {}"), curobj->formID, curobj->fullName, duration, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.duration);
 					}
-					if (objectToAdd[2] != "null") {
+					if (!IsNullValue(objectToAdd[2])) {
 						effect->effectItem.area = area;
 						logger::debug(FMT_STRING("enchantment {:08X} {} changed first {} to area of {:08X} {} to {}"), curobj->formID, curobj->fullName, area, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.area);
 					}
-					if (objectToAdd[3] != "null") {
+					if (!IsNullValue(objectToAdd[3])) {
 						effect->effectItem.magnitude = effect->effectItem.magnitude * multiplier;
 						logger::debug(FMT_STRING("enchantment {:08X} {} changed(multiplied) first magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
 					}
 					}
 				}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("enchantment {:08X}: invalid mgefsToChangeFirst entry skipped: {}"), curobj->formID, e.what());
+			}
 			}
 		}
 
 		if (!line.changedDamageHealthObjects.empty()) {
 		for (auto objectToAdd : line.changedDamageHealthObjects) {
+			try {
 			if (objectToAdd.empty()) { logger::warn("enchant {:08X}: empty changedDamageHealthObjects entry", curobj->formID); continue; }
 			objectToAdd.resize(4, "null");
 				float magnitude = 0.0f;
-				if (objectToAdd[0] != "null") {
+				if (!IsNullValue(objectToAdd[0])) {
 					magnitude = std::stof(objectToAdd[0]);
 				}
 
 				int32_t duration = 0;
-				if (objectToAdd[1] != "null") {
+				if (!IsNullValue(objectToAdd[1])) {
 					duration = std::stoi(objectToAdd[1]);
 				}
 
 				int32_t area = 0;
-				if (objectToAdd[2] != "null") {
+				if (!IsNullValue(objectToAdd[2])) {
 					area = std::stoi(objectToAdd[2]);
 				}
 
 				float multiplier = 0;
-				if (objectToAdd[3] != "null") {
+				if (!IsNullValue(objectToAdd[3])) {
 					multiplier = multiplier + std::stof(objectToAdd[3]);
 				}
 
 				for (const auto& effect : curobj->effects) {
 					if (effect && effect->baseEffect && effect->baseEffect->IsDetrimental() && (effect->baseEffect->data.primaryAV == RE::ActorValue::kHealth || effect->baseEffect->data.secondaryAV == RE::ActorValue::kHealth)) {
-						if (objectToAdd[0] != "null") {
+						if (!IsNullValue(objectToAdd[0])) {
 							effect->effectItem.magnitude = magnitude;
 							logger::debug(FMT_STRING("enchantment {:08X} {} changed damage effect {} to magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, magnitude, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
 						}
-						if (objectToAdd[1] != "null") {
+						if (!IsNullValue(objectToAdd[1])) {
 							effect->effectItem.duration = duration;
 							logger::debug(FMT_STRING("enchantment {:08X} {} changed damage effect {} to duration of {:08X} {} to {}"), curobj->formID, curobj->fullName, duration, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.duration);
 						}
-						if (objectToAdd[2] != "null") {
+						if (!IsNullValue(objectToAdd[2])) {
 							effect->effectItem.area = area;
 							logger::debug(FMT_STRING("enchantment {:08X} {} changed damage effect {} to area of {:08X} {} to {}"), curobj->formID, curobj->fullName, area, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.area);
 						}
-						if (objectToAdd[3] != "null") {
+						if (!IsNullValue(objectToAdd[3])) {
 							effect->effectItem.magnitude = effect->effectItem.magnitude * multiplier;
 							logger::debug(FMT_STRING("enchantment {:08X} {} changed(multiplied) damage effect magnitude of {:08X} {} to {}"), curobj->formID, curobj->fullName, effect->baseEffect->formID, effect->baseEffect->fullName, effect->effectItem.magnitude);
 						}
 					}
 				}
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("enchantment {:08X}: invalid mgefsToChangeDamageHealthEffects entry skipped: {}"), curobj->formID, e.what());
+			}
 			}
 		}
 
@@ -764,6 +824,7 @@ namespace ENCH
 				curobj->data.costOverride = std::stoi(line.baseCost);
 				logger::debug(FMT_STRING("enchantment formid: {:08X} {} changed baseCost to {}"), curobj->formID, curobj->fullName, curobj->data.costOverride);
 			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("enchantment {:08X}: invalid baseCost skipped: {}"), curobj->formID, e.what());
 			}
 		}
 
@@ -772,6 +833,7 @@ namespace ENCH
 				curobj->data.chargeOverride = std::stoi(line.chargeOverride);
 				logger::debug(FMT_STRING("enchantment formid: {:08X} {} changed enchantmentAmount to {}"), curobj->formID, curobj->fullName, curobj->data.chargeOverride);
 			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("enchantment {:08X}: invalid enchantmentAmount skipped: {}"), curobj->formID, e.what());
 			}
 		}
 
@@ -800,8 +862,12 @@ namespace ENCH
 		}
 
 		if ( !line.chargeTime.empty() && line.chargeTime != "none") {
+			try {
 			curobj->data.chargeTime = std::stof(line.chargeTime);
 			logger::debug(FMT_STRING("enchantment formid: {:08X} {} changed chargeTime to {}"), curobj->formID, curobj->fullName, line.chargeTime);
+			} catch (const std::exception& e) {
+				logger::warn(FMT_STRING("enchantment {:08X}: invalid chargeTime skipped: {}"), curobj->formID, e.what());
+			}
 		}
 
 		if ( !line.setFlags.empty()) {

@@ -149,13 +149,30 @@ namespace WEAPON
 					formfilter::needleOperands(p, line.filterByNameContainsExcluded));
 			}
 			if (!line.filterByWFlags.empty()) {
-				formfilter::addNegative(p, Op::WeapBound, Mode::And,
-					{ toLowerCase(line.filterByWFlags.front()) == "boundweapon" ? 1ull : 0ull });
+				bool bound = false;
+				for (const auto& s : line.filterByWFlags) {
+					if (toLowerCase(trim(s)) == "boundweapon") {
+						bound = true;
+						break;
+					}
+				}
+				formfilter::addNegative(p, Op::WeapBound, Mode::And, { bound ? 1ull : 0ull });
 			}
 			if (!line.restrictToSkill.empty()) {
 				vals.clear();
 				for (const auto& s : line.restrictToSkill) {
-					vals.push_back(static_cast<std::uint32_t>(StringToActorValue(toLowerCase(s))));
+					std::string name = toLowerCase(trim(s));
+					if (name == "marksman") {
+						name = "archery";
+					} else if (name == "speechcraft") {
+						name = "speech";
+					}
+					const RE::ActorValue av = StringToActorValue(name);
+					if (av == RE::ActorValue::kNone && name != "null") {
+						logger::warn(FMT_STRING("restrictToSkills: unknown skill '{}' ignored"), s);
+						continue;
+					}
+					vals.push_back(static_cast<std::uint32_t>(av));
 				}
 				formfilter::addNegative(p, Op::WeapSkill, Mode::Or, vals);
 			}
@@ -276,12 +293,64 @@ namespace WEAPON
 			static const sp::KeyTable table(kWeaponKeys, std::size(kWeaponKeys));
 			return table;
 		}
+
+		std::string findEquipSound(const std::string& a_line)
+		{
+			static constexpr std::string_view key = "equipSound";
+			const std::size_t n = a_line.size();
+			std::size_t       tokStart = 0;
+			while (tokStart <= n) {
+				std::size_t tokEnd = a_line.find(':', tokStart);
+				if (tokEnd == std::string::npos) {
+					tokEnd = n;
+				}
+				for (std::size_t e = tokStart; e < tokEnd; ++e) {
+					if (a_line[e] != '=') {
+						continue;
+					}
+					std::size_t k = e;
+					while (k > tokStart && sp::detail::isRegexSpace(a_line[k - 1])) {
+						--k;
+					}
+					if (k - tokStart < key.size() || a_line.compare(k - key.size(), key.size(), key) != 0) {
+						continue;
+					}
+					const std::size_t keyStart = k - key.size();
+					if (keyStart - tokStart >= 2 && sp::detail::lowerAscii(a_line[keyStart - 2]) == 'u' &&
+						sp::detail::lowerAscii(a_line[keyStart - 1]) == 'n') {
+						continue;
+					}
+					if (e + 1 >= tokEnd) {
+						continue;
+					}
+					return sp::detail::trimWs(std::string_view(a_line).substr(e + 1, tokEnd - e - 1));
+				}
+				if (tokEnd == n) {
+					break;
+				}
+				tokStart = tokEnd + 1;
+			}
+			return "none";
+		}
+
+		std::uint16_t toDamage(double a_value)
+		{
+			const double v = std::floor(a_value + 1e-4);
+			if (!(v > 0.0)) {
+				return 0;
+			}
+			if (v >= 65535.0) {
+				return 65535;
+			}
+			return static_cast<std::uint16_t>(v);
+		}
 	}
 
 	struct patch_instruction create_patch_instructions(const std::string& line)
 	{
 		patch_instruction l;
 		weaponKeyTable().parse(line, &l);
+		l.equipSound = findEquipSound(line);
 		return l;
 	}
 
@@ -302,6 +371,11 @@ namespace WEAPON
 			std::unordered_set<RE::FormID> patched;
 			indexStale = indexStale || weaponRuleInvalidatesIndex(line);
 
+			if ((!line.hasPlugin.empty() && !formfilter::hasAllPlugins(line.hasPlugin)) ||
+				(!line.hasPluginOr.empty() && !formfilter::hasAnyPlugin(line.hasPluginOr))) {
+				continue;
+			}
+
 			if (!line.object.empty()) {
 				for (const auto& npcstring : line.object) {
 					RE::TESForm*       currentform = nullptr;
@@ -318,7 +392,7 @@ namespace WEAPON
 				}
 			}
 
-			if (!line.object.empty() && line.keywords.empty() && line.filterByWFlags.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.filterAnimationTypeOr.empty() && line.embeddedAVs.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByNameContains.empty() && line.filterByNameContainsOr.empty()) {
+			if (!line.object.empty() && line.keywords.empty() && line.filterByFirstPersonModelOr.empty() && line.keywordsOr.empty() && line.filterAnimationTypeOr.empty() && line.embeddedAVs.empty() && line.filterByEditorIdContains.empty() && line.filterByEditorIdContainsOr.empty() && line.filterByNameContains.empty() && line.filterByNameContainsOr.empty()) {
 				continue;
 			}
 
@@ -400,7 +474,8 @@ namespace WEAPON
 								fileName = fileName.substr(0, pos);
 								const char* modname = fileName.c_str();
 
-								if ((strstr(modname, ".esp") != nullptr || strstr(modname, ".esl") != nullptr || strstr(modname, ".esm") != nullptr)) {
+								const std::string lowerName = toLowerCase(fileName);
+								if (lowerName.find(".esp") != std::string::npos || lowerName.find(".esl") != std::string::npos || lowerName.find(".esm") != std::string::npos) {
 									if (!IsPluginInstalled(modname)) {
 										logger::info("************************************************************");
 										logger::info(FMT_STRING("{} not found or is not a valid plugin file, skipping config file {}."), modname, fullPath);
@@ -448,7 +523,7 @@ namespace WEAPON
 			{ "normal", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kNormal), 0, "normal" },
 			{ "dismemberonly", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kDismemberOnly), 0, "dismember only" },
 			{ "dismember", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kDismemberOnly), 0, "dismember only" },
-			{ "explodeOnly", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kExplodeOnly), 0, "explode only" },
+			{ "explodeonly", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kExplodeOnly), 0, "explode only" },
 			{ "explode", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kExplodeOnly), 0, "explode only" },
 			{ "nodismemberorexplode", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kNoDismemberOrExplode), 0, "no dismember or explode" },
 			{ "no", static_cast<std::uint32_t>(RE::WEAPONHITBEHAVIOR::kNoDismemberOrExplode), 0, "no dismember or explode" },
@@ -547,7 +622,7 @@ namespace WEAPON
 
 		if (!line.attackDamage.empty() && line.attackDamage != "none") {
 			try {
-				curobj->attackDamage = std::stof(line.attackDamage);
+				curobj->attackDamage = toDamage(std::stod(line.attackDamage));
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed damage {}"), curobj->formID, curobj->fullName, curobj->attackDamage);
 			} catch (const std::exception& e) {
 			}
@@ -555,13 +630,13 @@ namespace WEAPON
 
 		if (!line.attackDamageToAdd.empty() && line.attackDamageToAdd != "none") {
 			try {
-				curobj->attackDamage = curobj->attackDamage + std::stof(line.attackDamageToAdd);
+				curobj->attackDamage = toDamage(curobj->attackDamage + std::stod(line.attackDamageToAdd));
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} added damage {} total {}"), curobj->formID, curobj->fullName, line.attackDamageToAdd, curobj->attackDamage);
 			} catch (const std::exception& e) {
 			}
 		}
 
-		if (!line.critDamageSetToBase.empty() && line.critDamageSetToBase != "none") {
+		if (IsSwitchOn(line.critDamageSetToBase)) {
 			try {
 				curobj->criticalData.damage = curobj->attackDamage;
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} set critDamage {} to weapon base damage"), curobj->formID, curobj->fullName, curobj->criticalData.damage);
@@ -571,7 +646,7 @@ namespace WEAPON
 
 		if (!line.critDamage.empty() && line.critDamage != "none") {
 			try {
-				curobj->criticalData.damage = std::stof(line.critDamage);
+				curobj->criticalData.damage = toDamage(std::stod(line.critDamage));
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} changed critDamage {}"), curobj->formID, curobj->fullName, curobj->criticalData.damage);
 			} catch (const std::exception& e) {
 			}
@@ -579,7 +654,7 @@ namespace WEAPON
 
 		if (!line.critDamageToAdd.empty() && line.critDamageToAdd != "none") {
 			try {
-				curobj->criticalData.damage = curobj->criticalData.damage + std::stof(line.critDamageToAdd);
+				curobj->criticalData.damage = toDamage(curobj->criticalData.damage + std::stod(line.critDamageToAdd));
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} added critDamage {} total {}"), curobj->formID, curobj->fullName, line.critDamageToAdd, curobj->criticalData.damage);
 			}
 			catch (const std::exception& e) {
@@ -588,7 +663,7 @@ namespace WEAPON
 
 		if (!line.critDamageMult.empty() && line.critDamageMult != "none") {
 			try {
-				curobj->criticalData.damage = curobj->criticalData.damage * std::stof(line.critDamageMult);
+				curobj->criticalData.damage = toDamage(MultRoundDown(curobj->criticalData.damage, std::stod(line.critDamageMult)));
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} multiplied critDamage by {} total {}"), curobj->formID, curobj->fullName, line.critDamageMult, curobj->criticalData.damage);
 			}
 			catch (const std::exception& e) {
@@ -655,7 +730,7 @@ namespace WEAPON
 
 		if (!line.attackDamageMult.empty() && line.attackDamageMult != "none") {
 			try {
-				curobj->attackDamage = curobj->attackDamage * std::stof(line.attackDamageMult);
+				curobj->attackDamage = toDamage(MultRoundDown(curobj->attackDamage, std::stod(line.attackDamageMult)));
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} multiplied attackDamage to {}"), curobj->formID, curobj->fullName, curobj->attackDamage);
 			} catch (const std::exception& e) {
 			}
@@ -714,6 +789,9 @@ namespace WEAPON
 				if (currentform && currentform->formType == RE::FormType::SoundRecord) {
 					curobj->attackFailSound = (RE::BGSSoundDescriptorForm*)currentform;
 					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed attackFailSound {:08X}"), curobj->formID, curobj->fullName, curobj->attackFailSound->formID);
+				} else if (IsNullValue(line.failSound)) {
+					curobj->attackFailSound = nullptr;
+					logger::debug(FMT_STRING("weapon formid: {:08X} {} changed attackFailSound to null"), curobj->formID, curobj->fullName);
 				}
 			} catch (const std::exception& e) {
 			}
@@ -765,7 +843,7 @@ namespace WEAPON
 
 		if (!line.valueMult.empty() && line.valueMult != "none") {
 			try {
-				curobj->value = static_cast<int32_t>(std::ceil(curobj->value * std::stof(line.valueMult)));
+				curobj->value = static_cast<int32_t>(MultRoundUp(curobj->value, std::stod(line.valueMult)));
 				logger::debug(FMT_STRING("weapon formid: {:08X} {} multiplied value {}"), curobj->formID, curobj->fullName, curobj->value);
 			} catch (const std::exception& e) {
 			}
@@ -802,7 +880,7 @@ namespace WEAPON
 			if (auto* enchantment = currentform ? currentform->As<RE::EnchantmentItem>() : nullptr) {
 				curobj->formEnchanting = enchantment;
 				logger::debug(FMT_STRING("weapon formid: {:08X} changed objectEffect {:08X} "), curobj->formID, enchantment->formID);
-			} else if (line.objectEffect == "null") {
+			} else if (IsNullValue(line.objectEffect)) {
 				curobj->formEnchanting = nullptr;
 				logger::debug(FMT_STRING("weapon formid: {:08X} changed objectEffect null (none)"), curobj->formID);
 			} else {

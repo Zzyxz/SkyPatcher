@@ -22,7 +22,9 @@ namespace EngineLists
 
 	std::size_t RemoveContainerObjects(RE::TESContainer& container, const std::function<bool(const RE::ContainerObject&)>& pred);
 
-	bool RemoveContainerObjectWithCount(RE::TESContainer& container, RE::TESBoundObject* object, std::int32_t count);
+	std::size_t RemoveContainerObjectWithCount(RE::TESContainer& container, RE::TESBoundObject* object, std::int32_t count);
+
+	std::size_t MultiplyContainerObjectCounts(RE::TESContainer& container, RE::TESBoundObject* object, float multiplier);
 
 	std::size_t RemoveContainerObjectInstances(RE::TESContainer& container, RE::TESBoundObject* object);
 
