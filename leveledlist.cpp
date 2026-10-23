@@ -168,11 +168,6 @@ namespace LEVELEDLIST
 						continue;
 					}
 
-					if (static_cast<uint32_t>(curobj->numEntries) > kBulkFilterEntryLimit) {
-						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
-						continue;
-					}
-
 					if (!line.filterByEditorIdContains.empty()) {
 						contains = formfilter::matchesEditorIdAnd(view, curobj);
 					}
@@ -195,6 +190,11 @@ namespace LEVELEDLIST
 						if (formfilter::hasExcludedEditorId(view, curobj)) {
 							found = false;
 						}
+					}
+
+					if (found && static_cast<uint32_t>(curobj->numEntries) > kBulkFilterEntryLimit) {
+						logger::debug(FMT_STRING("leveled lists {:08X} skipped. Too huge progress. This Leveled List also may provide performance issues ingame."), curobj->formID);
+						found = false;
 					}
 
 					if (found) {
