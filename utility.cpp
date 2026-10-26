@@ -265,12 +265,8 @@ std::string StripLineComment(const std::string& line)
 		static_cast<unsigned char>(text[2]) == 0xBF) {
 		text.remove_prefix(3);
 	}
-	bool insideName = false;
 	for (std::size_t i = 0; i < text.size(); ++i) {
-		const char c = text[i];
-		if (c == '~') {
-			insideName = !insideName;
-		} else if (c == ';' && !insideName && (i == 0 || text[i - 1] == ' ' || text[i - 1] == '\t')) {
+		if (text[i] == ';' && (i == 0 || text[i - 1] == ' ' || text[i - 1] == '\t')) {
 			text = text.substr(0, i);
 			break;
 		}
