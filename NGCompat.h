@@ -115,9 +115,6 @@ namespace ngcompat
 		if (!a_npc || !a_npc->race || a_npc->race == a_oldRace) {
 			return;
 		}
-		if (a_npc->baseTemplateForm && a_npc->actorData.templateUseFlags.any(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAttackData)) {
-			return;
-		}
 		if (!a_npc->attackDataMap || (a_oldRace && a_npc->attackDataMap == a_oldRace->attackDataMap)) {
 			a_npc->attackDataMap = a_npc->race->attackDataMap;
 		}
