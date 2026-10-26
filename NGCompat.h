@@ -110,6 +110,19 @@ namespace ngcompat
 		return !a_npc->race || a_npc->attackDataMap != a_npc->race->attackDataMap;
 	}
 
+	inline void FollowRaceAttackData(RE::TESNPC* a_npc, const RE::TESRace* a_oldRace)
+	{
+		if (!a_npc || !a_npc->race || a_npc->race == a_oldRace) {
+			return;
+		}
+		if (a_npc->baseTemplateForm && a_npc->actorData.templateUseFlags.any(RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG::kAttackData)) {
+			return;
+		}
+		if (!a_npc->attackDataMap || (a_oldRace && a_npc->attackDataMap == a_oldRace->attackDataMap)) {
+			a_npc->attackDataMap = a_npc->race->attackDataMap;
+		}
+	}
+
 	inline bool AddOrReplaceAttackData(RE::BGSAttackDataMap* a_map, RE::NiPointer<RE::BGSAttackData> a_data)
 	{
 		if (!a_map || !a_data || a_data->event.empty()) {

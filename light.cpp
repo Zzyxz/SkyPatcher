@@ -355,6 +355,7 @@ void *readConfig(const std::string &folder) {
       std::list<patch_instruction> tokens;
       std::string configLine;
       while (std::getline(infile, configLine)) {
+        configLine = StripLineComment(configLine);
         if (!configLine.empty() && configLine[0] != skipChar) {
           tokens.push_back(create_patch_instructions(configLine));
         }

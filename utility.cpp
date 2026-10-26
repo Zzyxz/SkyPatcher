@@ -258,6 +258,31 @@ namespace
 	}
 }
 
+std::string StripLineComment(const std::string& line)
+{
+	std::string_view text(line);
+	if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xEF && static_cast<unsigned char>(text[1]) == 0xBB &&
+		static_cast<unsigned char>(text[2]) == 0xBF) {
+		text.remove_prefix(3);
+	}
+	bool insideName = false;
+	for (std::size_t i = 0; i < text.size(); ++i) {
+		const char c = text[i];
+		if (c == '~') {
+			insideName = !insideName;
+		} else if (c == ';' && !insideName && (i == 0 || text[i - 1] == ' ' || text[i - 1] == '\t')) {
+			text = text.substr(0, i);
+			break;
+		}
+	}
+	const auto first = text.find_first_not_of(" \t\r\n");
+	if (first == std::string_view::npos) {
+		return {};
+	}
+	const auto last = text.find_last_not_of(" \t\r\n");
+	return std::string(text.substr(first, last - first + 1));
+}
+
 bool IsSwitchOn(const std::string& value)
 {
 	const auto v = toLowerCase(trimAllSpace(value));

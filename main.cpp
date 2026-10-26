@@ -550,7 +550,9 @@ bool CopyVisual(RE::TESNPC* npcToCopyFrom, RE::Actor* a_this, const NPC::NPCData
 			if (shouldCopy && npc) {
 				RE::TESNPC* npcToChange = npc;
 
+				auto* const oldRace = npcToChange->race;
 				npcToChange->race = npcToCopyFrom->race;
+				ngcompat::FollowRaceAttackData(npcToChange, oldRace);
 				if (npcToCopyFrom->actorData.actorBaseFlags) {
 					if (npcToCopyFrom->actorData.actorBaseFlags.all(RE::ACTOR_BASE_DATA::Flag::kFemale)) {
 						npcToChange->actorData.actorBaseFlags.set(RE::ACTOR_BASE_DATA::Flag::kFemale);
@@ -1194,7 +1196,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_message)
 							}
 
 							if (it->second.npcRace) {
+								auto* const oldRace = actorBase->race;
 								actorBase->race = it->second.npcRace;
+								ngcompat::FollowRaceAttackData(actorBase, oldRace);
 							}
 
 

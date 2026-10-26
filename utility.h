@@ -59,6 +59,7 @@ std::optional<float>              tryParseFloat(const std::string& text);
 void                              copyKeywordArray(RE::BGSKeywordForm* target, const RE::BGSKeywordForm* source);
 
 bool                              IsSwitchOn(const std::string& value);
+std::string                       StripLineComment(const std::string& line);
 bool                              IsNullValue(const std::string& value);
 double                            MultRoundUp(double value, double mult);
 double                            MultRoundDown(double value, double mult);

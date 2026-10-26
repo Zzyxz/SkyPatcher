@@ -1143,7 +1143,9 @@ namespace NPC
 			RE::TESForm* currentform = nullptr;
 			currentform = GetFormFromIdentifier(line.race);
 			if (currentform && currentform->formType == RE::FormType::Race) {
+				auto* const oldRace = curobj->race;
 				curobj->race = (RE::TESRace*)currentform;
+				ngcompat::FollowRaceAttackData(curobj, oldRace);
 				logger::debug(FMT_STRING("npc formid: {:08X} changed race to {:08X} "), curobj->formID, ((RE::TESRace*)currentform)->formID);
 			}
 		}
@@ -1946,6 +1948,7 @@ namespace NPC
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
+									line = StripLineComment(line);
 									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
@@ -2008,6 +2011,7 @@ namespace NPC
 
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
+									line = StripLineComment(line);
 									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}

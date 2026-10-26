@@ -339,6 +339,7 @@ namespace CELL
 								std::list<patch_instruction> tokens;
 								infile.open(fullPath);
 								while (std::getline(infile, line)) {
+									line = StripLineComment(line);
 									if (line.empty() || line[0] == skipChar) {
 										continue;
 									}
