@@ -737,6 +737,210 @@ static VisualStyleResult ApplyVisualStyleBeforeLoad(RE::Character* a_this)
 	return VisualStyleResult::kNone;
 }
 
+std::uint32_t gameMainThreadID = 0;
+
+void ApplyRulesAfterLoad(RE::Character* a_this)
+{
+	bool refreshHealth = false;
+	bool refreshStamina = false;
+	bool refreshMagicka = false;
+
+	if (const auto npc = a_this->GetActorBase(); npc && a_this->data.objectReference) {
+		auto data = (RE::ExtraLeveledCreature*)a_this->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
+		auto it = actData.npcData.find(a_this->data.objectReference->formID);
+		bool originalBaseHasStyleList = false;
+
+		if (data) {
+			if (data->originalBase) {
+				auto itBase = actData.npcData.find(data->originalBase->formID);
+				if (itBase != actData.npcData.end()) {
+					
+					if (itBase->second.npcVisualStyleList) {
+						originalBaseHasStyleList = true;
+					}
+
+					if (itBase->second.updateFlags) {
+						RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(itBase->first);
+						if (npcForm) {
+							npc->actorData.actorBaseFlags = npcForm->actorData.actorBaseFlags;
+							logger::debug("NPC update: {:08X} updated actor flags (original Base)", itBase->first);
+						}
+						else {
+							logger::debug("NPC update: Failed to lookup NPC with ID {:08X} (original Base)", itBase->first);
+						}
+					}
+
+					if (itBase->second.updateTemplateFlags) {
+						RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(itBase->first);
+						if (npcForm) {
+							npc->actorData.templateUseFlags = npcForm->actorData.templateUseFlags;
+							logger::debug("NPC update: {:08X} updated template flags (original Base)", itBase->first);
+						}
+						else {
+							logger::debug("NPC update: Failed to lookup NPC with ID {:08X} (original Base)", itBase->first);
+						}
+					}
+				}
+
+			}
+
+
+			if (data->templateBase) {
+				it = actData.npcData.find(data->templateBase->formID);
+				if (it != actData.npcData.end()) {
+					auto* objectBase = a_this->data.objectReference->As<RE::TESNPC>();
+					if (statRefreshEnabled && !(npc->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats && npc->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kPCLevelMult)) {
+						if (it->second.health >= 0) {
+							data->templateBase->actorData.healthOffset = it->second.health;
+							if (data->originalBase) {
+								data->originalBase->actorData.healthOffset = data->templateBase->actorData.healthOffset;
+							}
+							if (objectBase) {
+								objectBase->actorData.healthOffset = data->templateBase->actorData.healthOffset;
+							}
+							refreshHealth = true;
+						}
+						if (it->second.stamina >= 0) {
+							data->templateBase->actorData.staminaOffset = it->second.stamina;
+							if (data->originalBase) {
+								data->originalBase->actorData.staminaOffset = data->templateBase->actorData.staminaOffset;
+							}
+							if (objectBase) {
+								objectBase->actorData.staminaOffset = data->templateBase->actorData.staminaOffset;
+							}
+							refreshStamina = true;
+						}
+						if (it->second.magicka >= 0) {
+							data->templateBase->actorData.magickaOffset = it->second.magicka;
+							if (data->originalBase) {
+								data->originalBase->actorData.magickaOffset = data->templateBase->actorData.magickaOffset;
+							}
+							if (objectBase) {
+								objectBase->actorData.magickaOffset = data->templateBase->actorData.magickaOffset;
+							}
+							refreshMagicka = true;
+						}
+					}
+					for (auto perk : it->second.perks) {
+						npc->AddPerk(perk, 0);
+					}
+					for (auto spell : it->second.spellItems) {
+						if (!a_this->HasSpell(spell))
+							a_this->AddSpell(spell);
+					}
+				}
+
+			}
+		}
+		else {
+			if (it != actData.npcData.end()) {
+				if (statRefreshEnabled  && !(npc->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats && npc->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kPCLevelMult)) {
+					if (it->second.health >= 0) {
+						npc->actorData.healthOffset = it->second.health;
+						refreshHealth = true;
+					}
+					if (it->second.stamina >= 0) {
+						npc->actorData.staminaOffset = it->second.stamina;
+						refreshStamina = true;
+					}
+					if (it->second.magicka >= 0) {
+						npc->actorData.magickaOffset = it->second.magicka;
+						refreshMagicka = true;
+					}
+				}
+
+
+
+				for (auto perk : it->second.perks) {
+					npc->AddPerk(perk, 0);
+				}
+				for (auto spell : it->second.spellItems) {
+					if (!a_this->HasSpell(spell))
+						a_this->AddSpell(spell);
+				}
+
+			}
+
+		}
+
+		if (refreshHealth && npc->race) {
+			ngcompat::SetBaseActorValue(a_this, RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
+		}
+		if (refreshStamina && npc->race) {
+			ngcompat::SetBaseActorValue(a_this, RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
+		}
+		if (refreshMagicka && npc->race) {
+			ngcompat::SetBaseActorValue(a_this, RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
+		}
+
+
+
+		if (it != actData.npcData.end()) {
+			if (it->second.updateFlags) {
+				RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
+				if (npcForm) {
+					npc->actorData.actorBaseFlags = npcForm->actorData.actorBaseFlags;
+					logger::debug("NPC update: {:08X} updated actor flags", it->first);
+				}
+			}
+
+			if (it->second.updateTemplateFlags) {
+				RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
+				if (npcForm) {
+					npc->actorData.templateUseFlags = npcForm->actorData.templateUseFlags;
+					logger::debug("NPC update: {:08X} updated template flags", it->first);
+				}
+			}
+
+			if (it->second.minLevelWasSet || it->second.maxLevelWasSet) {
+				RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
+				if (npcForm) {
+					if (it->second.minLevelWasSet) {
+						npcForm->actorData.calcLevelMin = it->second.minLevel;
+						logger::debug("NPC update: {:08X} setminlevel {}", it->first, it->second.minLevel);
+					}
+
+					if (it->second.maxLevelWasSet) {
+						npcForm->actorData.calcLevelMax = it->second.maxLevel;
+						logger::debug("NPC update: {:08X} setmaxlevel {}", it->first, it->second.maxLevel);
+					}
+				}
+			}
+		}
+
+		if (it != actData.npcData.end() && it->second.npcCombatStyleList) {
+			auto& gen = RandomEngine();
+			std::uniform_int_distribution<int> dis(1, 100);
+			int randomValueThatNeedsTobeGen = dis(gen);
+
+			if (randomValueThatNeedsTobeGen <= it->second.npcCombatStyleChance) {
+				auto& forms = it->second.npcCombatStyleList->forms;
+				if (!forms.empty()) {
+					std::uniform_int_distribution<size_t> disForms(0, forms.size() - 1);
+					size_t randomIndex = disForms(gen);
+					auto* randomForm = forms[randomIndex] ? forms[randomIndex]->As<RE::TESCombatStyle>() : nullptr;
+					if (randomForm) {
+						auto dataCS = (RE::ExtraCombatStyle*)a_this->extraList.GetByType(RE::ExtraDataType::kCombatStyle);
+						if (dataCS) {
+							dataCS->combatStyle = randomForm;
+						}
+						npc->combatStyle = randomForm;
+					}
+				}
+			}
+		}
+
+		if (it != actData.npcData.end() && it->second.voiceType) {
+			RE::TESNPC* npc = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
+			if (npc) {
+				npc->voiceType = it->second.voiceType;
+				logger::debug("NPC update: {:08X} updated voiceType to {:08X}", npc->formID, it->second.voiceType->formID);
+			}
+		}
+
+	}
+}
+
 struct Load3D
 {
 	static RE::NiAVObject* thunk(RE::Character* a_this, bool a_arg1)
@@ -771,203 +975,14 @@ struct Load3D
 				return root;
 			}
 		}
-		bool refreshHealth = false;
-		bool refreshStamina = false;
-		bool refreshMagicka = false;
-
-		if (const auto npc = a_this->GetActorBase(); npc && a_this->data.objectReference) {
-			auto data = (RE::ExtraLeveledCreature*)a_this->extraList.GetByType(RE::ExtraDataType::kLeveledCreature);
-			auto it = actData.npcData.find(a_this->data.objectReference->formID);
-			bool originalBaseHasStyleList = false;
-
-			if (data) {
-				if (data->originalBase) {
-					auto itBase = actData.npcData.find(data->originalBase->formID);
-					if (itBase != actData.npcData.end()) {
-						
-						if (itBase->second.npcVisualStyleList) {
-							originalBaseHasStyleList = true;
-						}
-
-						if (itBase->second.updateFlags) {
-							RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(itBase->first);
-							if (npcForm) {
-								npc->actorData.actorBaseFlags = npcForm->actorData.actorBaseFlags;
-								logger::debug("NPC update: {:08X} updated actor flags (original Base)", itBase->first);
-							}
-							else {
-								logger::debug("NPC update: Failed to lookup NPC with ID {:08X} (original Base)", itBase->first);
-							}
-						}
-
-						if (itBase->second.updateTemplateFlags) {
-							RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(itBase->first);
-							if (npcForm) {
-								npc->actorData.templateUseFlags = npcForm->actorData.templateUseFlags;
-								logger::debug("NPC update: {:08X} updated template flags (original Base)", itBase->first);
-							}
-							else {
-								logger::debug("NPC update: Failed to lookup NPC with ID {:08X} (original Base)", itBase->first);
-							}
-						}
-					}
-
+		if (GetCurrentThreadId() == gameMainThreadID) {
+			ApplyRulesAfterLoad(a_this);
+		} else {
+			SKSE::GetTaskInterface()->AddTask([actorID = a_this->formID] {
+				if (auto* actor = RE::TESForm::LookupByID<RE::Character>(actorID)) {
+					ApplyRulesAfterLoad(actor);
 				}
-
-
-				if (data->templateBase) {
-					it = actData.npcData.find(data->templateBase->formID);
-					if (it != actData.npcData.end()) {
-						auto* objectBase = a_this->data.objectReference->As<RE::TESNPC>();
-						if (statRefreshEnabled && !(npc->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats && npc->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kPCLevelMult)) {
-							if (it->second.health >= 0) {
-								data->templateBase->actorData.healthOffset = it->second.health;
-								if (data->originalBase) {
-									data->originalBase->actorData.healthOffset = data->templateBase->actorData.healthOffset;
-								}
-								if (objectBase) {
-									objectBase->actorData.healthOffset = data->templateBase->actorData.healthOffset;
-								}
-								refreshHealth = true;
-							}
-							if (it->second.stamina >= 0) {
-								data->templateBase->actorData.staminaOffset = it->second.stamina;
-								if (data->originalBase) {
-									data->originalBase->actorData.staminaOffset = data->templateBase->actorData.staminaOffset;
-								}
-								if (objectBase) {
-									objectBase->actorData.staminaOffset = data->templateBase->actorData.staminaOffset;
-								}
-								refreshStamina = true;
-							}
-							if (it->second.magicka >= 0) {
-								data->templateBase->actorData.magickaOffset = it->second.magicka;
-								if (data->originalBase) {
-									data->originalBase->actorData.magickaOffset = data->templateBase->actorData.magickaOffset;
-								}
-								if (objectBase) {
-									objectBase->actorData.magickaOffset = data->templateBase->actorData.magickaOffset;
-								}
-								refreshMagicka = true;
-							}
-						}
-						for (auto perk : it->second.perks) {
-							npc->AddPerk(perk, 0);
-						}
-						for (auto spell : it->second.spellItems) {
-							if (!a_this->HasSpell(spell))
-								a_this->AddSpell(spell);
-						}
-					}
-
-				}
-			}
-			else {
-				if (it != actData.npcData.end()) {
-					if (statRefreshEnabled  && !(npc->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kAutoCalcStats && npc->actorData.actorBaseFlags & RE::ACTOR_BASE_DATA::Flag::kPCLevelMult)) {
-						if (it->second.health >= 0) {
-							npc->actorData.healthOffset = it->second.health;
-							refreshHealth = true;
-						}
-						if (it->second.stamina >= 0) {
-							npc->actorData.staminaOffset = it->second.stamina;
-							refreshStamina = true;
-						}
-						if (it->second.magicka >= 0) {
-							npc->actorData.magickaOffset = it->second.magicka;
-							refreshMagicka = true;
-						}
-					}
-
-
-
-					for (auto perk : it->second.perks) {
-						npc->AddPerk(perk, 0);
-					}
-					for (auto spell : it->second.spellItems) {
-						if (!a_this->HasSpell(spell))
-							a_this->AddSpell(spell);
-					}
-
-				}
-
-			}
-
-			if (refreshHealth && npc->race) {
-				ngcompat::SetBaseActorValue(a_this, RE::ActorValue::kHealth, npc->actorData.healthOffset + npc->race->data.startingHealth);
-			}
-			if (refreshStamina && npc->race) {
-				ngcompat::SetBaseActorValue(a_this, RE::ActorValue::kStamina, npc->actorData.staminaOffset + npc->race->data.startingStamina);
-			}
-			if (refreshMagicka && npc->race) {
-				ngcompat::SetBaseActorValue(a_this, RE::ActorValue::kMagicka, npc->actorData.magickaOffset + npc->race->data.startingMagicka);
-			}
-
-
-
-			if (it != actData.npcData.end()) {
-				if (it->second.updateFlags) {
-					RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
-					if (npcForm) {
-						npc->actorData.actorBaseFlags = npcForm->actorData.actorBaseFlags;
-						logger::debug("NPC update: {:08X} updated actor flags", it->first);
-					}
-				}
-
-				if (it->second.updateTemplateFlags) {
-					RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
-					if (npcForm) {
-						npc->actorData.templateUseFlags = npcForm->actorData.templateUseFlags;
-						logger::debug("NPC update: {:08X} updated template flags", it->first);
-					}
-				}
-
-				if (it->second.minLevelWasSet || it->second.maxLevelWasSet) {
-					RE::TESNPC* npcForm = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
-					if (npcForm) {
-						if (it->second.minLevelWasSet) {
-							npcForm->actorData.calcLevelMin = it->second.minLevel;
-							logger::debug("NPC update: {:08X} setminlevel {}", it->first, it->second.minLevel);
-						}
-
-						if (it->second.maxLevelWasSet) {
-							npcForm->actorData.calcLevelMax = it->second.maxLevel;
-							logger::debug("NPC update: {:08X} setmaxlevel {}", it->first, it->second.maxLevel);
-						}
-					}
-				}
-			}
-
-			if (it != actData.npcData.end() && it->second.npcCombatStyleList) {
-				auto& gen = RandomEngine();
-				std::uniform_int_distribution<int> dis(1, 100);
-				int randomValueThatNeedsTobeGen = dis(gen);
-
-				if (randomValueThatNeedsTobeGen <= it->second.npcCombatStyleChance) {
-					auto& forms = it->second.npcCombatStyleList->forms;
-					if (!forms.empty()) {
-						std::uniform_int_distribution<size_t> disForms(0, forms.size() - 1);
-						size_t randomIndex = disForms(gen);
-						auto* randomForm = forms[randomIndex] ? forms[randomIndex]->As<RE::TESCombatStyle>() : nullptr;
-						if (randomForm) {
-							auto dataCS = (RE::ExtraCombatStyle*)a_this->extraList.GetByType(RE::ExtraDataType::kCombatStyle);
-							if (dataCS) {
-								dataCS->combatStyle = randomForm;
-							}
-							npc->combatStyle = randomForm;
-						}
-					}
-				}
-			}
-
-			if (it != actData.npcData.end() && it->second.voiceType) {
-				RE::TESNPC* npc = RE::TESForm::LookupByID<RE::TESNPC>(it->first);
-				if (npc) {
-					npc->voiceType = it->second.voiceType;
-					logger::debug("NPC update: {:08X} updated voiceType to {:08X}", npc->formID, it->second.voiceType->formID);
-				}
-			}
-
+			});
 		}
 		return root;
 	}
@@ -1906,6 +1921,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 		RACE::LoadRaceDataHook::InstallHook();
 	}
 
+	gameMainThreadID = GetCurrentThreadId();
 	if (npcPatchingEnabled)
 		InstallActorHook();
 
